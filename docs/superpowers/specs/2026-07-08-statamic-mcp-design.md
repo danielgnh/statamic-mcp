@@ -1,8 +1,8 @@
-# Design: innobrain/statamic-mcp — MCP Server Addon for Statamic v6
+# Design: danielgnh/statamic-mcp — MCP Server Addon for Statamic v6
 
 **Date:** 2026-07-08
 **Status:** Approved by owner (design gate passed); pending spec review
-**Package:** `innobrain/statamic-mcp` (vendor name confirmed as placeholder-acceptable; rename before first release if desired), namespace `Innobrain\StatamicMcp`, MIT, Packagist + Statamic Marketplace.
+**Package:** `danielgnh/statamic-mcp` (personally owned by Daniel Goncharov — not an inno-brain package), namespace `Danielgnh\StatamicMcp`, MIT, Packagist + Statamic Marketplace.
 
 ## 1. What this is
 
@@ -176,7 +176,7 @@ return [
 ];
 ```
 
-**Zero-config path:** `composer require innobrain/statamic-mcp` → `php please mcp:token you@site.com` → paste URL + header into the client. No publish step required.
+**Zero-config path:** `composer require danielgnh/statamic-mcp` → `php please mcp:token you@site.com` → paste URL + header into the client. No publish step required.
 
 **Deliberately absent** (YAGNI — each with a built-in alternative): per-token scopes (use a dedicated user + role), per-resource read/write matrices (use roles), site allowlists (use `access {site} site`), audit-log config (listen to Statamic's own events), response-format knobs, tool enable/disable maps, CP dashboard toggles.
 
