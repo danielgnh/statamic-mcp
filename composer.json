@@ -1,0 +1,57 @@
+{
+    "name": "danielgnh/statamic-mcp",
+    "description": "MCP server for Statamic — manage entries, terms, and globals from AI clients over streamable HTTP.",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Daniel Goncharov"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "statamic/cms": "^6.0",
+        "laravel/mcp": "^0.8"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "laravel/pint": "^1.13",
+        "phpstan/phpstan": "^2.0"
+    },
+    "suggest": {
+        "laravel/passport": "Required for OAuth mode (claude.ai / ChatGPT connectors)."
+    },
+    "autoload": {
+        "psr-4": {
+            "Danielgnh\\StatamicMcp\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Danielgnh\\StatamicMcp\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "format": "pint",
+        "test": "pest"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "statamic": {
+            "name": "Statamic MCP",
+            "description": "MCP server for Statamic content"
+        },
+        "laravel": {
+            "providers": [
+                "Danielgnh\\StatamicMcp\\ServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
