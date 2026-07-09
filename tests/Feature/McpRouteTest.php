@@ -16,18 +16,23 @@ it('registers the mcp route when enabled', function () {
 });
 
 it('applies configured middleware, then token auth, then the permission gate', function () {
-    $middleware = mcpPostRoute()->middleware();
+    // Assert the RESOLVED pipeline (post-SortedMiddleware), not the declared
+    // array — declared order passing means nothing if Laravel's middleware
+    // priority hoists an entry at runtime.
+    $resolved = app('router')->gatherRouteMiddleware(mcpPostRoute());
 
-    expect($middleware)->toContain('throttle:60,1')
-        ->toContain(AuthenticateMcpToken::class)
-        ->toContain(EnsureMcpPermission::class);
+    // spec §5: configured middleware runs BEFORE auth; 'access mcp' is checked AFTER auth.
+    expect(array_slice($resolved, -2))->toBe([
+        AuthenticateMcpToken::class,
+        EnsureMcpPermission::class,
+    ]);
 
-    // spec §5: configured middleware is PREPENDED to auth; 'access mcp' is checked AFTER auth.
-    expect(array_search('throttle:60,1', $middleware, true))
-        ->toBeLessThan(array_search(AuthenticateMcpToken::class, $middleware, true));
+    $throttleIndex = collect($resolved)->search(
+        fn ($middleware) => is_string($middleware) && str_ends_with($middleware, ':60,1'),
+    );
 
-    expect(array_search(AuthenticateMcpToken::class, $middleware, true))
-        ->toBeLessThan(array_search(EnsureMcpPermission::class, $middleware, true));
+    expect($throttleIndex)->not->toBeFalse()
+        ->and($throttleIndex)->toBeLessThan(array_search(AuthenticateMcpToken::class, $resolved, true));
 });
 
 it('merges default config under statamic.mcp', function () {
