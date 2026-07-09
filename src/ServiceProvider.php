@@ -7,8 +7,10 @@ use Danielgnh\StatamicMcp\Console\IssueToken;
 use Danielgnh\StatamicMcp\Console\ListTokens;
 use Danielgnh\StatamicMcp\Console\RevokeToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
+use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
-use Danielgnh\StatamicMcp\Middleware\EnsureOAuthConfigured;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Passport\Passport;
 use Statamic\Facades\Permission;
@@ -44,6 +46,10 @@ class ServiceProvider extends AddonServiceProvider
             $this->registerMcpRoutes();
         } catch (Throwable $e) {
             report($e); // misconfiguration must never brick the host site (spec §5)
+
+            Log::warning('Statamic MCP failed to mount; run `php please mcp:doctor`', [
+                'exception' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -60,14 +66,22 @@ class ServiceProvider extends AddonServiceProvider
     {
         $oauth = config('statamic.mcp.auth') === 'oauth';
 
-        Mcp::web(config('statamic.mcp.route'), Server::class)->middleware([
-            ...config('statamic.mcp.middleware', []),
+        // Build the full middleware stack BEFORE Mcp::web() registers anything,
+        // so a config-shape error throws while zero routes exist — a throw after
+        // registration would leave an unauthenticated route behind (fail closed).
+        $middleware = [
+            ...Arr::wrap(config('statamic.mcp.middleware', [])),
             ...($oauth
-                // Preflight answers 503-with-remedy BEFORE auth:api can throw on a missing guard.
-                ? [EnsureOAuthConfigured::class, 'auth:api']
+                // Wrapper runs the oauth preflight then delegates to the api
+                // guard — deliberately NOT 'auth:api' directly, which Laravel's
+                // middleware priority would hoist above the preflight; must not
+                // implement AuthenticatesRequests.
+                ? [AuthenticateOAuth::class]
                 : [AuthenticateMcpToken::class]),
             EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes (spec §5)
-        ]);
+        ];
+
+        Mcp::web(config('statamic.mcp.route'), Server::class)->middleware($middleware);
 
         if ($oauth && class_exists(Passport::class)) {
             Mcp::oauthRoutes(); // hard-requires Passport — guarded so bootAddon never throws
