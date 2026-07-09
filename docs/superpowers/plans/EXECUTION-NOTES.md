@@ -11,6 +11,9 @@ Controller-maintained log of approved deviations from the plan text discovered d
 
 ## Carry-forward instructions for future tasks
 
+- **Tasks 10+ (all tools):** base Tool now provides throwing guards `ensureWritesEnabled()`/`ensureDeletesEnabled()` (canonical denial messages naming the config switch) and boolean `can(UserContract, string)` — USE THESE, never hand-roll read-only/deletes-disabled/permission-flag logic (T8 quality review).
+- **Task 10/12 + 17 (site handling):** revisit whether statamic_overview's `sites` block should gain a per-site access flag in multisite ('access {site} site' only registers when multisite enabled) — the model shouldn't be offered sites it will be denied on (T8 quality review #5).
+
 - **Task 6 (AuthenticateMcpToken):** the class must NEVER implement `Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests` — Laravel's priority sorter would hoist it above the configured throttle. The Task 3 resolved-pipeline test pins this; leave a comment on the class.
 - **Task 6 (optional polish, from T4 quality review):** add one test to `tests/Feature/EnsureMcpPermissionTest.php` passing a generic `Authenticatable` that is NOT a Statamic UserContract → expect 403 with the generic message (locks in the Stache UserRepository's fail-closed `fromUser` semantics).
 - **Task 23 (OAuth mode):** implement `src/Middleware/AuthenticateOAuth.php` (single class: oauth preflight → 503-with-remedy, then delegate to the `api` guard, e.g. via `auth()->shouldUse('api')` + manual Authenticate invocation or guard check) INSTEAD of the plan's separate `EnsureOAuthConfigured` + `'auth:api'`. Must not implement `AuthenticatesRequests`. Adapt the plan's T23 tests: assert resolved pipeline has `AuthenticateOAuth` before `EnsureMcpPermission` and does NOT contain `auth:api`/`Authenticate`. The provider already forward-references this class (Task 3 fix commit).
