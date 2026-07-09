@@ -28,7 +28,10 @@ class Fixtures
             'de' => ['name' => 'German', 'url' => '/de/', 'locale' => 'de_DE'],
         ]);
 
-        config(['statamic.system.multisite' => true]); // enables 'access {site} site' permissions
+        // Enables 'access {site} site' permissions — but only if multisite() runs before anything
+        // builds the permission tree (Permission::all(), CP requests, authorization checks):
+        // Statamic's Permissions::boot() is memoized, so later registrations won't appear.
+        config(['statamic.system.multisite' => true]);
     }
 
     // Call tags() before blog(): the article blueprint's 'topic' field targets the tags taxonomy.
