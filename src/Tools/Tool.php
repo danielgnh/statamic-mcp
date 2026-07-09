@@ -40,11 +40,24 @@ abstract class Tool extends BaseTool
 
     /**
      * The acting Statamic user, mode-agnostic: under Passport $request->user()
-     * is the Eloquent model; fromUser() normalizes both (spec §5).
+     * is the Eloquent model; fromUser() normalizes both (spec §5). Behind the
+     * fail-closed HTTP middleware a user always exists, but stdio/inspector
+     * contexts reach tools unauthenticated — guard so they get a clear tool
+     * error instead of a TypeError-turned-opaque-500.
      */
     protected function user(Request $request): UserContract
     {
-        return User::fromUser($request->user());
+        $authenticated = $request->user();
+
+        $user = $authenticated ? User::fromUser($authenticated) : null;
+
+        if (! $user) {
+            throw new ToolException(
+                'no authenticated user — the MCP server requires token or OAuth authentication; see the README'
+            );
+        }
+
+        return $user;
     }
 
     /**
@@ -86,12 +99,21 @@ abstract class Tool extends BaseTool
     }
 
     /**
+     * The one permission predicate: supers auto-pass. Used directly for
+     * capability flags; ensurePermission() turns it into a throwing guard.
+     */
+    protected function can(UserContract $user, string $permission): bool
+    {
+        return $user->isSuper() || $user->hasPermission($permission);
+    }
+
+    /**
      * Uniform denial message for every native-permission check (spec §6).
      * Supers auto-pass. Publish/site checks pass their own permission strings.
      */
     protected function ensurePermission(UserContract $user, string $permission): void
     {
-        if ($user->isSuper() || $user->hasPermission($permission)) {
+        if ($this->can($user, $permission)) {
             return;
         }
 
@@ -110,6 +132,35 @@ abstract class Tool extends BaseTool
     protected function deletesEnabled(): bool
     {
         return $this->writesEnabled() && config('statamic.mcp.deletes');
+    }
+
+    /**
+     * Throwing guard for every write tool — one canonical message naming the
+     * operative config switch. The boolean getters above stay for flag
+     * reporting and shouldRegister().
+     */
+    protected function ensureWritesEnabled(): void
+    {
+        if (! $this->writesEnabled()) {
+            throw new ToolException(
+                'writes are disabled on this server (statamic.mcp.read_only) — reads remain available'
+            );
+        }
+    }
+
+    /**
+     * Throwing guard for every delete tool: read_only trumps deletes, so the
+     * message always names the switch that actually blocked the call.
+     */
+    protected function ensureDeletesEnabled(): void
+    {
+        $this->ensureWritesEnabled();
+
+        if (! config('statamic.mcp.deletes')) {
+            throw new ToolException(
+                'delete tools are disabled on this server (statamic.mcp.deletes)'
+            );
+        }
     }
 
     /**

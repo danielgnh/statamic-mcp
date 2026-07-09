@@ -140,4 +140,17 @@ it('guards the real MCP endpoint end to end', function () {
     ])
         ->assertOk()
         ->assertSee('Statamic'); // serverInfo name from the #[Name] attribute
+
+    // full seam over real HTTP: middleware → Auth::setUser → Request::user() → User::fromUser
+    $this->postJson('/mcp/statamic', [
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/call',
+        'params' => ['name' => 'statamic_overview', 'arguments' => []],
+    ], [
+        'Authorization' => "Bearer {$plain->token}",
+        'Accept' => 'application/json, text/event-stream',
+    ])
+        ->assertOk()
+        ->assertSee('collections');
 });
