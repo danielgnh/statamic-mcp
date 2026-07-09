@@ -139,9 +139,4 @@ class StatamicOverview extends Tool
     {
         return collect($this->exposedHandles($type))->sort()->values();
     }
-
-    private function can(UserContract $user, string $permission): bool
-    {
-        return $user->isSuper() || $user->hasPermission($permission);
-    }
 }
