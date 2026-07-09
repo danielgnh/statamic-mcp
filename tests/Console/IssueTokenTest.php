@@ -30,7 +30,9 @@ it('issues a token, prints it once, and prints ready-to-paste client snippets', 
         ->toContain('"Authorization": "Bearer mcp_')
         // Honest client-coverage note (spec §2/§5):
         ->toContain('claude.ai')
-        ->toContain("'auth' => 'oauth'");
+        ->toContain("'auth' => 'oauth'")
+        // Shell-history advisory for the pasteable one-liner:
+        ->toContain('shell history');
 
     $tokens = app(TokenRepository::class)->all();
 
@@ -74,6 +76,20 @@ it('rejects a non-positive or non-numeric --expires-days', function (string $day
 
     expect(app(TokenRepository::class)->all())->toBe([]);
 })->with(['zero' => '0', 'negative' => '-3', 'word' => 'soon']);
+
+it('warns about the framework-default APP_URL only while it is unset', function () {
+    $user = Fixtures::makeUser();
+
+    Artisan::call('statamic:mcp:token', ['email' => $user->email()]);
+
+    expect(Artisan::output())->toContain('Snippets use APP_URL');
+
+    config()->set('app.url', 'https://example.com');
+
+    Artisan::call('statamic:mcp:token', ['email' => $user->email()]);
+
+    expect(Artisan::output())->not->toContain('Snippets use APP_URL');
+});
 
 it("warns when the user lacks 'access mcp' but still issues the token", function () {
     tap(User::make()->email('bare@site.test'))->save(); // no roles at all

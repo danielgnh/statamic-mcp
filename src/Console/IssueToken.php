@@ -54,6 +54,10 @@ class IssueToken extends Command
             $this->warn("Heads up: {$email} does not have the 'access mcp' permission yet — requests will get 403 until you grant it to one of their roles in the Control Panel.");
         }
 
+        if (config('app.url') === 'http://localhost') {
+            $this->warn('Snippets use APP_URL (currently http://localhost) — set APP_URL to your real site URL or the pasted config will point at localhost.');
+        }
+
         $this->line('');
         $this->info('Claude Code:');
         $this->line('');
@@ -74,6 +78,8 @@ class IssueToken extends Command
         $this->line('Individual claude.ai and Claude Desktop connectors cannot send static headers (that is an');
         $this->line("org-admin beta for Team/Enterprise plans) — for those clients use OAuth mode ('auth' => 'oauth').");
         $this->line('See the README client-compatibility matrix.');
+        $this->line('');
+        $this->line('Note: pasting the Claude Code one-liner puts the token in your shell history — consider a leading space (HIST_IGNORE_SPACE) or `history -d`.');
 
         return self::SUCCESS;
     }
