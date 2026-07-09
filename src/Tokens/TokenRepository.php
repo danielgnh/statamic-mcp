@@ -8,6 +8,15 @@ use Illuminate\Support\Str;
 use Statamic\Contracts\Auth\User;
 use Statamic\Facades\YAML;
 
+/**
+ * Single-writer assumption: issuance and revocation are expected from the CLI
+ * (`php please mcp:token*` commands), so writes are serialized by LOCK_EX alone.
+ * Any future WEB-triggered issuance path must add real locking around the whole
+ * read-modify-write (flock on the file, or Cache::lock) — otherwise interleaved
+ * revoke() + issue() can write back pre-revoke state and resurrect a token.
+ * The torn-write failure mode fails closed: corrupt YAML breaks authentication,
+ * it never opens it up.
+ */
 class TokenRepository
 {
     public function issue(User $user, ?string $name = null, ?int $expiresDays = null): PlainToken
@@ -18,6 +27,10 @@ class TokenRepository
         $expiresAt = $expiresDays ? Carbon::now()->addDays($expiresDays) : null;
 
         $tokens = $this->read();
+
+        while (isset($tokens[$tokenId])) {
+            $tokenId = Str::lower(Str::random(12));
+        }
 
         $tokens[$tokenId] = [
             'user' => (string) $user->id(),
@@ -47,6 +60,9 @@ class TokenRepository
     }
 
     /**
+     * Returns the raw record regardless of expiry — expiry is enforced by the
+     * authentication middleware.
+     *
      * @return array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}|null
      */
     public function find(string $tokenId): ?array
@@ -83,7 +99,12 @@ class TokenRepository
 
     protected function write(array $tokens): void
     {
-        File::ensureDirectoryExists(dirname($this->path()));
-        File::put($this->path(), YAML::dump($tokens));
+        $directory = dirname($this->path());
+
+        File::ensureDirectoryExists($directory, 0700);
+        File::chmod($directory, 0700); // mkdir's mode is umask-subject; chmod is not
+
+        File::put($this->path(), YAML::dump($tokens), lock: true);
+        File::chmod($this->path(), 0600);
     }
 }

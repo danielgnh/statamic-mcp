@@ -6,6 +6,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\User;
 use Statamic\Facades\YAML;
+use Statamic\Yaml\ParseException;
 
 beforeEach(function () {
     // Testbench's storage dir survives between tests — start clean every time.
@@ -97,6 +98,14 @@ it('revokes a token and rewrites the file without it, leaving others intact', fu
 
 it('returns false when revoking an unknown token id', function () {
     expect($this->repo->revoke('doesnotexist'))->toBeFalse();
+});
+
+it('throws loudly when tokens.yaml is corrupt instead of treating it as empty', function () {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), 'just a string');
+
+    // A corrupt auth store must fail closed and loud — never an empty token list.
+    expect(fn () => $this->repo->all())->toThrow(ParseException::class);
 });
 
 it('returns all issued tokens keyed by token id', function () {
