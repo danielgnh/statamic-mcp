@@ -17,7 +17,7 @@ use Statamic\Fields\Blueprint;
 use Statamic\Fields\Value;
 
 #[Name('terms_get')]
-#[Description('Get one taxonomy term by id ("{taxonomy}::{slug}") or by taxonomy + slug. format=raw (default) returns the round-trippable data shape for terms_update; format=augmented is read-only — never send augmented values back into terms_update. With site, data holds that site\'s local overrides and inherited holds what comes from the default site (a term\'s localizations are data overrides within one term). Terms have no publish state, so there is no status. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles).')]
+#[Description('Get one taxonomy term by id ("{taxonomy}::{slug}") or by taxonomy + slug. format=raw (default) returns the round-trippable data shape for terms_update; format=augmented is read-only — never send augmented values back into terms_update. With site, data holds that site\'s local overrides and inherited holds what comes from the term\'s origin site (the taxonomy\'s first configured site — a term\'s localizations are data overrides within one term). Terms have no publish state, so there is no status. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles).')]
 #[IsReadOnly]
 class TermsGet extends Tool
 {
@@ -85,7 +85,9 @@ class TermsGet extends Tool
         $site = $this->resolveSite($request, $user, $term->taxonomy()->sites());
 
         $localized = $term->in($site);
-        $defaultSite = $term->taxonomy()->sites()->first();
+        // The term's origin locale is the taxonomy's FIRST configured site
+        // (Term::defaultLocale()), not necessarily the global default site.
+        $originSite = $term->taxonomy()->sites()->first();
         $format = $validated['format'] ?? 'raw';
         $requestedFields = array_values($validated['fields'] ?? []);
         $blueprint = $localized->blueprint();
@@ -115,12 +117,13 @@ class TermsGet extends Tool
             // metadata, stripped so agents can't round-trip stale values.
             $data = $localized->data()->except(['updated_at', 'updated_by'])->all();
 
-            if ($site !== $defaultSite) {
+            if ($site !== $originSite) {
                 // A term's localizations are data overrides within one term (the
                 // globals rule, not the entries rule): everything not overridden
-                // locally comes from the default site's data — the origin.
+                // locally comes from the origin site's data — the taxonomy's
+                // first configured site.
                 $inherited = array_diff_key(
-                    $term->in($defaultSite)->data()->except(['updated_at', 'updated_by'])->all(),
+                    $term->in($originSite)->data()->except(['updated_at', 'updated_by'])->all(),
                     $data,
                 );
             }
@@ -137,9 +140,9 @@ class TermsGet extends Tool
                 $inherited = array_intersect_key($inherited, array_flip($requestedFields));
             }
 
-            $response['origin_site'] = $defaultSite;
+            $response['origin_site'] = $originSite;
             $response['inherited'] = $this->withRichTextPreviews($inherited, $blueprint, $requestedFields);
-            $response['note'] = "data = this site's local overrides (the round-trippable shape for terms_update with site '{$site}'); inherited = values coming from the default site";
+            $response['note'] = "data = this site's local overrides (the round-trippable shape for terms_update with site '{$site}'); inherited = values coming from the origin site (the taxonomy's first configured site)";
         }
 
         // value('updated_at') so the fallback chain matches title() — a

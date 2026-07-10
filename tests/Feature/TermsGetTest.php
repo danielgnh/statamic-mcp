@@ -207,6 +207,35 @@ it('rejects unknown field handles naming valid ones', function () {
         ->assertHasErrors(['unknown field titel — valid handles: title']);
 });
 
+it("pins the origin to the taxonomy's first configured site, not the global default", function () {
+    Fixtures::multisite(withThirdSite: true); // en is the GLOBAL default...
+    Fixtures::tags();
+    Taxonomy::findByHandle('tags')->sites(['de', 'at'])->save(); // ...but the taxonomy starts at de
+
+    $term = Term::make()->taxonomy('tags')->slug('php');
+    $term->dataForLocale('de', ['title' => 'PHP (DE)']);
+    $term->save();
+
+    $user = Fixtures::makeUser('view tags terms', 'access de site', 'access at site');
+
+    // de IS the origin (Term::defaultLocale() = taxonomy->sites()->first()) —
+    // no origin/inherited block, even though de is not the global default.
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php', 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"title":"PHP (DE)"')
+        ->assertDontSee('"origin_site"')
+        ->assertDontSee('"inherited"');
+
+    // at inherits from de — never from the global default en.
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php', 'site' => 'at'])
+        ->assertOk()
+        ->assertSee('"origin_site":"de"')
+        ->assertSee('"inherited":{"title":"PHP (DE)"}')
+        ->assertSee('"data":[]');
+});
+
 it('reports updated_at with default-locale fallback and strips it from raw data', function () {
     Fixtures::multisite();
     Fixtures::tags();
