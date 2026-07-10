@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use Illuminate\Support\Collection;
 use Laravel\Mcp\Request;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\Site;
@@ -12,13 +13,16 @@ trait ResolvesSites
     /**
      * The requested site (default: Site::default()), validated against the
      * configured sites, with 'access {site} site' enforced for non-default
-     * sites on multisite installs (spec §6).
+     * sites on multisite installs (spec §6). Pass $validSites to limit the
+     * check to a resource's own configured sites (taxonomies, global sets);
+     * when omitted, every configured site is valid (entries).
      */
-    protected function resolveSite(Request $request, UserContract $user): string
+    protected function resolveSite(Request $request, UserContract $user, ?Collection $validSites = null): string
     {
         $site = $request->get('site') ?? Site::default()->handle();
 
-        $handles = Site::all()->map->handle()->values()->all();
+        $handles = $validSites?->values()->all()
+            ?? Site::all()->map->handle()->values()->all();
 
         if (! in_array($site, $handles, true)) {
             sort($handles);
