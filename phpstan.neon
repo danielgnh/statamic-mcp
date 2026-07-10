@@ -1,0 +1,19 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - src
+    level: 5
+    ignoreErrors:
+        # Statamic v6 contracts (Statamic\Contracts\Entries\Entry, ...\Taxonomies\Term,
+        # ...\Globals\GlobalSet, ...\Auth\User, etc.) are EMPTY marker interfaces —
+        # the vendor facades type their returns against them while the real API lives
+        # on the concrete classes (Statamic\Entries\Entry, LocalizedTerm, Variables).
+        # Every method call through a contract type is therefore "undefined" to
+        # PHPStan even though it exists at runtime. Scoped to vendor contract types
+        # only: calls to undefined methods on OUR classes (Danielgnh\StatamicMcp\*)
+        # still fail the build, so class-reference drift detection is intact.
+        -
+            identifier: method.notFound
+            message: '#^Call to an undefined method Statamic\\Contracts\\#'
