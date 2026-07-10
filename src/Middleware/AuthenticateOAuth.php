@@ -44,7 +44,11 @@ class AuthenticateOAuth
             );
         }
 
-        if (! config('auth.guards.api')) {
+        // Driver, not just presence: a pre-existing session/token/sanctum
+        // 'api' guard would let OAuth discovery and token issuance complete,
+        // then 401-loop on tokens the guard ignores — misconfiguration
+        // presenting as credential failure.
+        if (config('auth.guards.api.driver') !== 'passport') {
             return $this->unavailable(
                 "OAuth mode requires an 'api' guard. In config/auth.php add 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'."
             );
@@ -78,6 +82,6 @@ class AuthenticateOAuth
             'error' => 'MCP OAuth mode is misconfigured.',
             'remedy' => $remedy,
             'doctor' => "Run 'php please mcp:doctor' to check every OAuth prerequisite at once.",
-        ], 503);
+        ], 503, ['Retry-After' => '60']); // RFC 9110 pacing for well-behaved retry clients
     }
 }

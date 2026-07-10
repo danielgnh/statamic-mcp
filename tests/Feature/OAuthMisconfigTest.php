@@ -33,6 +33,7 @@ it('answers 503 on the MCP route naming the missing Eloquent-users prerequisite'
 
     $response
         ->assertStatus(503)
+        ->assertHeader('Retry-After', '60') // RFC 9110 pacing for well-behaved retry clients
         ->assertJsonPath('error', 'MCP OAuth mode is misconfigured.');
 
     expect($response->json('remedy'))
@@ -55,6 +56,27 @@ it('names the missing api guard once users are eloquent', function () {
     expect($response->json('remedy'))
         ->toContain("'api' guard")
         ->toContain('config/auth.php');
+});
+
+it('rejects an api guard whose driver is not passport', function () {
+    // Presence alone is a trap: a pre-existing session/token/sanctum 'api'
+    // guard would pass preflight once Passport lands, let discovery and token
+    // issuance complete (Passport's routes work), then 401-loop forever on
+    // tokens the guard ignores — misconfiguration presenting as credential
+    // failure. The remedy already prescribes the passport driver.
+    config([
+        'statamic.users.repository' => 'eloquent',
+        'auth.guards.api' => ['driver' => 'session', 'provider' => 'users'],
+    ]);
+
+    $response = misconfiguredOAuthInitialize($this);
+
+    $response
+        ->assertStatus(503)
+        ->assertJsonPath('error', 'MCP OAuth mode is misconfigured.');
+
+    expect($response->json('remedy'))
+        ->toContain("'driver' => 'passport'");
 });
 
 it('names Passport when only the package is missing', function () {
