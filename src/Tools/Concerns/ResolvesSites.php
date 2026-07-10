@@ -16,22 +16,35 @@ trait ResolvesSites
      * sites on multisite installs (spec §6). Pass $validSites to limit the
      * check to a resource's own configured sites (taxonomies, global sets);
      * when omitted, every configured site is valid (entries).
+     *
+     * Message semantics: "not found" is reserved for sites that do not exist
+     * globally — a site statamic_overview advertises but $validSites rejects
+     * is "not available for this resource", and when the DEFAULT site was
+     * filled in and rejected, the error says so and asks for an explicit site.
      */
     protected function resolveSite(Request $request, UserContract $user, ?Collection $validSites = null): string
     {
-        $site = $request->get('site') ?? Site::default()->handle();
+        $requested = $request->get('site');
+        $site = $requested ?? Site::default()->handle();
 
-        $handles = $validSites?->values()->all()
-            ?? Site::all()->map->handle()->values()->all();
+        $configured = Site::all()->map->handle()->values()->all();
+        $handles = $validSites?->values()->all() ?? $configured;
 
         if (! in_array($site, $handles, true)) {
             sort($handles);
+            $available = implode(', ', $handles);
 
-            throw new ToolException(sprintf(
-                "site '%s' not found — available: %s",
-                $site,
-                implode(', ', $handles),
-            ));
+            throw new ToolException(match (true) {
+                ! in_array($site, $configured, true) => sprintf(
+                    "site '%s' not found — available: %s", $site, $available,
+                ),
+                $requested === null => sprintf(
+                    "this resource is not available in the default site '%s' — pass site explicitly; available: %s", $site, $available,
+                ),
+                default => sprintf(
+                    "site '%s' is not available for this resource — available: %s", $site, $available,
+                ),
+            });
         }
 
         $this->ensureSiteAccess($user, $site);

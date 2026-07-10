@@ -83,9 +83,11 @@ class TermsList extends Tool
                 'title' => $term->title(), // value('title') under the hood — recurses to the default locale
                 'slug' => $term->slug(),
                 'url' => $term->url(),
-                // get('updated_at') only — never fileLastModified(), which
-                // breaks on items that were never written to disk (tests).
-                'updated_at' => ($timestamp = $term->get('updated_at'))
+                // value('updated_at') so the fallback chain matches title()
+                // (a localized view inherits the origin's timestamp) — never
+                // fileLastModified(), which breaks on items that were never
+                // written to disk (tests). value() never touches the file.
+                'updated_at' => ($timestamp = $term->value('updated_at'))
                     ? Carbon::createFromTimestamp($timestamp, config('app.timezone'))->toIso8601String()
                     : null,
             ])->values()->all(),

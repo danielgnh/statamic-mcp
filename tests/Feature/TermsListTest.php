@@ -112,10 +112,23 @@ it('rejects a configured site the taxonomy is not available in', function () {
     Fixtures::tags();
     Taxonomy::findByHandle('tags')->sites(['en'])->save();
 
-    // 'de' is a configured site, but the tags taxonomy only lives in 'en'.
+    // 'de' exists (statamic_overview advertises it) — the error must say
+    // "not available for this resource", never the contradictory "not found".
     Server::actingAs(Fixtures::makeSuper())
         ->tool(TermsList::class, ['taxonomy' => 'tags', 'site' => 'de'])
-        ->assertHasErrors(["site 'de' not found — available: en"]);
+        ->assertHasErrors(["site 'de' is not available for this resource — available: en"]);
+});
+
+it('asks for an explicit site when the default site is not valid for the resource', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Taxonomy::findByHandle('tags')->sites(['de'])->save();
+
+    // No site param: the default (en) is filled in, but the taxonomy only
+    // lives in de — the error must say the DEFAULT was the problem.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(TermsList::class, ['taxonomy' => 'tags'])
+        ->assertHasErrors(["this resource is not available in the default site 'en' — pass site explicitly; available: de"]);
 });
 
 it('rejects an unknown site naming the available ones', function () {
