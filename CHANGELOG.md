@@ -19,7 +19,9 @@ adheres to [Semantic Versioning](https://semver.org).
 - Token auth mode (default): `mcp_{tokenId}_{secret}` tokens hashed (SHA-256)
   into `storage/statamic/mcp/tokens.yaml` — works on file-based and Eloquent
   user installs. Commands: `mcp:token`, `mcp:tokens`, `mcp:token:revoke`.
-  Every authentication failure answers one indistinguishable 401.
+  Every authentication failure answers one indistinguishable 401 — including
+  hand-edited records that lost their hash key (which always reject, never
+  degrading to a guessable password).
 - OAuth auth mode (opt-in): delegates entirely to `laravel/mcp` + Laravel
   Passport; misconfiguration answers 503 with the exact remedy on the MCP
   route only — token mode never touches Passport.

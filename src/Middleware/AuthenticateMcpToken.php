@@ -38,17 +38,22 @@ class AuthenticateMcpToken
 
         [, $tokenId, $secret] = $parts;
 
-        // 3. Constant-time compare against the stored SHA-256. A dummy hash
-        // stands in when the record is missing (every request burns one
-        // comparison — timing uniformity) or when a hand-edited record lost
-        // its hash key (degrade to a clean 401, never a 500).
+        // 3. Constant-time compare against the stored SHA-256. When no usable
+        // hash is present (record missing, or a hand-edited record that lost
+        // its hash key) an UNPREDICTABLE per-request dummy stands in so one
+        // hash_equals still runs on every path (timing uniformity) — never a
+        // fixed public string, which would BE the password for a hash-less
+        // record. The $hasHash flag, not the compare, decides those cases:
+        // a hash-less record ALWAYS 401s regardless of the secret sent.
         $record = $this->tokens->find($tokenId);
 
-        $knownHash = is_string($record['hash'] ?? null)
-            ? $record['hash']
-            : hash('sha256', 'statamic-mcp-dummy-secret');
+        $hasHash = is_string($record['hash'] ?? null);
 
-        if (! hash_equals($knownHash, hash('sha256', $secret)) || ! $record) {
+        $knownHash = $hasHash
+            ? $record['hash']
+            : hash('sha256', bin2hex(random_bytes(32)));
+
+        if (! hash_equals($knownHash, hash('sha256', $secret)) || ! $hasHash) {
             return $this->unauthenticated();
         }
 

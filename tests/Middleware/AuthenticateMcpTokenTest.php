@@ -138,6 +138,17 @@ it('answers every authentication failure class with one indistinguishable 401', 
 
             return ['Authorization' => 'Bearer mcp_editedbyhand_'.Str::random(40)];
         })(),
+        // Bypass regression: a hash-less record must reject even when the
+        // secret equals the former hardcoded dummy — the $hasHash flag, not
+        // the compare, decides. Before the fix this authenticated.
+        'hash-less record probed with the old dummy secret' => (function () {
+            writeHandEditedTokenRecord('editedbyhand', [
+                'user' => (string) Fixtures::makeUser()->id(),
+                'expires_at' => null,
+            ]);
+
+            return ['Authorization' => 'Bearer mcp_editedbyhand_statamic-mcp-dummy-secret'];
+        })(),
     };
 
     // Anti-enumeration pin: status, header, and body must be byte-identical
@@ -158,6 +169,7 @@ it('answers every authentication failure class with one indistinguishable 401', 
     'revoked token',
     'deleted user',
     'hand-edited record missing its hash',
+    'hash-less record probed with the old dummy secret',
 ]);
 
 it('treats a hand-edited record without an expires_at key as non-expiring', function () {
