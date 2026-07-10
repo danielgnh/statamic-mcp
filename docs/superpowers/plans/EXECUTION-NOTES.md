@@ -11,6 +11,10 @@ Controller-maintained log of approved deviations from the plan text discovered d
 3. **(Task 3 quality review, IMPORTANT)** OAuth branch uses a single wrapper middleware `Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth::class` — NOT the plan's `[EnsureOAuthConfigured::class, 'auth:api']` pair. Reason: Laravel's middleware priority hoists `auth:api` (AuthenticatesRequests) above the preflight at runtime, 500ing on missing api guard and disabling pre-auth throttle.
 4. **(Task 3 quality review)** Middleware-order tests must assert the RESOLVED pipeline (`app('router')->gatherRouteMiddleware($route)`), never the declared array.
 
+## v1.1 candidates (post-release)
+
+- **Default-site gating CP parity:** ResolvesSites::canAccessSite never gates the default site (adjudicated T10/T12/T15; README documents the exemption + guidance since T26). Vendor SitePolicy gates EVERY site under multisite — our server is laxer for the default site. Revisit whether v1.1 should match the CP (breaking change for scoped agents; needs migration note).
+
 ## Carry-forward instructions for future tasks
 
 - **Tasks 10+ (all tools):** tests/TestCase.php registers `Laravel\Mcp\Server\McpServiceProvider` via getPackageProviders() (T9 fix) — AddonTestCase skips composer discovery, and without it every parameterized tool call in tests sees EMPTY arguments ("The type field is required."). Production is unaffected (auto-discovery). Do not remove; if a tool test sees empty args, check this first. Also: v6 auto-injects a `slug` field into entry/term blueprints and duplicates `required` on injected title (dedupe with array_unique) — expect these in Fields-API views.
