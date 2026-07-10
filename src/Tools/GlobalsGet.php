@@ -12,6 +12,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Globals\Variables;
 use Statamic\Facades\GlobalSet;
+use Statamic\Globals\GlobalSet as GlobalSetInstance;
 
 #[Name('globals_get')]
 #[Description("Read global variables in the raw round-trippable shape for globals_update. Pass handle for one set, or omit it to get every set you can access (others are silently omitted). With site, data holds that site's localization; when the set localizes through an origin site, inherited holds the values falling back from it. Globals have no publish state — values are always live.")]
@@ -82,6 +83,8 @@ class GlobalsGet extends Tool
             // exactly like statamic_overview (spec §4 row 13).
             ->filter(fn (string $handle) => $this->can($user, "edit {$handle} globals"))
             ->map(fn (string $handle) => GlobalSet::findByHandle($handle))
+            // A handle exposed in config but deleted on disk resolves to null.
+            ->filter(fn ($set) => $set instanceof GlobalSetInstance)
             // Sets not configured for the requested site are silently omitted too.
             ->filter(fn ($set) => $set->sites()->contains($site))
             ->map(fn ($set) => [

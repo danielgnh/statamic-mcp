@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
+use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -117,6 +118,7 @@ class BlueprintsGet extends Tool
             'collection' => 'collections',
             'taxonomy' => 'taxonomies',
             'global' => 'globals',
+            default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
     }
 
@@ -132,6 +134,7 @@ class BlueprintsGet extends Tool
             'collection' => Collection::findByHandle($handle)->entryBlueprints(),
             'taxonomy' => Taxonomy::findByHandle($handle)->termBlueprints(),
             'global' => collect([GlobalSet::findByHandle($handle)->blueprint()])->filter(),
+            default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
 
         return collect($blueprints)->keyBy(fn ($blueprint) => $blueprint->handle());
