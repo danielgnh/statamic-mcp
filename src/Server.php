@@ -17,5 +17,6 @@ class Server extends McpServer
         Tools\BlueprintsGet::class,
         Tools\EntriesList::class,
         Tools\EntriesGet::class,
+        Tools\EntriesCreate::class,
     ];
 }
