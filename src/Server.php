@@ -16,5 +16,6 @@ class Server extends McpServer
         Tools\StatamicOverview::class,
         Tools\BlueprintsGet::class,
         Tools\EntriesList::class,
+        Tools\EntriesGet::class,
     ];
 }
