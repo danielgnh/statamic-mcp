@@ -1,0 +1,212 @@
+<?php
+
+use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Danielgnh\StatamicMcp\Tools\EntriesDelete;
+use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
+use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
+use Danielgnh\StatamicMcp\Tools\TermsCreate;
+use Danielgnh\StatamicMcp\Tools\TermsDelete;
+use Danielgnh\StatamicMcp\Tools\TermsUpdate;
+use Illuminate\Testing\TestResponse;
+use Laravel\Mcp\Request;
+use Statamic\Facades\Entry;
+
+const READ_TOOLS = [
+    'blueprints_get',
+    'entries_get',
+    'entries_list',
+    'globals_get',
+    'statamic_overview',
+    'terms_get',
+    'terms_list',
+];
+
+const WRITE_TOOLS = [
+    'entries_create',
+    'entries_update',
+    'globals_update',
+    'terms_create',
+    'terms_update',
+];
+
+const DELETE_TOOLS = [
+    'entries_delete',
+    'terms_delete',
+];
+
+function readOnlyPost(array $payload, string $token, ?string $sessionId = null): TestResponse
+{
+    return test()->withHeaders(array_filter([
+        'Authorization' => 'Bearer '.$token,
+        'Accept' => 'application/json, text/event-stream',
+        'Mcp-Session-Id' => $sessionId,
+    ]))->postJson('/mcp/statamic', $payload);
+}
+
+function readOnlyInitialize(string $token): ?string
+{
+    $response = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 1,
+        'method' => 'initialize',
+        'params' => [
+            'protocolVersion' => '2025-11-25',
+            'capabilities' => (object) [],
+            'clientInfo' => ['name' => 'pest', 'version' => '1.0.0'],
+        ],
+    ], $token);
+
+    $response->assertOk();
+
+    // laravel/mcp's web transport is stateless, but pass the session id
+    // along if the server issued one — protocol-correct either way.
+    return $response->headers->get('Mcp-Session-Id');
+}
+
+function readOnlyToolNames(string $token): array
+{
+    $sessionId = readOnlyInitialize($token);
+
+    $response = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/list',
+    ], $token, $sessionId);
+
+    $response->assertOk();
+
+    return collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
+}
+
+it('advertises only the seven read tools over HTTP in read_only mode', function () {
+    config(['statamic.mcp.read_only' => true]);
+
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'ro')->token;
+
+    $names = readOnlyToolNames($token);
+
+    // Exact set equality: ONLY the seven read tools remain...
+    expect($names)->toBe(READ_TOOLS);
+
+    // ...and every write/delete tool is absent BY NAME — if the exact-set
+    // assertion ever loosens, this still pins the security property.
+    expect($names)->not->toContain(...WRITE_TOOLS, ...DELETE_TOOLS);
+});
+
+it('advertises the twelve non-delete tools with the zero-config default', function () {
+    // Default config: read_only=false, deletes=false.
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'rw')->token;
+
+    $names = readOnlyToolNames($token);
+
+    expect($names)->toBe(collect([...READ_TOOLS, ...WRITE_TOOLS])->sort()->values()->all());
+    expect($names)->toContain(...WRITE_TOOLS);
+    expect($names)->not->toContain(...DELETE_TOOLS);
+});
+
+it('advertises all fourteen tools when deletes are enabled', function () {
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'full')->token;
+
+    expect(readOnlyToolNames($token))->toBe(
+        collect([...READ_TOOLS, ...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all()
+    );
+});
+
+it('still serves read tool calls over HTTP in read_only mode', function () {
+    config(['statamic.mcp.read_only' => true]);
+
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $user = Fixtures::makeUser('view blog entries');
+    $token = app(TokenRepository::class)->issue($user, 'reader')->token;
+
+    $sessionId = readOnlyInitialize($token);
+
+    $call = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 3,
+        'method' => 'tools/call',
+        'params' => ['name' => 'statamic_overview', 'arguments' => (object) []],
+    ], $token, $sessionId);
+
+    $call->assertOk();
+
+    expect($call->json('error'))->toBeNull()
+        ->and(data_get($call->json(), 'result.isError'))->not->toBeTrue()
+        ->and(data_get($call->json(), 'result.content.0.text'))
+        ->toContain('"read_only":true');
+});
+
+// Stale-client-cache scenario, spec §6 layer 1: the Server harness enforces
+// shouldRegister(), so only a direct handle() call can pin the IN-HANDLER
+// re-check for every write/delete tool. The guard fires before validation or
+// user resolution, so bare requests suffice and no content can be touched.
+it('re-checks read_only inside the handler of every write and delete tool', function (string $tool) {
+    config(['statamic.mcp.read_only' => true, 'statamic.mcp.deletes' => true]);
+
+    Fixtures::site();
+
+    $response = (new $tool)->handle(new Request([]));
+
+    expect($response->isError())->toBeTrue()
+        ->and((string) $response->content())
+        ->toContain('writes are disabled on this server (statamic.mcp.read_only)');
+})->with([
+    'entries_create' => EntriesCreate::class,
+    'entries_update' => EntriesUpdate::class,
+    'entries_delete' => EntriesDelete::class,
+    'terms_create' => TermsCreate::class,
+    'terms_update' => TermsUpdate::class,
+    'terms_delete' => TermsDelete::class,
+    'globals_update' => GlobalsUpdate::class,
+]);
+
+it('refuses a stale-cached write tool call over HTTP in read_only mode', function () {
+    config(['statamic.mcp.read_only' => true]);
+
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->slug('hello-world')->data(['title' => 'Hello World'])->published(true)
+    )->save();
+
+    // A super user: the refusal below can only come from the read_only gate,
+    // never from a permission denial.
+    $super = Fixtures::makeSuper();
+    $token = app(TokenRepository::class)->issue($super, 'stale-cache')->token;
+
+    $sessionId = readOnlyInitialize($token);
+
+    // Simulates a client whose cached tool list still contains entries_update.
+    $call = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 3,
+        'method' => 'tools/call',
+        'params' => [
+            'name' => 'entries_update',
+            'arguments' => ['id' => $entry->id(), 'data' => ['title' => 'Hacked']],
+        ],
+    ], $token, $sessionId);
+
+    $call->assertOk(); // JSON-RPC errors still ride on HTTP 200
+
+    // Whether laravel/mcp rejects the unregistered tool at dispatch (JSON-RPC
+    // 'error') or the handler's own re-check fires (tool result isError),
+    // the refusal must happen and the write must not.
+    $refused = $call->json('error') !== null
+        || data_get($call->json(), 'result.isError') === true;
+
+    expect($refused)->toBeTrue();
+    expect(Entry::find($entry->id())->get('title'))->toBe('Hello World');
+});
