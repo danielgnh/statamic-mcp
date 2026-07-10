@@ -4,6 +4,8 @@ Controller-maintained log of approved deviations from the plan text discovered d
 
 ## Approved deviations from plan text
 
+0. **(Task 14, vendor-verified)** The publish permission gates publish-state transitions in EITHER direction (v6 CP authorizes 'publish' for unpublish too — PublishedEntriesController store+destroy); same-state sends are free. Spec §6 amended accordingly. Terms/globals have no publish state, so this applies only to entry tools (T16 revisions must respect it too).
+
 1. **(Task 3, from Pest 4.7.4 reality)** `DisabledMcpTestCase` class is impossible (Pest forbids two class bindings per file). Shipped as trait `tests/DisablesMcp.php` instead. Same pattern applies to any future per-file test-case override: use a trait (e.g. `tests/UsesOAuthMode.php`).
 2. **(Task 3 quality review, CRITICAL)** ServiceProvider builds + validates the full middleware stack BEFORE calling `Mcp::web()` (fail-closed: a config-shape throw must leave zero routes registered, never an unauthenticated route), and `Arr::wrap()`s the configured middleware.
 3. **(Task 3 quality review, IMPORTANT)** OAuth branch uses a single wrapper middleware `Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth::class` — NOT the plan's `[EnsureOAuthConfigured::class, 'auth:api']` pair. Reason: Laravel's middleware priority hoists `auth:api` (AuthenticatesRequests) above the preflight at runtime, 500ing on missing api guard and disabling pre-auth throttle.
