@@ -106,8 +106,12 @@ class EntriesUpdate extends Tool
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
 
-        // == not ===: key order is irrelevant, values must match exactly.
-        $dirty = $merged != $current
+        // Strict compare over normalized values: assoc key order is
+        // irrelevant (sorted recursively), but types matter — loose == would
+        // juggle null == '' and '1' == 1 into false no-ops, so an explicit
+        // null could never clear a falsy field and the write would be
+        // silently dropped.
+        $dirty = $this->normalize($merged) !== $this->normalize($current)
             || ($slug !== null && $slug !== $entry->slug())
             || ($date !== null && ! $date->equalTo($entry->date()))
             || ($published !== null && $published !== $entry->published());
@@ -167,6 +171,25 @@ class EntriesUpdate extends Tool
     }
 
     /**
+     * Recursively sort associative keys (list order is content, key order is
+     * not) so the dirty check can compare strictly — see the comment there.
+     */
+    private function normalize(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $value = array_map($this->normalize(...), $value);
+
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return $value;
+    }
+
+    /**
      * The one raw-path artifact an agent can accidentally round-trip: the
      * truncated {__preview, truncated, note} shape entries_get substitutes
      * for long Bard/markdown values (T11 quality review).
@@ -186,8 +209,14 @@ class EntriesUpdate extends Tool
 
     private function resolveDate(?string $date, EntryContract $entry): ?Carbon
     {
-        if (! $date) {
+        if ($date === null) {
             return null;
+        }
+
+        // Symmetry with the slug path: an empty value is an error, never a
+        // silent ignore (Carbon::parse('') would quietly mean "now").
+        if (trim($date) === '') {
+            throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09 15:30, or omit date');
         }
 
         if (! $entry->collection()->dated()) {
