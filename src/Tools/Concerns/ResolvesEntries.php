@@ -17,7 +17,9 @@ trait ResolvesEntries
      * Missing and exists-but-unexposed are indistinguishable by design
      * (spec §4 / §6 layer 2). A supplied $site must match the entry's own
      * site — selecting a localization by site is the collection + slug
-     * lookup's job.
+     * lookup's job. The mismatch check runs before the site-access check on
+     * purpose: the access denial names the site anyway, so erroring earlier
+     * with the sibling localization ids reveals nothing the denial wouldn't.
      */
     protected function findExposedEntry(string $id, UserContract $user, ?string $site = null): EntryContract
     {
@@ -28,11 +30,19 @@ trait ResolvesEntries
         }
 
         if ($site !== null && $site !== $entry->locale()) {
+            $siblings = $entry->collection()->sites()
+                ->map(fn (string $handle) => $entry->in($handle))
+                ->filter()
+                ->map(fn (EntryContract $localization) => $localization->locale().' => '.$localization->id())
+                ->values()
+                ->all();
+
             throw new ToolException(sprintf(
-                "entry '%s' belongs to site '%s' — omit site or pass '%s'",
+                "entry '%s' belongs to site '%s', not '%s' — pass the matching localization id instead (or omit site). Localizations: %s",
                 $id,
                 $entry->locale(),
-                $entry->locale(),
+                $site,
+                implode('; ', $siblings),
             ));
         }
 

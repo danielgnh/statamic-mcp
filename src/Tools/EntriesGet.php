@@ -76,17 +76,35 @@ class EntriesGet extends Tool
 
         $this->assertKnownFields($requestedFields, $blueprint);
 
-        $data = $format === 'augmented'
+        $localization = null;
+
+        if ($format === 'augmented') {
             // Value::jsonSerialize runs a FULL augment — a terms relation would
             // inline whole augmented terms including their reverse entries.
             // shallow() reduces relations to id/title/api_url-style stubs.
-            ? collect($entry->toAugmentedArray())
+            $data = collect($entry->toAugmentedArray())
                 ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
-                ->all()
+                ->all();
+        } else {
             // raw: the round-trippable write shape. updated_at/updated_by are
             // Statamic-managed metadata (its own toArray excludes updated_at) —
             // stripped so agents can't round-trip stale values into updates.
-            : $entry->data()->except(['updated_at', 'updated_by'])->all();
+            $data = $entry->data()->except(['updated_at', 'updated_by'])->all();
+
+            if ($entry->hasOrigin()) {
+                $origin = $entry->origin();
+                $inherited = array_diff_key($origin->data()->except(['updated_at', 'updated_by'])->all(), $data);
+
+                $localization = [
+                    'origin_id' => $origin->id(),
+                    'local_overrides' => array_keys($data),
+                    'inherited_from_origin' => array_keys($inherited),
+                    'note' => 'inherited fields are shown from the origin — sending one back in entries_update makes it a local override',
+                ];
+
+                $data = array_merge($inherited, $data); // disjoint by the diff_key above — local wins there
+            }
+        }
 
         if ($requestedFields !== []) {
             $data = array_intersect_key($data, array_flip($requestedFields));
@@ -113,6 +131,10 @@ class EntriesGet extends Tool
 
         if ($format === 'augmented') {
             $response['warning'] = 'augmented data is rendered for display — NEVER send it back into entries_update; fetch raw first';
+        }
+
+        if ($localization !== null) {
+            $response['localization'] = $localization;
         }
 
         return $this->json($response);

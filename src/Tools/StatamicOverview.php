@@ -32,7 +32,7 @@ class StatamicOverview extends Tool
         $user = $this->user($request);
 
         return $this->json([
-            'sites' => $this->sites(),
+            'sites' => $this->sites($user),
             'collections' => $this->collections($user),
             'taxonomies' => $this->taxonomies($user),
             'globals' => $this->globals($user),
@@ -48,14 +48,28 @@ class StatamicOverview extends Tool
         ]);
     }
 
-    private function sites(): array
+    private function sites(UserContract $user): array
     {
-        return Site::all()->map(fn ($site) => [
-            'handle' => $site->handle(),
-            'name' => $site->name(),
-            'url' => $site->url(),
-            'locale' => $site->locale(),
-        ])->values()->all();
+        $multisite = Site::multiEnabled();
+
+        return Site::all()->map(function ($site) use ($user, $multisite) {
+            $shape = [
+                'handle' => $site->handle(),
+                'name' => $site->name(),
+                'url' => $site->url(),
+                'locale' => $site->locale(),
+            ];
+
+            // Mirrors ensureSiteAccess so the model is never offered a site it
+            // will be denied on: 'access {site} site' only exists on multisite,
+            // and the default site is never gated (single-site: no flag at all).
+            if ($multisite) {
+                $shape['can_access'] = $site->handle() === Site::default()->handle()
+                    || $this->can($user, "access {$site->handle()} site");
+            }
+
+            return $shape;
+        })->values()->all();
     }
 
     private function collections(UserContract $user): array

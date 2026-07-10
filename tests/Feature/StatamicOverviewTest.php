@@ -116,6 +116,32 @@ it('reports the read_only server flag and forces the deletes flag off', function
         ->assertSee('"server":{"read_only":true,"deletes":false}');
 });
 
+it('flags per-site access under multisite, never gating the default site', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $user = Fixtures::makeUser('view blog entries'); // no 'access de site'
+
+    Server::actingAs($user)
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        // ensureSiteAccess never gates the default site, so en stays accessible
+        ->assertSee('"locale":"en_US","can_access":true')
+        ->assertSee('"locale":"de_DE","can_access":false');
+});
+
+it('reflects a granted site permission in the can_access flag', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('access de site'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"de_DE","can_access":true');
+});
+
 // moved here from Task 6: requires the Server class
 it('guards the real MCP endpoint end to end', function () {
     $initialize = [
