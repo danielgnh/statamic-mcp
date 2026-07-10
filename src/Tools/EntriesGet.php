@@ -19,7 +19,7 @@ use Statamic\Fields\Blueprint;
 use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable.')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist; the returned data is always the live entry.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
@@ -138,6 +138,13 @@ class EntriesGet extends Tool
 
         if ($entry->collection()->dated()) {
             $response['date'] = $entry->date()?->toIso8601String();
+        }
+
+        // One-key working-copy surfacing (staged values themselves are v1.1):
+        // data above is always the LIVE entry — a true here means CP or MCP
+        // edits are staged on top of it.
+        if ($entry->revisionsEnabled()) {
+            $response['has_working_copy'] = $entry->hasWorkingCopy();
         }
 
         if ($format === 'augmented') {
