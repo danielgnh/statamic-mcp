@@ -36,18 +36,26 @@ trait ComparesPatchData
      * for long Bard/markdown values (T11 quality review).
      *
      * @param  string  $getTool  the tool to point the agent back to, e.g. 'entries_get'
+     * @param  bool  $supportsFields  whether $getTool has a fields parameter — globals_get
+     *                                does not, and the remedy must never fabricate one
      */
-    protected function rejectPreviewObjects(array $data, string $getTool): void
+    protected function rejectPreviewObjects(array $data, string $getTool, bool $supportsFields = true): void
     {
         foreach ($data as $handle => $value) {
             if (is_array($value) && array_key_exists('__preview', $value)) {
-                throw new ToolException(sprintf(
-                    'field %s is a truncated preview object from %s, not raw content — fetch the raw value first (%s with fields: ["%s"]) and send that back',
-                    $handle,
-                    $getTool,
-                    $getTool,
-                    $handle,
-                ));
+                throw new ToolException($supportsFields
+                    ? sprintf(
+                        'field %s is a truncated preview object from %s, not raw content — fetch the raw value first (%s with fields: ["%s"]) and send that back',
+                        $handle,
+                        $getTool,
+                        $getTool,
+                        $handle,
+                    )
+                    : sprintf(
+                        'field %s is a truncated preview object, not raw content — fetch the current raw value from %s and send that back',
+                        $handle,
+                        $getTool,
+                    ));
             }
         }
     }

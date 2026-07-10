@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Laravel\Mcp\Request;
 use Statamic\Events\EntryDeleting;
 use Statamic\Facades\Entry;
@@ -315,6 +316,8 @@ it('reports a clean error when a listener cancels a second-level localization de
 
     [$origin, $de, $at] = makeDeletableLocalizedChain();
 
+    Exceptions::fake();
+
     // Cancelling 'at' makes de->delete() inside deleteDescendants() throw
     // vendor's raw 'Cannot delete an entry with localizations.' — the tool
     // must catch it and name the survivors, never leak an internal error.
@@ -323,6 +326,12 @@ it('reports a clean error when a listener cancels a second-level localization de
     Server::actingAs(Fixtures::makeSuper())
         ->tool(EntriesDelete::class, ['id' => $origin->id()])
         ->assertHasErrors(["localizations could not be deleted (a listener may have cancelled, or new localizations appeared) — still present: de => {$de->id()}; at => {$at->id()}. The origin entry was not deleted and nothing else was."]);
+
+    // The agent sees the survivor ToolException; the swallowed vendor throw
+    // must still land in the host app's exception reporter (observability).
+    Exceptions::assertReported(
+        fn (Exception $e) => $e->getMessage() === 'Cannot delete an entry with localizations.'
+    );
 
     expect(Entry::find($origin->id()))->not->toBeNull()
         ->and(Entry::find($de->id()))->not->toBeNull()

@@ -89,6 +89,13 @@ class EntriesDelete extends Tool
             $survivors = $entry->descendants()->map->fresh()->filter();
 
             if ($survivors->isNotEmpty()) {
+                if ($cascadeFailure) {
+                    // The agent gets the survivor ToolException below; the
+                    // swallowed vendor throw still goes to the host app's
+                    // exception reporter so operators see the root cause.
+                    report($cascadeFailure);
+                }
+
                 $survivorIds = $survivors->map->id()->values()->all();
 
                 $alreadyDeleted = collect($deleted)->reject(

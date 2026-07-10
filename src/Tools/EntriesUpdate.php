@@ -33,7 +33,7 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or published.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date (e.g. 2026-07-09 or 2026-07-09 15:30) — dated collections only.'),
             'published' => $schema->boolean()->description('Omit to leave publish state untouched. Changing it requires the publish permission for the collection. Rejected entirely on revision-enabled collections.'),
@@ -57,13 +57,15 @@ class EntriesUpdate extends Tool
         $validated = $request->validate(
             [
                 'id' => 'required|string',
-                'data' => 'required|array',
+                // present (not required): Laravel's 'required' fails on [],
+                // and a slug/date/published-only update sends an empty object.
+                'data' => 'present|array',
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
                 'published' => 'nullable|boolean',
                 'site' => 'nullable|string',
             ],
-            ['data.required' => "Pass 'data' as an object of raw field values to merge — call entries_get (format raw) first."],
+            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug, date, or published).'],
         );
 
         $user = $this->user($request);

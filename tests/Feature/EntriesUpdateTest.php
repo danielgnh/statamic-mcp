@@ -319,6 +319,40 @@ it('normalizes a new slug the way Statamic will persist it', function () {
     expect(Entry::find($entry->id())->slug())->toBe('hello-again');
 });
 
+it('updates the slug alone with an empty data object', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // The UX papercut this pins: Laravel's 'required' rule fails on [] — an
+    // agent changing only the slug must not be forced to invent a data patch.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'slug' => 'hello-again'])
+        ->assertOk()
+        ->assertSee('"slug":"hello-again"');
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->slug())->toBe('hello-again')
+        ->and($fresh->get('title'))->toBe('Hello World');
+});
+
+it('still requires the data key to be present', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'slug' => 'hello-again'])
+        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug, date, or published).']);
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
 it('rejects a slug colliding with another entry, but never with itself', function () {
     Fixtures::site();
     Fixtures::tags();
