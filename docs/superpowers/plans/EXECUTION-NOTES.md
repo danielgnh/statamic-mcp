@@ -11,6 +11,10 @@ Controller-maintained log of approved deviations from the plan text discovered d
 3. **(Task 3 quality review, IMPORTANT)** OAuth branch uses a single wrapper middleware `Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth::class` — NOT the plan's `[EnsureOAuthConfigured::class, 'auth:api']` pair. Reason: Laravel's middleware priority hoists `auth:api` (AuthenticatesRequests) above the preflight at runtime, 500ing on missing api guard and disabling pre-auth throttle.
 4. **(Task 3 quality review)** Middleware-order tests must assert the RESOLVED pipeline (`app('router')->gatherRouteMiddleware($route)`), never the declared array.
 
+## Approved deviation (T27)
+
+- phpstan.neon carries ONE message-scoped ignore (`^Call to an undefined method Statamic\\Contracts\\`): Statamic v6 contracts are empty marker interfaces (verified in vendor) while facades type against them — 133 false `method.notFound` findings. The ignore is scoped so drift in OUR namespace still fails the build (currently zero). Level 5 + larastan 3.10.
+
 ## v1.1 candidates (post-release)
 
 - **Default-site gating CP parity:** ResolvesSites::canAccessSite never gates the default site (adjudicated T10/T12/T15; README documents the exemption + guidance since T26). Vendor SitePolicy gates EVERY site under multisite — our server is laxer for the default site. Revisit whether v1.1 should match the CP (breaking change for scoped agents; needs migration note).
