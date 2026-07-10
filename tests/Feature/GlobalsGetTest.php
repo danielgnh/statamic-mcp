@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\GlobalsGet;
+use Statamic\Contracts\Globals\GlobalRepository;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Site;
@@ -52,6 +53,51 @@ it('treats an unexposed set as missing, listing only exposed handles', function 
     Server::actingAs(Fixtures::makeSuper())
         ->tool(GlobalsGet::class, ['handle' => 'secrets'])
         ->assertHasErrors(["global 'secrets' not found — available: settings"]);
+});
+
+it('reports not-found instead of erroring when an exposed set cannot be fetched', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    // Stache index/item drift: the exposure check sees the handle in
+    // GlobalSet::all() while findByHandle() comes back null (e.g. a deploy
+    // deleted the set under a warm cache). A proxied partial stubs only the
+    // fetch — everything else forwards to the real repository.
+    $real = app(GlobalRepository::class);
+    $mock = Mockery::mock($real);
+    $mock->shouldReceive('findByHandle')->with('settings')->andReturnNull();
+    GlobalSet::swap($mock);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(GlobalsGet::class, ['handle' => 'settings'])
+        ->assertHasErrors(["global 'settings' not found — available: settings"]);
+});
+
+it('silently omits a set from the listing when it cannot be fetched', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    Blueprint::makeFromFields(['tagline' => ['type' => 'text']])
+        ->setHandle('footer')->setNamespace('globals')->save();
+    $footer = GlobalSet::make('footer')->title('Footer');
+    $footer->save();
+    $footer->makeLocalization(Site::default()->handle())->data(['tagline' => 'Bye'])->save();
+
+    // Same index/item drift as above, listing path: footer survives the
+    // exposure and permission filters but its fetch comes back null, while
+    // other handles forward to the real repository.
+    $real = app(GlobalRepository::class);
+    $mock = Mockery::mock($real);
+    $mock->shouldReceive('findByHandle')->andReturnUsing(
+        fn (string $handle) => $handle === 'footer' ? null : $real->findByHandle($handle),
+    );
+    GlobalSet::swap($mock);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(GlobalsGet::class, [])
+        ->assertOk()
+        ->assertSee('"handle":"settings"')
+        ->assertDontSee('"handle":"footer"');
 });
 
 it('reports a truly missing handle with the identical error shape', function () {

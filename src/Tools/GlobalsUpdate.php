@@ -69,6 +69,14 @@ class GlobalsUpdate extends Tool
 
         $set = GlobalSet::findByHandle($handle);
 
+        // ensureExposed() checked the handle against GlobalSet::all(), but
+        // the index and the item fetch can drift (a deploy deleting the set
+        // under a warm Stache) — report the indistinguishable not-found
+        // shape rather than fatal on the null.
+        if ($set === null) {
+            return $this->notFound('global', $handle, $this->exposedHandles('globals'));
+        }
+
         // Global sets only exist in their own configured sites; the trait
         // enforces 'access {site} site' for non-default sites on multisite.
         $site = $this->resolveSite($request, $user, $set->sites());

@@ -59,6 +59,14 @@ class GlobalsGet extends Tool
 
         $set = GlobalSet::findByHandle($handle);
 
+        // ensureExposed() checked the handle against GlobalSet::all(), but
+        // the index and the item fetch can drift (a deploy deleting the set
+        // under a warm Stache) — report the indistinguishable not-found
+        // shape rather than fatal on the null.
+        if ($set === null) {
+            return $this->notFound('global', $handle, $this->exposedHandles('globals'));
+        }
+
         // Global sets only exist in their own configured sites; the trait
         // enforces 'access {site} site' for non-default sites on multisite.
         $site = $this->resolveSite($request, $user, $set->sites());
@@ -83,7 +91,12 @@ class GlobalsGet extends Tool
             // exactly like statamic_overview (spec §4 row 13).
             ->filter(fn (string $handle) => $this->can($user, "edit {$handle} globals"))
             ->map(fn (string $handle) => GlobalSet::findByHandle($handle))
-            // A handle exposed in config but deleted on disk resolves to null.
+            // A handle exposed in config but deleted on disk resolves to
+            // null. Narrowing to the concrete class (needed for static
+            // analysis — the contract is an empty marker interface) would
+            // also omit sets from a third-party repository returning its own
+            // implementation; acceptable, the core repository is the
+            // supported surface.
             ->filter(fn ($set) => $set instanceof GlobalSetInstance)
             // Sets not configured for the requested site are silently omitted too.
             ->filter(fn ($set) => $set->sites()->contains($site))

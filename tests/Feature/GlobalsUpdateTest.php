@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
 use Illuminate\Support\Facades\Event;
+use Statamic\Contracts\Globals\GlobalRepository;
 use Statamic\Events\GlobalVariablesSaving;
 use Statamic\Facades\Blink;
 use Statamic\Facades\GlobalSet;
@@ -205,6 +206,27 @@ it('reports a listener-cancelled save instead of claiming success', function () 
 
     expect(GlobalSet::findByHandle('settings')->in('en')->data()->get('site_name'))
         ->toBe('Acme');
+});
+
+it('reports not-found instead of erroring when an exposed set cannot be fetched', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    // Stache index/item drift: the exposure check sees the handle in
+    // GlobalSet::all() while findByHandle() comes back null (e.g. a deploy
+    // deleted the set under a warm cache). A proxied partial stubs only the
+    // fetch — everything else forwards to the real repository.
+    $real = app(GlobalRepository::class);
+    $mock = Mockery::mock($real);
+    $mock->shouldReceive('findByHandle')->with('settings')->andReturnNull();
+    GlobalSet::swap($mock);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(GlobalsUpdate::class, [
+            'handle' => 'settings',
+            'data' => ['site_name' => 'X'],
+        ])
+        ->assertHasErrors(["global 'settings' not found — available: settings"]);
 });
 
 it('denies updating without the edit permission, naming it', function () {
