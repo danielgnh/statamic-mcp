@@ -41,10 +41,22 @@ trait ResolvesSites
      */
     protected function ensureSiteAccess(UserContract $user, string $site): void
     {
+        if (! $this->canAccessSite($user, $site)) {
+            $this->ensurePermission($user, "access {$site} site");
+        }
+    }
+
+    /**
+     * The single source of truth for site access — statamic_overview's
+     * advertised can_access flag and the enforcement above must never drift
+     * apart. Single-site installs and the default site are never gated.
+     */
+    protected function canAccessSite(UserContract $user, string $site): bool
+    {
         if (! Site::multiEnabled() || $site === Site::default()->handle()) {
-            return;
+            return true;
         }
 
-        $this->ensurePermission($user, "access {$site} site");
+        return $this->can($user, "access {$site} site");
     }
 }

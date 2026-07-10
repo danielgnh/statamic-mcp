@@ -21,12 +21,18 @@ class Fixtures
         ]);
     }
 
-    public static function multisite(): void
+    public static function multisite(bool $withThirdSite = false): void
     {
-        Site::setSites([
+        $sites = [
             'en' => ['name' => 'English', 'url' => '/', 'locale' => 'en_US'],
             'de' => ['name' => 'German', 'url' => '/de/', 'locale' => 'de_DE'],
-        ]);
+        ];
+
+        if ($withThirdSite) {
+            $sites['at'] = ['name' => 'Austrian', 'url' => '/at/', 'locale' => 'de_AT'];
+        }
+
+        Site::setSites($sites);
 
         // Enables 'access {site} site' permissions — but only if multisite() runs before anything
         // builds the permission tree (Permission::all(), CP requests, authorization checks):
