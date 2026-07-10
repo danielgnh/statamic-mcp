@@ -11,6 +11,7 @@ Controller-maintained log of approved deviations from the plan text discovered d
 
 ## Carry-forward instructions for future tasks
 
+- **Tasks 10+ (all tools):** tests/TestCase.php registers `Laravel\Mcp\Server\McpServiceProvider` via getPackageProviders() (T9 fix) — AddonTestCase skips composer discovery, and without it every parameterized tool call in tests sees EMPTY arguments ("The type field is required."). Production is unaffected (auto-discovery). Do not remove; if a tool test sees empty args, check this first. Also: v6 auto-injects a `slug` field into entry/term blueprints and duplicates `required` on injected title (dedupe with array_unique) — expect these in Fields-API views.
 - **Tasks 10+ (all tools):** base Tool now provides throwing guards `ensureWritesEnabled()`/`ensureDeletesEnabled()` (canonical denial messages naming the config switch) and boolean `can(UserContract, string)` — USE THESE, never hand-roll read-only/deletes-disabled/permission-flag logic (T8 quality review).
 - **Task 10/12 + 17 (site handling):** revisit whether statamic_overview's `sites` block should gain a per-site access flag in multisite ('access {site} site' only registers when multisite enabled) — the model shouldn't be offered sites it will be denied on (T8 quality review #5).
 
