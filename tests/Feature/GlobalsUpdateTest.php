@@ -179,8 +179,10 @@ it('rejects preview objects round-tripped from globals_get', function () {
             'handle' => 'settings',
             'data' => ['footer_text' => ['__preview' => 'A long…', 'truncated' => true, 'note' => 'NOT writable']],
         ])
-        ->assertHasErrors()
-        ->assertSee('is a truncated preview object');
+        // globals_get has no fields parameter — the remediation must not
+        // fabricate one (the entries/terms message does, honestly, for them).
+        ->assertHasErrors(['field footer_text is a truncated preview object, not raw content — fetch the current raw value from globals_get and send that back'])
+        ->assertDontSee('fields:');
 });
 
 it('reports a listener-cancelled save instead of claiming success', function () {

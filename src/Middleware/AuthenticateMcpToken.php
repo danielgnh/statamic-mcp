@@ -38,15 +38,25 @@ class AuthenticateMcpToken
 
         [, $tokenId, $secret] = $parts;
 
-        // 3. Constant-time compare against the stored SHA-256.
+        // 3. Constant-time compare against the stored SHA-256. A dummy hash
+        // stands in when the record is missing (every request burns one
+        // comparison — timing uniformity) or when a hand-edited record lost
+        // its hash key (degrade to a clean 401, never a 500).
         $record = $this->tokens->find($tokenId);
 
-        if (! $record || ! hash_equals($record['hash'], hash('sha256', $secret))) {
+        $knownHash = is_string($record['hash'] ?? null)
+            ? $record['hash']
+            : hash('sha256', 'statamic-mcp-dummy-secret');
+
+        if (! hash_equals($knownHash, hash('sha256', $secret)) || ! $record) {
             return $this->unauthenticated();
         }
 
-        // 4. Expiry (TokenRepository::find intentionally returns expired records).
-        if ($record['expires_at'] && Carbon::parse($record['expires_at'])->isPast()) {
+        // 4. Expiry (TokenRepository::find intentionally returns expired
+        // records; hand-edited records may lack the key entirely).
+        $expiresAt = $record['expires_at'] ?? null;
+
+        if ($expiresAt && Carbon::parse($expiresAt)->isPast()) {
             return $this->unauthenticated();
         }
 

@@ -88,7 +88,9 @@ class GlobalsUpdate extends Tool
         // resolveSite() already rejected.
         $variables = $set->in($site) ?? $set->makeLocalization($site);
 
-        $this->rejectPreviewObjects($patch, 'globals_get');
+        // supportsFields: false — globals_get has no fields parameter, the
+        // remediation text must not invent one.
+        $this->rejectPreviewObjects($patch, 'globals_get', supportsFields: false);
 
         // Statamic-managed front-matter is never writable via data — enforced
         // even without a blueprint: the global-variables Stache store strips

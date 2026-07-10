@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tools\TermsDelete;
 use Illuminate\Support\Facades\Event;
 use Laravel\Mcp\Request;
 use Statamic\Events\TermDeleting;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
 use Statamic\Facades\Taxonomy;
@@ -220,4 +221,38 @@ it('removes entry references to the deleted term', function () {
     // dangling reference from the entry's term field.
     expect(Entry::find($entry->id())->get('topic'))->toBeNull()
         ->and(Entry::find($entry->id()))->not->toBeNull();
+});
+
+it('strips only the deleted term from a multi-term field, re-indexed', function () {
+    config(['statamic.mcp.deletes' => true]);
+
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    makeDoomedTag();
+    Term::make()->taxonomy('tags')->slug('laravel')->data(['title' => 'Laravel'])->save();
+
+    // A multi-term field (no max_items cap) stores an ARRAY of slugs —
+    // vendor's replaceValuesInArray path, which the single-term string-shape
+    // test above cannot reach. Pin: only the deleted slug goes, and the
+    // survivor list comes back re-indexed (a keyed remainder like [1 =>
+    // 'laravel'] would serialize as a JSON object, not an array).
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'topics' => ['type' => 'terms', 'taxonomies' => ['tags']],
+    ])->setHandle('article')->setNamespace('collections.blog')->save();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->slug('post')->data(['title' => 'Post', 'topics' => ['php', 'laravel']])
+    )->save();
+
+    // Rehydrate from disk (fresh-process reality) — same fact as the
+    // single-term test: reference removal needs the tool's pre-delete sync.
+    Stache::store('terms')->store('tags')->forgetItem('en::php');
+
+    Server::actingAs(Fixtures::makeUser('delete tags terms'))
+        ->tool(TermsDelete::class, ['id' => 'tags::php'])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('topics'))->toBe(['laravel']);
 });
