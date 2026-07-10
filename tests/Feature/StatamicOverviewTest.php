@@ -152,5 +152,6 @@ it('guards the real MCP endpoint end to end', function () {
         'Accept' => 'application/json, text/event-stream',
     ])
         ->assertOk()
-        ->assertSee('collections');
+        ->assertSee('collections')
+        ->assertSee('"isError":false', escape: false);
 });

@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tests;
 
 use Danielgnh\StatamicMcp\ServiceProvider;
+use Laravel\Mcp\Server\McpServiceProvider;
 use Statamic\Testing\AddonTestCase;
 use Statamic\Testing\Concerns\PreventsSavingStacheItemsToDisk;
 
@@ -12,6 +13,17 @@ abstract class TestCase extends AddonTestCase
     use PreventsSavingStacheItemsToDisk;
 
     protected string $addonServiceProvider = ServiceProvider::class;
+
+    protected function getPackageProviders($app)
+    {
+        // AddonTestCase skips composer package discovery, so laravel/mcp's own
+        // provider (whose resolving() callback feeds tool arguments into the
+        // injected Request) must be registered explicitly. Production apps get
+        // it via auto-discovery.
+        return array_merge(parent::getPackageProviders($app), [
+            McpServiceProvider::class,
+        ]);
+    }
 
     protected function getEnvironmentSetUp($app)
     {

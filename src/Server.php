@@ -14,5 +14,6 @@ class Server extends McpServer
     /** @var array<int, class-string<Tool>> */
     protected array $tools = [
         Tools\StatamicOverview::class,
+        Tools\BlueprintsGet::class,
     ];
 }
