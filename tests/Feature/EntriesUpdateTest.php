@@ -1,0 +1,420 @@
+<?php
+
+use Danielgnh\StatamicMcp\Server;
+use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
+use Illuminate\Support\Facades\Event;
+use Statamic\Events\EntrySaved;
+use Statamic\Events\EntrySaving;
+use Statamic\Facades\Blueprint;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
+
+function makeUpdatableBlogEntry(array $data = []): Statamic\Contracts\Entries\Entry
+{
+    return tap(
+        Entry::make()
+            ->collection('blog')
+            ->slug('hello-world')
+            ->data(array_merge(['title' => 'Hello World', 'hero_image' => 'hero.jpg'], $data))
+            ->published(true)
+    )->save();
+}
+
+function makeUpdatableDatedEvent(): Statamic\Contracts\Entries\Entry
+{
+    tap(
+        Collection::make('events')
+            ->title('Events')
+            ->dated(true)
+            ->sites(['en'])
+            ->routes('/events/{slug}')
+    )->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('event')->setNamespace('collections.events')->save();
+
+    return tap(
+        Entry::make()->collection('events')->slug('launch-party')->data(['title' => 'Launch Party'])->date('2026-08-01')->published(true)
+    )->save();
+}
+
+it('merges top-level keys shallowly, preserving untouched fields and publish state', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertOk()
+        ->assertSee('"result":"published"') // publish state untouched
+        ->assertSee('"cp_edit_url"');
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Hello Again')
+        ->and($fresh->get('hero_image'))->toBe('hero.jpg')
+        ->and($fresh->published())->toBeTrue();
+});
+
+it('replaces nested structures wholesale, never deep-merging', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry(['content' => [
+        ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Old paragraph one.']]],
+        ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Old paragraph two.']]],
+    ]]);
+
+    $newContent = [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'The only paragraph now.']]]];
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['content' => $newContent]])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('content'))->toBe($newContent);
+});
+
+it('stores an explicit null to clear a field', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero_image' => null]])
+        ->assertOk();
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->data()->has('hero_image'))->toBeTrue() // a local null, not an absent key
+        ->and($fresh->get('hero_image'))->toBeNull();
+});
+
+it('errors when clearing a required field, via merged validation', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => null]])
+        ->assertHasErrors()
+        ->assertSee('validation failed');
+});
+
+it('does not false-fail required fields on partial updates', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // title stays present via the merge — updating only hero_image must pass
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero_image' => 'new.jpg']])
+        ->assertOk()
+        ->assertHasNoErrors();
+});
+
+it('is a no-op when merged data equals current data', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Event::fake([EntrySaved::class]);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World']])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Event::assertNotDispatched(EntrySaved::class); // nothing was saved
+});
+
+it('changes publish state only when published is sent explicitly', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // CP parity: the unpublish route authorizes 'publish' too
+    // (PublishedEntriesController::destroy) — the gate is on any transition.
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'publish blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => false])
+        ->assertOk()
+        ->assertSee('saved as draft — not live');
+
+    expect(Entry::find($entry->id())->published())->toBeFalse();
+});
+
+it("requires 'publish blog entries' to set published: true", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->slug('a-draft')->data(['title' => 'Draft'])->published(false)
+    )->save();
+
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Draft'], 'published' => true])
+        ->assertHasErrors(["requires 'publish blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'publish blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Draft'], 'published' => true])
+        ->assertOk()
+        ->assertSee('"result":"published"');
+});
+
+it("requires 'publish blog entries' to unpublish (CP parity)", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+    $user = Fixtures::makeUser('edit blog entries');
+
+    // The CP's unpublish action authorizes 'publish' (there is no separate
+    // unpublish permission in v6) — same gate here, on the transition to false.
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => false])
+        ->assertHasErrors(["requires 'publish blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(Entry::find($entry->id())->published())->toBeTrue();
+});
+
+it('needs no publish permission when published matches the current state', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // No transition — sending the current state is harmless, and here nothing
+    // else changed either, so it resolves as a no-op.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => true])
+        ->assertOk()
+        ->assertSee('no-op');
+});
+
+it('rejects a mismatched site selector, listing localization ids', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'Hi'], 'site' => 'de'])
+        ->assertHasErrors([
+            "entry '{$origin->id()}' belongs to site 'en', not 'de' — pass the matching localization id instead (or omit site). Localizations: en => {$origin->id()}; de => {$localization->id()}",
+        ]);
+});
+
+it('rejects unknown data keys with a did-you-mean hint', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['titel' => 'Hi']])
+        ->assertHasErrors(["unknown field titel — valid handles: content, hero_image, title, topic — did you mean 'title' instead of 'titel'?"]);
+});
+
+it('denies updating without the edit permission', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+    $user = Fixtures::makeUser('view blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hi']])
+        ->assertHasErrors(["requires 'edit blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+});
+
+it('rejects preview-object values, pointing at the raw fetch', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // The one raw-path artifact an agent can accidentally round-trip: the
+    // truncated {__preview, truncated, note} shape from entries_get.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['content' => [
+            '__preview' => 'Old paragraph one. Old paragraph two…',
+            'truncated' => true,
+            'note' => 'NOT writable — fetch raw field before editing: entries_get with fields: ["content"]',
+        ]]])
+        ->assertHasErrors(['field content is a truncated preview object from entries_get, not raw content — fetch the raw value first (entries_get with fields: ["content"]) and send that back']);
+
+    expect(Entry::find($entry->id())->get('content'))->toBeNull(); // nothing written
+});
+
+it('ignores stale updated_at and updated_by keys in the patch', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // Statamic-managed metadata — stripped, so a stale copy in agent context
+    // can neither dirty the entry (no-op below) nor overwrite real values.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [
+            'title' => 'Hello World',
+            'updated_at' => 12345,
+            'updated_by' => 'stale-user-id',
+        ]])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [
+            'title' => 'Hello Again',
+            'updated_by' => 'stale-user-id',
+        ]])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('updated_by'))->toBe($user->id()); // the acting user, never the stale copy
+});
+
+it('normalizes a new slug the way Statamic will persist it', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'slug' => 'Hello Again!'])
+        ->assertOk()
+        ->assertSee('"slug":"hello-again"');
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-again');
+});
+
+it('rejects a slug colliding with another entry, but never with itself', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    $other = tap(
+        Entry::make()->collection('blog')->slug('taken')->data(['title' => 'Taken'])->published(true)
+    )->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'slug' => 'taken'])
+        ->assertHasErrors(["slug 'taken' already exists in collection 'blog' (site 'en') as entry '{$other->id()}'"]);
+
+    // Its own slug (even un-normalized) is not a collision — it's a no-op.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'slug' => 'Hello World'])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
+it('rejects a slug that normalizes to empty', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'slug' => '🎉🎉🎉'])
+        ->assertHasErrors(["slug '🎉🎉🎉' normalizes to an empty string — pass a usable slug"]);
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
+it('updates the date of a dated entry, rejecting the data-key spelling', function () {
+    Fixtures::site();
+    $entry = makeUpdatableDatedEvent();
+
+    Server::actingAs(Fixtures::makeUser('edit events entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['date' => '2026-09-01']])
+        ->assertHasErrors(['pass date as a top-level parameter, not inside data']);
+
+    // The injected required 'date' blueprint field is satisfied by the
+    // resolved Carbon — a plain string (or a missing value) would false-fail.
+    Server::actingAs(Fixtures::makeUser('edit events entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Launch Party'], 'date' => '2026-09-01'])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->date()->format('Y-m-d'))->toBe('2026-09-01');
+});
+
+it('rejects date on a non-dated collection', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'date' => '2026-09-01'])
+        ->assertHasErrors(["collection 'blog' is not dated — omit date"]);
+});
+
+it('refuses to update when the server is read-only', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    config(['statamic.mcp.read_only' => true]);
+
+    // Either the registration gate (shouldRegister) or the in-handler
+    // re-check rejects the call — both are errors, which is all that matters.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hi']])
+        ->assertHasErrors();
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('Hello World');
+});
+
+it('reports a listener-cancelled save instead of claiming success', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // Approval-workflow addons cancel saves by returning false from
+    // EntrySaving; Entry::save() then returns false.
+    Event::listen(EntrySaving::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertHasErrors(['the save was cancelled by a listener on this site — the entry was not updated']);
+});

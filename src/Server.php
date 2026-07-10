@@ -18,5 +18,6 @@ class Server extends McpServer
         Tools\EntriesList::class,
         Tools\EntriesGet::class,
         Tools\EntriesCreate::class,
+        Tools\EntriesUpdate::class,
     ];
 }
