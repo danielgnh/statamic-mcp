@@ -357,6 +357,22 @@ it('rejects a slug that normalizes to empty', function () {
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });
 
+it('rejects the data-key spelling of slug with a targeted remedy', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry();
+
+    // v6 injects 'slug' into blueprints, but it is a dedicated top-level
+    // parameter — the generic unknown-field error would give no usable hint.
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['slug' => 'other']])
+        ->assertHasErrors(['pass slug as a top-level parameter, not inside data']);
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
 it('updates the date of a dated entry, rejecting the data-key spelling', function () {
     Fixtures::site();
     $entry = makeUpdatableDatedEvent();

@@ -274,6 +274,51 @@ it('stores a localized slug override on a non-default site without changing the 
         ->and($term->in('en')->slug())->toBe('alpha');
 });
 
+it('round-trips the terms_get bucket after a localized slug rename', function () {
+    Fixtures::multisite();
+    makeTopicsTaxonomy();
+    Taxonomy::findByHandle('topics')->sites(['en', 'de'])->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+
+    $user = Fixtures::makeUser('edit topics terms', 'access de site');
+
+    // Localized rename: vendor stores the de slug as a data['slug'] override,
+    // so the round-trippable bucket terms_get returns now CONTAINS slug.
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['title' => 'Alpha DE'], 'slug' => 'alpha-de', 'site' => 'de'])
+        ->assertOk();
+
+    // The reviewer's probe: read the de bucket (the terms_get raw shape,
+    // slug override included), change one field, send it straight back.
+    $bucket = Term::find('topics::alpha')->in('de')->data()->except(['updated_at', 'updated_by'])->all();
+
+    expect($bucket)->toHaveKey('slug', 'alpha-de');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => [...$bucket, 'description' => 'Neu'], 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"description":"Neu"');
+
+    $fresh = Term::find('topics::alpha')->in('de');
+
+    expect($fresh->slug())->toBe('alpha-de') // the override survived the round-trip
+        ->and($fresh->data()->get('description'))->toBe('Neu');
+});
+
+it('rejects a differing slug inside data with a targeted remedy', function () {
+    Fixtures::site();
+    makeTopicsTaxonomy();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit topics terms'))
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['slug' => 'other']])
+        ->assertHasErrors(['pass slug as a top-level parameter, not inside data']);
+
+    expect(Term::find('topics::other'))->toBeNull();
+});
+
 it('rejects a rename that collides with an existing term', function () {
     Fixtures::site();
     makeTopicsTaxonomy();

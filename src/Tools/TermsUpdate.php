@@ -95,6 +95,21 @@ class TermsUpdate extends Tool
         $patch = collect($validated['data'])->except(['updated_at', 'updated_by'])->all();
 
         $this->rejectPreviewObjects($patch, 'terms_get');
+
+        // On non-default sites a localized slug rename stores itself as a
+        // data['slug'] override (vendor LocalizedTerm::slug()), so terms_get's
+        // round-trippable bucket can legitimately contain it: an UNCHANGED
+        // value is harmless and stripped like updated_at. A differing value
+        // is ambiguous with the top-level rename parameter — targeted
+        // rejection, because the generic unknown-field error gives no hint.
+        if (array_key_exists('slug', $patch)) {
+            if ($patch['slug'] !== $localized->slug()) {
+                throw new ToolException('pass slug as a top-level parameter, not inside data');
+            }
+
+            unset($patch['slug']);
+        }
+
         $this->rejectUnknownKeys($blueprint, $patch);
 
         // The merge basis is the SITE's local override bucket — the exact
@@ -184,7 +199,7 @@ class TermsUpdate extends Tool
 
         if ($renamed) {
             $payload['previous_id'] = $previousId;
-            $payload['note'] = "slug renamed: the term id changed and its file moved — the old id no longer resolves; term references in entries are rewritten by Statamic's reference updater (runs on the queue; skipped when statamic.system.update_references is false)";
+            $payload['note'] = "slug renamed: the term id changed and its file moved — the old id no longer resolves; term references in entries are rewritten by Statamic's reference updater (runs on the queue; skipped when statamic.system.update_references is false), possibly with a delay when a queue worker is used — an immediate re-read may still show the old slug in entry fields; do not rewrite references manually";
         }
 
         // Terms have no draft state (spec §4 rows 8-12) — updates are live
