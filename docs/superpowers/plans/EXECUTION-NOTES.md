@@ -17,6 +17,8 @@ Controller-maintained log of approved deviations from the plan text discovered d
 
 ## v1.1 candidates (post-release)
 
+- **Token-record type honesty + ListTokens hardening:** TokenRepository::all()/find() PHPDoc types records as always-complete, but hand-edited tokens.yaml records can be partial (the auth middleware and doctor already defend against this). To harden ListTokens against a missing created_at/user (cosmetic warning today), widen the repository return types to model optional keys, then the defensive coalesces in ListTokens land cleanly under PHPStan. Deferred from T28 final review (reverting the ListTokens hunk kept the release commit green).
+
 - **Default-site gating CP parity:** ResolvesSites::canAccessSite never gates the default site (adjudicated T10/T12/T15; README documents the exemption + guidance since T26). Vendor SitePolicy gates EVERY site under multisite — our server is laxer for the default site. Revisit whether v1.1 should match the CP (breaking change for scoped agents; needs migration note).
 
 ## Carry-forward instructions for future tasks
