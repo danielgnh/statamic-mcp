@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -13,9 +14,10 @@ use Statamic\Facades\Term;
 use Statamic\Support\Str;
 
 #[Name('terms_create')]
-#[Description('Create a taxonomy term from raw field data (get the shape from blueprints_get; never send augmented data). Slug is generated from data.title when omitted. Terms are created in the default site — localize afterwards with terms_update and its site parameter. Terms have no draft state: a created term is live immediately.')]
+#[Description("Create a taxonomy term from raw field data (get the shape from blueprints_get; never send augmented data). Slug is generated from data.title when omitted. Terms are created in the taxonomy's origin site (its first configured site) — localize afterwards with terms_update and its site parameter. Terms have no draft state: a created term is live immediately.")]
 class TermsCreate extends Tool
 {
+    use ResolvesSites;
     use ValidatesBlueprintData;
 
     public function schema(JsonSchema $schema): array
@@ -24,7 +26,7 @@ class TermsCreate extends Tool
             'taxonomy' => $schema->string()->description('Taxonomy handle, e.g. "tags".')->required(),
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
-            'site' => $schema->string()->description('Must be the default site when given — terms are created in the default site and localized via terms_update.'),
+            'site' => $schema->string()->description("Must be the taxonomy's origin site (its first configured site) when given — terms are created there and localized via terms_update."),
         ];
     }
 
@@ -75,6 +77,12 @@ class TermsCreate extends Tool
                 $site,
             ));
         }
+
+        // CP parity (TermPolicy::store gates the target site): the created
+        // term lives in the origin site, so the user must be able to access
+        // it. The trait exempts single-site installs and the global default
+        // site, keeping common-case behavior identical.
+        $this->ensureSiteAccess($user, $defaultSite);
 
         $blueprint = $taxonomy->termBlueprint();
 

@@ -121,6 +121,39 @@ it('refuses a non-default site and points to terms_update for localization', fun
         ->assertHasErrors(["terms are created in the default site 'en' — create the term first, then localize it with terms_update and site 'de'"]);
 });
 
+it("denies creation when the user cannot access the taxonomy's origin site", function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    // Origin ('de', the FIRST configured site) is not the global default —
+    // the created term would live in a site this user cannot access.
+    Taxonomy::findByHandle('tags')->sites(['de', 'en'])->save();
+
+    $user = Fixtures::makeUser('create tags terms'); // no 'access de site'
+
+    Server::actingAs($user)
+        ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['title' => 'Neu']])
+        ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(Term::query()->where('taxonomy', 'tags')->count())->toBe(0);
+});
+
+it('accepts the origin site even when it is not the global default', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Taxonomy::findByHandle('tags')->sites(['de', 'en'])->save();
+
+    // site 'de' is accepted because the comparison targets the taxonomy's
+    // FIRST configured site, not the global default ('en').
+    Server::actingAs(Fixtures::makeUser('create tags terms', 'access de site'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['title' => 'Neu'], 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"id":"tags::neu"')
+        ->assertSee('"site":"de"')
+        ->assertSee('created — live');
+
+    expect(Term::find('tags::neu'))->not->toBeNull();
+});
+
 it('reports a listener-cancelled save instead of claiming success', function () {
     Fixtures::site();
     Fixtures::tags();
