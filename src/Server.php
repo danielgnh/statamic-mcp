@@ -21,5 +21,6 @@ class Server extends McpServer
         Tools\EntriesUpdate::class,
         Tools\EntriesDelete::class,
         Tools\TermsList::class,
+        Tools\TermsGet::class,
     ];
 }
