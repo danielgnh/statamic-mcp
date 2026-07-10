@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Carbon\Exceptions\InvalidFormatException;
+use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
@@ -23,6 +24,7 @@ use Statamic\Support\Str;
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
+    use ComparesPatchData;
     use ResolvesEntries;
     use ResolvesSites;
     use ValidatesBlueprintData;
@@ -79,7 +81,7 @@ class EntriesUpdate extends Tool
         // context) — silently ignored, never merged or treated as a change.
         $data = collect($validated['data'])->except(['updated_at', 'updated_by'])->all();
 
-        $this->rejectPreviewObjects($data);
+        $this->rejectPreviewObjects($data, 'entries_get');
 
         // Dated collections inject a 'date' blueprint field — the tool models
         // it as a top-level param, so reject the ambiguous data-key spelling.
@@ -233,43 +235,6 @@ class EntriesUpdate extends Tool
         }
 
         return $this->json($payload);
-    }
-
-    /**
-     * Recursively sort associative keys (list order is content, key order is
-     * not) so the dirty check can compare strictly — see the comment there.
-     */
-    private function normalize(mixed $value): mixed
-    {
-        if (! is_array($value)) {
-            return $value;
-        }
-
-        $value = array_map($this->normalize(...), $value);
-
-        if (! array_is_list($value)) {
-            ksort($value);
-        }
-
-        return $value;
-    }
-
-    /**
-     * The one raw-path artifact an agent can accidentally round-trip: the
-     * truncated {__preview, truncated, note} shape entries_get substitutes
-     * for long Bard/markdown values (T11 quality review).
-     */
-    private function rejectPreviewObjects(array $data): void
-    {
-        foreach ($data as $handle => $value) {
-            if (is_array($value) && array_key_exists('__preview', $value)) {
-                throw new ToolException(sprintf(
-                    'field %s is a truncated preview object from entries_get, not raw content — fetch the raw value first (entries_get with fields: ["%s"]) and send that back',
-                    $handle,
-                    $handle,
-                ));
-            }
-        }
     }
 
     private function resolveDate(?string $date, EntryContract $entry): ?Carbon
