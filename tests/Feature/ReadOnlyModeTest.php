@@ -36,6 +36,16 @@ const DELETE_TOOLS = [
     'terms_delete',
 ];
 
+const WRITE_TOOL_CLASSES = [
+    'entries_create' => EntriesCreate::class,
+    'entries_update' => EntriesUpdate::class,
+    'entries_delete' => EntriesDelete::class,
+    'terms_create' => TermsCreate::class,
+    'terms_update' => TermsUpdate::class,
+    'terms_delete' => TermsDelete::class,
+    'globals_update' => GlobalsUpdate::class,
+];
+
 function readOnlyPost(array $payload, string $token, ?string $sessionId = null): TestResponse
 {
     return test()->withHeaders(array_filter([
@@ -160,15 +170,16 @@ it('re-checks read_only inside the handler of every write and delete tool', func
     expect($response->isError())->toBeTrue()
         ->and((string) $response->content())
         ->toContain('writes are disabled on this server (statamic.mcp.read_only)');
-})->with([
-    'entries_create' => EntriesCreate::class,
-    'entries_update' => EntriesUpdate::class,
-    'entries_delete' => EntriesDelete::class,
-    'terms_create' => TermsCreate::class,
-    'terms_update' => TermsUpdate::class,
-    'terms_delete' => TermsDelete::class,
-    'globals_update' => GlobalsUpdate::class,
-]);
+})->with(WRITE_TOOL_CLASSES);
+
+// Completeness: a v1.1 write tool first breaks the exact-set tests above;
+// updating the name constants then breaks this until the tool's class joins
+// WRITE_TOOL_CLASSES — nothing can be advertised as a write/delete tool
+// without its in-handler re-check being swept.
+it('sweeps every advertised write and delete tool', function () {
+    expect(collect(array_keys(WRITE_TOOL_CLASSES))->sort()->values()->all())
+        ->toBe(collect([...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all());
+});
 
 it('refuses a stale-cached write tool call over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
