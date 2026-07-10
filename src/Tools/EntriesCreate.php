@@ -18,7 +18,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Saves an unpublished draft by default; published: true requires the publish permission for the collection. slug is generated from data.title when omitted. Dated collections require date.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Saves an unpublished draft by default; published: true requires the publish permission for the collection. On revision-enabled collections entries are always created as unpublished drafts with an initial revision attributed to you, and any explicit published value is rejected — publish from the Control Panel. slug is generated from data.title when omitted. Dated collections require date.')]
 class EntriesCreate extends Tool
 {
     use ResolvesSites;
@@ -32,7 +32,7 @@ class EntriesCreate extends Tool
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
             'date' => $schema->string()->description('Entry date (e.g. 2026-07-09 or 2026-07-09 15:30). Required for dated collections; rejected otherwise.'),
-            'published' => $schema->boolean()->description('Defaults to false (draft). true requires the publish permission for the collection.'),
+            'published' => $schema->boolean()->description('Defaults to false (draft). true requires the publish permission for the collection. Rejected entirely on revision-enabled collections.'),
         ];
     }
 
@@ -71,15 +71,28 @@ class EntriesCreate extends Tool
 
         $site = $this->resolveSite($request, $user);
 
-        $published = (bool) ($validated['published'] ?? false);
+        $collection = Collection::findByHandle($collectionHandle);
+        $blueprint = $collection->entryBlueprint(); // the collection's default blueprint
+
+        $revisions = $collection->revisionsEnabled();
+
+        // On revision collections publish state is CP-owned: ANY explicit
+        // published value — true or false — is rejected outright, and the
+        // rejection must win over a publish-permission denial (spec §6), so
+        // this check sits above the publish gate.
+        if ($revisions && ($validated['published'] ?? null) !== null) {
+            throw new ToolException(sprintf(
+                "collection '%s' uses revisions — entries are always created as unpublished drafts here; publish/unpublish from the Control Panel",
+                $collectionHandle,
+            ));
+        }
+
+        $published = ! $revisions && (bool) ($validated['published'] ?? false);
 
         if ($published) {
             // Publish is distinct — matches the CP's own gate (spec §6 layer 3).
             $this->ensurePermission($user, "publish {$collectionHandle} entries");
         }
-
-        $collection = Collection::findByHandle($collectionHandle);
-        $blueprint = $collection->entryBlueprint(); // the collection's default blueprint
 
         // resolveSite() only checks the site exists and is accessible — the
         // collection itself may not be configured for it.
@@ -132,6 +145,15 @@ class EntriesCreate extends Tool
         // (approval addons do this) — never report success for it.
         if (! $entry->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — nothing was created');
+        }
+
+        if ($revisions) {
+            // CP-parity create path (EntriesController@store, 6.x): the draft
+            // gets an attributed initial revision. This inlines Revisable::
+            // store() — published(false) + save + makeRevision — because
+            // store()'s return is the revision save, which would mask a
+            // listener-cancelled entry save behind a false success.
+            $entry->makeRevision()->user($user)->message('Created via MCP (entries_create)')->save();
         }
 
         $payload = [
