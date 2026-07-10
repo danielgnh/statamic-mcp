@@ -14,9 +14,10 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
+use Statamic\Fieldtypes\Date;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -73,6 +74,14 @@ class BlueprintsGet extends Tool
 
         foreach ($blueprint->fields()->all() as $field) {
             $fields[] = $this->describe($field);
+
+            // computed fields are omitted from write processing (Fields::values()
+            // rejects visibility=computed) — never offer them as writable
+            if ($field->visibility() === 'computed') {
+                $notes[$field->handle()] = 'computed — not writable';
+
+                continue;
+            }
 
             [$value, $note] = $this->exampleFor($field);
 
@@ -141,6 +150,10 @@ class BlueprintsGet extends Tool
             'rules' => array_values(array_unique(array_filter($field->rules()[$field->handle()] ?? [], 'is_string'))),
         ];
 
+        if (($visibility = $field->visibility()) !== 'visible') {
+            $descriptor['visibility'] = $visibility;
+        }
+
         if (isset($config['options'])) {
             $descriptor['options'] = $config['options'];
         }
@@ -169,8 +182,10 @@ class BlueprintsGet extends Tool
             'integer' => [42, null],
             'float' => [3.14, null],
             'toggle' => [true, null],
-            'date' => ['2026-01-15', null],
-            'select', 'radio' => $this->firstOption($field),
+            'date' => $this->dateExample($field),
+            // multi-selects store arrays; Statamic silently accepts a scalar and saves the wrong shape
+            'select' => $this->firstOption($field, wrapInArray: (bool) ($field->config()['multiple'] ?? false)),
+            'radio' => $this->firstOption($field),
             'checkboxes' => $this->firstOption($field, wrapInArray: true),
             'entries' => [['REPLACE-WITH-REAL-ENTRY-ID'], null],
             'terms' => [['REPLACE-WITH-REAL-TERM-ID'], null],
@@ -180,6 +195,33 @@ class BlueprintsGet extends Tool
                 $field->type(),
             )],
         };
+    }
+
+    /**
+     * A date example matching the shape the DateFieldtype validation rule
+     * accepts (vendor src/Rules/DateFieldtype.php): the string format follows
+     * the field's SAVE format, not time_enabled — the default save format is
+     * 'Y-m-d H:i' (contains time), so a default-config date field requires
+     * 'Y-m-d\TH:i:s.v\Z'; plain 'Y-m-d' only validates when a time-less
+     * 'format' is configured. mode:range wants a start/end pair of the same.
+     *
+     * @return array{0: mixed, 1: ?string}
+     */
+    private function dateExample(Field $field): array
+    {
+        /** @var Date $fieldtype */
+        $fieldtype = $field->fieldtype();
+
+        $hasTime = $fieldtype->formatHasTime();
+
+        $start = $hasTime ? '2026-01-15T09:30:00.000Z' : '2026-01-15';
+        $end = $hasTime ? '2026-01-16T09:30:00.000Z' : '2026-01-16';
+
+        if ($fieldtype->config('mode', 'single') === 'range') {
+            return [['start' => $start, 'end' => $end], null];
+        }
+
+        return [$start, null];
     }
 
     /**
@@ -193,7 +235,10 @@ class BlueprintsGet extends Tool
         $options = $field->config()['options'] ?? [];
 
         if (! is_array($options) || $options === []) {
-            return [null, sprintf("fieldtype '%s' has no options configured", $field->type())];
+            return [null, sprintf(
+                "fieldtype '%s' has no options configured — read a real value from existing content before writing this field",
+                $field->type(),
+            )];
         }
 
         $first = array_is_list($options) ? $options[0] : array_key_first($options);
