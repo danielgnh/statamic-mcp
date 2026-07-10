@@ -25,7 +25,9 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom, curl, libxml, mbstring, zip, intl, iconv
+          # Statamic's documented extensions pinned explicitly — survives
+          # runner-image changes to the default extension set.
+          extensions: bcmath, ctype, curl, dom, exif, gd, iconv, intl, libxml, mbstring, openssl, pdo, tokenizer, xml, zip
           coverage: none
 
       - name: Install dependencies
