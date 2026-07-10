@@ -2,6 +2,13 @@
     "name": "danielgnh/statamic-mcp",
     "description": "MCP server for Statamic — manage entries, terms, and globals from AI clients over streamable HTTP.",
     "license": "MIT",
+    "keywords": [
+        "statamic",
+        "mcp",
+        "addon",
+        "ai",
+        "claude"
+    ],
     "authors": [
         {
             "name": "Daniel Goncharov"
