@@ -23,5 +23,6 @@ class Server extends McpServer
         Tools\TermsList::class,
         Tools\TermsGet::class,
         Tools\TermsCreate::class,
+        Tools\TermsUpdate::class,
     ];
 }
