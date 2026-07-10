@@ -71,15 +71,43 @@ class EntriesDelete extends Tool
             ->all();
 
         if ($descendants->isNotEmpty()) {
-            $entry->deleteDescendants();
+            $cascadeFailure = null;
 
-            // deleteDescendants() ignores per-entry cancellations (an
-            // EntryDeleting listener returning false); a survivor would make
-            // the origin's own delete() throw — report it cleanly instead.
-            if ($entry->descendants()->isNotEmpty()) {
-                throw new ToolException(
-                    'a listener on this site cancelled deleting a localization — the origin entry was not deleted (other localizations may already be gone)'
+            try {
+                $entry->deleteDescendants();
+            } catch (\Exception $cascadeFailure) {
+                // A cancelled deeper localization leaves a survivor that makes
+                // its PARENT's delete() throw vendor's raw 'Cannot delete an
+                // entry with localizations.' mid-sweep — same root cause as a
+                // cancelled direct child (which deleteDescendants() silently
+                // swallows), so both shapes route into the survivor check below.
+            }
+
+            // fresh() past the Blink cache: it goes stale when the cascade
+            // aborts mid-sweep (deleteDescendants() only forgets it on
+            // completion), and deleted entries must not be named as survivors.
+            $survivors = $entry->descendants()->map->fresh()->filter();
+
+            if ($survivors->isNotEmpty()) {
+                $survivorIds = $survivors->map->id()->values()->all();
+
+                $alreadyDeleted = collect($deleted)->reject(
+                    fn (array $localization) => in_array($localization['id'], $survivorIds, true)
                 );
+
+                throw new ToolException(sprintf(
+                    'localizations could not be deleted (a listener may have cancelled, or new localizations appeared) — still present: %s. The origin entry was not deleted%s.',
+                    $survivors->map(fn (EntryContract $localization) => $localization->locale().' => '.$localization->id())->values()->implode('; '),
+                    $alreadyDeleted->isEmpty()
+                        ? ' and nothing else was'
+                        : sprintf('; %d localization%s already deleted', $alreadyDeleted->count(), $alreadyDeleted->count() === 1 ? ' was' : 's were'),
+                ));
+            }
+
+            if ($cascadeFailure) {
+                // Nothing survived, so it wasn't a cancellation — don't mask
+                // an unknown failure behind a false success.
+                throw $cascadeFailure;
             }
         }
 
