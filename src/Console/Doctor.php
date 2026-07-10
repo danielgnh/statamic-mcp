@@ -9,7 +9,6 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
-use RuntimeException;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
 use Throwable;
@@ -86,7 +85,7 @@ class Doctor extends Command
     {
         $uri = trim(config('statamic.mcp.route', 'mcp/statamic'), '/');
 
-        foreach (Route::getRoutes() as $route) {
+        foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
                 return true;
             }
@@ -175,10 +174,6 @@ class Doctor extends Command
         // authentication reads the same file and fails closed.
         try {
             $records = $tokens->all();
-
-            if (! is_array($records)) {
-                throw new RuntimeException('tokens.yaml did not parse to a token map');
-            }
 
             [$active, $expired, $orphaned] = $this->classifyTokens($records);
         } catch (Throwable $e) {
