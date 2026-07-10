@@ -16,6 +16,21 @@ trait ValidatesBlueprintData
      */
     protected function rejectUnknownKeys(Blueprint $blueprint, array $data): void
     {
+        // Front-matter keys Statamic manages itself — data keys shadow them on
+        // disk (fileData()), so a blueprint that happens to define a
+        // 'published' toggle would let a create-only user persist publish
+        // state through data. Hard-rejected regardless of blueprint contents.
+        $reserved = array_values(array_intersect(array_keys($data), ['id', 'origin', 'published', 'blueprint']));
+
+        if ($reserved !== []) {
+            throw new ToolException(sprintf(
+                'field%s %s %s reserved — never writable via data',
+                count($reserved) === 1 ? '' : 's',
+                implode(', ', $reserved),
+                count($reserved) === 1 ? 'is' : 'are',
+            ));
+        }
+
         $handles = $blueprint->fields()->all()->keys()->reject(fn ($handle) => $handle === 'slug')->values()->all();
         $unknown = array_values(array_diff(array_keys($data), $handles));
 
@@ -61,13 +76,15 @@ trait ValidatesBlueprintData
 
     /**
      * The CP's own validation path (spec §8). Callers pass MERGED values
-     * (existing + patch) so partial updates never false-fail required fields.
+     * (existing + patch) so partial updates never false-fail required fields,
+     * plus the CP's rule placeholder replacements (collection/site, and id on
+     * updates) so rules like unique_entry_value scope correctly.
      * Field-level messages reach the model for one-round-trip self-correction.
      */
-    protected function validateAgainstBlueprint(Blueprint $blueprint, array $merged): void
+    protected function validateAgainstBlueprint(Blueprint $blueprint, array $merged, array $replacements = []): void
     {
         try {
-            $blueprint->fields()->addValues($merged)->validator()->validate();
+            $blueprint->fields()->addValues($merged)->validator()->withReplacements($replacements)->validate();
         } catch (ValidationException $e) {
             throw new ToolException('validation failed: '.json_encode(
                 $e->errors(),
