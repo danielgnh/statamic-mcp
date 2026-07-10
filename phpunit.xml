@@ -9,6 +9,11 @@
             <directory>tests</directory>
         </testsuite>
     </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:x2eZQBpDzUYbmAOZYBy1JZBPMuXCsyvNlwPPYlpxKh8="/>
