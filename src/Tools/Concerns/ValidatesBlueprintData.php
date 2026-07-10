@@ -16,20 +16,7 @@ trait ValidatesBlueprintData
      */
     protected function rejectUnknownKeys(Blueprint $blueprint, array $data): void
     {
-        // Front-matter keys Statamic manages itself — data keys shadow them on
-        // disk (fileData()), so a blueprint that happens to define a
-        // 'published' toggle would let a create-only user persist publish
-        // state through data. Hard-rejected regardless of blueprint contents.
-        $reserved = array_values(array_intersect(array_keys($data), ['id', 'origin', 'published', 'blueprint']));
-
-        if ($reserved !== []) {
-            throw new ToolException(sprintf(
-                'field%s %s %s reserved — never writable via data',
-                count($reserved) === 1 ? '' : 's',
-                implode(', ', $reserved),
-                count($reserved) === 1 ? 'is' : 'are',
-            ));
-        }
+        $this->rejectReservedKeys($data);
 
         $handles = $blueprint->fields()->all()->keys()->reject(fn ($handle) => $handle === 'slug')->values()->all();
         $unknown = array_values(array_diff(array_keys($data), $handles));
@@ -72,6 +59,28 @@ trait ValidatesBlueprintData
         }
 
         throw new ToolException($message);
+    }
+
+    /**
+     * Front-matter keys Statamic manages itself — data keys shadow them on
+     * disk (fileData()), so a blueprint that happens to define a 'published'
+     * toggle would let a create-only user persist publish state through data
+     * (and the global-variables store silently strips 'origin' on
+     * rehydration). Hard-rejected regardless of blueprint contents — called
+     * directly by blueprint-less write paths (globals).
+     */
+    protected function rejectReservedKeys(array $data): void
+    {
+        $reserved = array_values(array_intersect(array_keys($data), ['id', 'origin', 'published', 'blueprint']));
+
+        if ($reserved !== []) {
+            throw new ToolException(sprintf(
+                'field%s %s %s reserved — never writable via data',
+                count($reserved) === 1 ? '' : 's',
+                implode(', ', $reserved),
+                count($reserved) === 1 ? 'is' : 'are',
+            ));
+        }
     }
 
     /**
