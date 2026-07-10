@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\Collection;
@@ -132,6 +133,121 @@ it('creates no working copy when the merged update equals current data', functio
         ->assertSee('no-op');
 
     expect(Entry::find($entry->id())->hasWorkingCopy())->toBeFalse();
+});
+
+it('amends an existing working copy, preserving fields staged earlier', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    enableBlogRevisions();
+
+    $entry = tap(
+        Entry::make()
+            ->collection('blog')
+            ->slug('live-post')
+            ->data(['title' => 'Live Title', 'hero_image' => 'hero.jpg'])
+            ->published(true)
+    )->save();
+
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk()
+        ->assertSee('working copy created — live entry unchanged');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero_image' => 'new-hero.jpg']])
+        ->assertOk()
+        ->assertSee('working copy amended — live entry unchanged');
+
+    // Both staged edits live in the single working copy — update #2 rebased
+    // onto the staged state instead of clobbering it from live data.
+    $staged = Entry::find($entry->id())->workingCopy()->attributes();
+
+    expect($staged['data']['title'])->toBe('Edited Title')
+        ->and($staged['data']['hero_image'])->toBe('new-hero.jpg');
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Live Title')
+        ->and($fresh->get('hero_image'))->toBe('hero.jpg');
+});
+
+it('treats a revert-to-live request as dirty when a working copy is staged', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    enableBlogRevisions();
+
+    $entry = makePublishedRevisableEntry();
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk()
+        ->assertSee('working copy created — live entry unchanged');
+
+    // 'Live Title' equals the LIVE entry but differs from the STAGED copy —
+    // it must be dirty against the rebased basis and re-stage the live value.
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Live Title']])
+        ->assertOk()
+        ->assertDontSee('no-op')
+        ->assertSee('working copy amended — live entry unchanged');
+
+    expect(Entry::find($entry->id())->workingCopy()->attributes()['data']['title'])->toBe('Live Title');
+});
+
+it('is a no-op against the staged working copy basis, leaving the copy unchanged', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    enableBlogRevisions();
+
+    $entry = makePublishedRevisableEntry();
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk()
+        ->assertSee('working copy created — live entry unchanged');
+
+    // Exactly the staged values → no-op against the STAGED basis, not live.
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk()
+        ->assertSee('no-op')
+        ->assertSee('working copy unchanged');
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->hasWorkingCopy())->toBeTrue()
+        ->and($fresh->workingCopy()->attributes()['data']['title'])->toBe('Edited Title');
+});
+
+it('surfaces has_working_copy on revision-enabled entries in entries_get', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    enableBlogRevisions();
+
+    $entry = makePublishedRevisableEntry();
+    $user = Fixtures::makeUser('view blog entries', 'edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"has_working_copy":false');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"has_working_copy":true');
 });
 
 it('saves unpublished drafts directly without a working copy (CP parity)', function () {

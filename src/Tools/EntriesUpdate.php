@@ -19,7 +19,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is untouched unless published is sent; changing it in either direction requires the publish permission. On revision-enabled collections, edits to a published entry are saved as a working copy attributed to you (the live entry stays unchanged — publish the working copy from the Control Panel), unpublished drafts are saved directly, and any explicit published value is rejected. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is untouched unless published is sent; changing it in either direction requires the publish permission. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — publish the working copy from the Control Panel); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), unpublished drafts are saved directly, and any explicit published value is rejected. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
@@ -112,7 +112,21 @@ class EntriesUpdate extends Tool
             $this->ensurePermission($user, "publish {$collectionHandle} entries");
         }
 
-        $current = $entry->data()->all();
+        // Routing is snapshotted from the LIVE entry BEFORE any rebase:
+        // fromWorkingCopy() restores the staged published attribute into the
+        // basis, and publish state must stay keyed to what is actually live.
+        $workingCopy = $entry->revisionsEnabled() && $entry->published();
+        $amending = $workingCopy && $entry->hasWorkingCopy();
+
+        // CP parity (EntriesController@update, 6.x: $entry = $entry->
+        // fromWorkingCopy() before touching data): when a working copy is
+        // already staged, edits rebase onto it — merging over live data would
+        // silently revert every previously staged field. fromWorkingCopy()
+        // hydrates a clone (makeFromRevision), so the live Stache instance
+        // stays pristine either way.
+        $basis = $amending ? $entry->fromWorkingCopy() : $entry;
+
+        $current = $basis->data()->all();
         $merged = array_merge($current, $data); // shallow top-level merge by design (spec §4/§8)
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
@@ -121,16 +135,18 @@ class EntriesUpdate extends Tool
         // irrelevant (sorted recursively), but types matter — loose == would
         // juggle null == '' and '1' == 1 into false no-ops, so an explicit
         // null could never clear a falsy field and the write would be
-        // silently dropped.
+        // silently dropped. The basis is the staged copy when one exists.
         $dirty = $this->normalize($merged) !== $this->normalize($current)
-            || ($slug !== null && $slug !== $entry->slug())
-            || ($date !== null && ! $date->equalTo($entry->date()))
+            || ($slug !== null && $slug !== $basis->slug())
+            || ($date !== null && ! $date->equalTo($basis->date()))
             || ($published !== null && $published !== $entry->published());
 
         if (! $dirty) {
             return $this->json([
                 'id' => $entry->id(),
-                'result' => 'no-op — merged result equals the current entry; nothing saved, no revision created',
+                'result' => $amending
+                    ? 'no-op — merged result equals the staged working copy; nothing saved, working copy unchanged'
+                    : 'no-op — merged result equals the current entry; nothing saved, no revision created',
                 'cp_edit_url' => $entry->editUrl(),
             ]);
         }
@@ -141,16 +157,18 @@ class EntriesUpdate extends Tool
         // so unique_entry_value excludes this entry itself.
         $this->validateAgainstBlueprint(
             $blueprint,
-            $collection->dated() ? [...$merged, 'date' => $date ?? $entry->date()] : $merged,
+            $collection->dated() ? [...$merged, 'date' => $date ?? $basis->date()] : $merged,
             ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
         );
 
-        // Published entries in revision collections get their changes staged
-        // on a clone (vendor pattern: makeFromRevision clones too) — the live
-        // Stache instance must stay pristine, it is never saved.
-        $workingCopy = $entry->revisionsEnabled() && $entry->published();
-
-        $target = $workingCopy ? clone $entry : $entry;
+        // Stage on the rebased clone when amending, on a fresh clone of live
+        // when creating the first working copy — the live Stache instance
+        // must stay pristine, it is never saved on the working-copy path.
+        $target = match (true) {
+            $amending => $basis, // already a clone hydrated from the staged copy
+            $workingCopy => clone $entry,
+            default => $entry,
+        };
 
         $target->data($merged);
 
@@ -181,7 +199,7 @@ class EntriesUpdate extends Tool
                 'slug' => $target->slug(),
                 'status' => $target->status(),
                 'url' => $target->url(),
-                ...$this->liveness($target, self::LIVENESS_WORKING_COPY),
+                ...$this->liveness($target, $amending ? self::LIVENESS_WORKING_COPY_AMENDED : self::LIVENESS_WORKING_COPY),
             ];
 
             if ($collection->dated()) {

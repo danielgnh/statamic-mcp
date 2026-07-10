@@ -23,6 +23,8 @@ abstract class Tool extends BaseTool
 
     public const LIVENESS_WORKING_COPY = 'working copy created — live entry unchanged';
 
+    public const LIVENESS_WORKING_COPY_AMENDED = 'working copy amended — live entry unchanged';
+
     public const LIVENESS_LIVE = 'updated — live'; // terms/globals have no draft state
 
     public const LIVENESS_CREATED = 'created — live'; // used later by terms_create
