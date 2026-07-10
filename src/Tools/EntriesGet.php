@@ -16,18 +16,22 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
 use Statamic\Fields\Blueprint;
+use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1).')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
     use ResolvesEntries;
     use ResolvesSites;
 
-    private const PREVIEW_THRESHOLD = 500; // chars of encoded JSON before truncation
+    // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:
+    // it approximates token cost; multibyte characters count per-byte.
+    private const PREVIEW_THRESHOLD = 500;
 
-    private const PREVIEW_LENGTH = 300;    // chars of plain-text preview kept
+    // Characters of plain-text preview kept (Str::limit is mb-safe — never cuts mid-character).
+    private const PREVIEW_LENGTH = 300;
 
     public function schema(JsonSchema $schema): array
     {
@@ -73,8 +77,16 @@ class EntriesGet extends Tool
         $this->assertKnownFields($requestedFields, $blueprint);
 
         $data = $format === 'augmented'
-            ? $entry->toAugmentedArray() // shallow, display only (spec §4 row 4)
-            : $entry->data()->all();     // raw: the round-trippable write shape
+            // Value::jsonSerialize runs a FULL augment — a terms relation would
+            // inline whole augmented terms including their reverse entries.
+            // shallow() reduces relations to id/title/api_url-style stubs.
+            ? collect($entry->toAugmentedArray())
+                ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
+                ->all()
+            // raw: the round-trippable write shape. updated_at/updated_by are
+            // Statamic-managed metadata (its own toArray excludes updated_at) —
+            // stripped so agents can't round-trip stale values into updates.
+            : $entry->data()->except(['updated_at', 'updated_by'])->all();
 
         if ($requestedFields !== []) {
             $data = array_intersect_key($data, array_flip($requestedFields));
@@ -109,7 +121,7 @@ class EntriesGet extends Tool
     private function resolveEntry(Request $request, UserContract $user): EntryContract
     {
         if ($id = $request->get('id')) {
-            return $this->findExposedEntry((string) $id);
+            return $this->findExposedEntry((string) $id, $user, $request->get('site'));
         }
 
         $collection = $request->get('collection');
@@ -205,7 +217,7 @@ class EntriesGet extends Tool
     private function plainText(mixed $value): string
     {
         if (is_string($value)) {
-            return $value;
+            return strip_tags($value); // augmented bard is HTML — markup wastes preview budget
         }
 
         if (! is_array($value)) {

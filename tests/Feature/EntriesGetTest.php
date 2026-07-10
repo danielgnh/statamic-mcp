@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Term;
 
 function makeBlogEntryForGet(array $data = [], string $slug = 'hello-world'): Statamic\Contracts\Entries\Entry
 {
@@ -134,6 +135,101 @@ it('treats an entry in an unexposed collection as not found', function () {
     Server::actingAs(Fixtures::makeSuper())
         ->tool(EntriesGet::class, ['id' => $entry->id()])
         ->assertHasErrors(["entry '{$entry->id()}' not found"]);
+});
+
+it('denies fetching a non-default-site entry by id without site access', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->locale('de')->slug('deutscher-beitrag')->data(['title' => 'Deutsch'])->published(true)
+    )->save();
+
+    $user = Fixtures::makeUser('view blog entries'); // no 'access de site'
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+});
+
+it('errors when the site param does not match the entry own site on id lookups', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->locale('de')->slug('deutscher-beitrag')->data(['title' => 'Deutsch'])->published(true)
+    )->save();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access de site'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'site' => 'en'])
+        ->assertHasErrors(["entry '{$entry->id()}' belongs to site 'de' — omit site or pass 'de'"]);
+});
+
+it('fetches a non-default-site entry by id with site access granted', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(
+        Entry::make()->collection('blog')->locale('de')->slug('deutscher-beitrag')->data(['title' => 'Deutsch'])->published(true)
+    )->save();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access de site'))
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"site":"de"');
+});
+
+it('returns shallow relation stubs in augmented format', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    tap(Term::make('news')->taxonomy('tags')->dataForLocale('en', ['title' => 'News']))->save();
+
+    $entry = makeBlogEntryForGet(['topic' => 'news']);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"title":"News"')
+        ->assertSee('"api_url"')
+        // shallow stub only — the term's own reverse relations must not be inlined
+        ->assertDontSee('"entries"');
+});
+
+it('keeps multibyte previews intact when truncating', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeBlogEntryForGet(['content' => [[
+        'type' => 'paragraph',
+        'content' => [['type' => 'text', 'text' => str_repeat('Über die Zukunft des Ökosystems entscheiden wir. ', 20)]],
+    ]]]);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"truncated":true')
+        ->assertSee('Über die Zukunft des Ökosystems')
+        ->assertDontSee('�'); // no bytes cut mid-character
+});
+
+it('strips updated_at and updated_by from raw data', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeBlogEntryForGet(['updated_at' => 1719999999, 'updated_by' => 'stale-user-id']);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertDontSee('"updated_at"')
+        ->assertDontSee('"updated_by"');
 });
 
 it('denies reading without the view permission', function () {
