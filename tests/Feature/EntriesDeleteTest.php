@@ -30,6 +30,20 @@ function makeDeletableLocalizedPair(): array
     return [$origin, $localization];
 }
 
+// en → de → at: 'at' originates from 'de', not from the root origin.
+// Requires Fixtures::multisite(true) for the third site.
+function makeDeletableLocalizedChain(): array
+{
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('doomed')->locale('en')->data(['title' => 'Doomed'])->published(true)
+    )->save();
+
+    $de = tap($origin->makeLocalization('de')->data(['title' => 'Verloren']))->save();
+    $at = tap($de->makeLocalization('at')->data(['title' => 'Dahin']))->save();
+
+    return [$origin, $de, $at];
+}
+
 it('deletes an entry when deletes are enabled and the user may delete', function () {
     Fixtures::site();
     Fixtures::tags();
@@ -241,8 +255,76 @@ it('keeps the origin when a listener cancels deleting a localization', function 
 
     Server::actingAs(Fixtures::makeSuper())
         ->tool(EntriesDelete::class, ['id' => $origin->id()])
-        ->assertHasErrors();
+        ->assertHasErrors(["localizations could not be deleted (a listener may have cancelled, or new localizations appeared) — still present: de => {$localization->id()}. The origin entry was not deleted and nothing else was."]);
 
     expect(Entry::find($origin->id()))->not->toBeNull()
         ->and(Entry::find($localization->id()))->not->toBeNull();
+});
+
+it('cascades through a multi-level localization chain and enumerates every level', function () {
+    Fixtures::multisite(true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    [$origin, $de, $at] = makeDeletableLocalizedChain();
+
+    // Pins the recursive sweep: descendants() must reach grandchildren
+    // (localizations of localizations), not just direct children.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesDelete::class, ['id' => $origin->id()])
+        ->assertOk()
+        ->assertSee('2 localizations')
+        ->assertSee($de->id())
+        ->assertSee($at->id());
+
+    expect(Entry::find($origin->id()))->toBeNull()
+        ->and(Entry::find($de->id()))->toBeNull()
+        ->and(Entry::find($at->id()))->toBeNull();
+});
+
+it('refuses to cascade when a deeper localization site is inaccessible', function () {
+    Fixtures::multisite(true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    [$origin, $de, $at] = makeDeletableLocalizedChain();
+
+    // Access to the direct child's site is not enough — the gate must sweep
+    // every level of the chain before anything is deleted.
+    $user = Fixtures::makeUser('delete blog entries', 'access de site');
+
+    Server::actingAs($user)
+        ->tool(EntriesDelete::class, ['id' => $origin->id()])
+        ->assertHasErrors(["requires 'access at site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(Entry::find($origin->id()))->not->toBeNull()
+        ->and(Entry::find($de->id()))->not->toBeNull()
+        ->and(Entry::find($at->id()))->not->toBeNull();
+});
+
+it('reports a clean error when a listener cancels a second-level localization delete', function () {
+    Fixtures::multisite(true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    [$origin, $de, $at] = makeDeletableLocalizedChain();
+
+    // Cancelling 'at' makes de->delete() inside deleteDescendants() throw
+    // vendor's raw 'Cannot delete an entry with localizations.' — the tool
+    // must catch it and name the survivors, never leak an internal error.
+    Event::listen(EntryDeleting::class, fn (EntryDeleting $event) => $event->entry->locale() === 'at' ? false : null);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesDelete::class, ['id' => $origin->id()])
+        ->assertHasErrors(["localizations could not be deleted (a listener may have cancelled, or new localizations appeared) — still present: de => {$de->id()}; at => {$at->id()}. The origin entry was not deleted and nothing else was."]);
+
+    expect(Entry::find($origin->id()))->not->toBeNull()
+        ->and(Entry::find($de->id()))->not->toBeNull()
+        ->and(Entry::find($at->id()))->not->toBeNull();
 });
