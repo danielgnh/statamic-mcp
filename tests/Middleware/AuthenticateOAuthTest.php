@@ -50,6 +50,8 @@ it('rejects an unauthenticated api guard with 401 and WWW-Authenticate', functio
 
     expect($called)->toBeFalse()
         ->and($response->getStatusCode())->toBe(401)
+        // rewritten with resource_metadata by laravel/mcp's
+        // AddWwwAuthenticateHeader on the real route — see the Passport CI leg
         ->and($response->headers->get('WWW-Authenticate'))->toBe('Bearer');
 });
 
