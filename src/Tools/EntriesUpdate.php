@@ -19,7 +19,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is untouched unless published is sent; changing it in either direction requires the publish permission. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is untouched unless published is sent; changing it in either direction requires the publish permission. On revision-enabled collections, edits to a published entry are saved as a working copy attributed to you (the live entry stays unchanged — publish the working copy from the Control Panel), unpublished drafts are saved directly, and any explicit published value is rejected. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
@@ -34,7 +34,7 @@ class EntriesUpdate extends Tool
             'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date (e.g. 2026-07-09 or 2026-07-09 15:30) — dated collections only.'),
-            'published' => $schema->boolean()->description('Omit to leave publish state untouched. Changing it requires the publish permission for the collection.'),
+            'published' => $schema->boolean()->description('Omit to leave publish state untouched. Changing it requires the publish permission for the collection. Rejected entirely on revision-enabled collections.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
         ];
     }
@@ -94,6 +94,17 @@ class EntriesUpdate extends Tool
 
         $published = $validated['published'] ?? null;
 
+        // On revision collections publish state is CP-owned: ANY explicit
+        // published value — true or false, even same-state — is rejected;
+        // publishing goes through the CP's revision flow (spec §6). Sits
+        // above the publish gate so the rejection wins over a denial.
+        if ($published !== null && $entry->revisionsEnabled()) {
+            throw new ToolException(sprintf(
+                "collection '%s' uses revisions — publish/unpublish from the Control Panel, not via entries_update",
+                $collectionHandle,
+            ));
+        }
+
         if ($published !== null && $published !== $entry->published()) {
             // Any publish-state transition is gated on 'publish' — the CP's
             // unpublish route authorizes the same ability (spec §6 layer 3;
@@ -134,14 +145,50 @@ class EntriesUpdate extends Tool
             ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
         );
 
-        $entry->data($merged);
+        // Published entries in revision collections get their changes staged
+        // on a clone (vendor pattern: makeFromRevision clones too) — the live
+        // Stache instance must stay pristine, it is never saved.
+        $workingCopy = $entry->revisionsEnabled() && $entry->published();
+
+        $target = $workingCopy ? clone $entry : $entry;
+
+        $target->data($merged);
 
         if ($slug !== null) {
-            $entry->slug($slug);
+            $target->slug($slug);
         }
 
         if ($date !== null) {
-            $entry->date($date);
+            $target->date($date);
+        }
+
+        if ($workingCopy) {
+            // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
+            // snapshots the in-memory attributes set above — the live entry
+            // is NEVER saved. Revision::save() returns false when a
+            // RevisionSaving listener cancels; nothing was persisted then.
+            $saved = $target->makeWorkingCopy()
+                ->user($user)
+                ->message('via MCP entries_update')
+                ->save();
+
+            if (! $saved) {
+                throw new ToolException('the working copy save was cancelled by a listener on this site — nothing was saved');
+            }
+
+            $payload = [
+                'id' => $target->id(),
+                'slug' => $target->slug(),
+                'status' => $target->status(),
+                'url' => $target->url(),
+                ...$this->liveness($target, self::LIVENESS_WORKING_COPY),
+            ];
+
+            if ($collection->dated()) {
+                $payload['date'] = $target->date()?->toIso8601String();
+            }
+
+            return $this->json($payload);
         }
 
         if ($published !== null) {

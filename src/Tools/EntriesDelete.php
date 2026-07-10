@@ -13,7 +13,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 
 #[Name('entries_delete')]
-#[Description('Permanently delete an entry by id. Deleting an origin also deletes all of its localizations (this requires site access to every localization\'s site); the response lists everything that was removed. This cannot be undone.')]
+#[Description('Permanently delete an entry by id. Deleting an origin also deletes all of its localizations (this requires site access to every localization\'s site); the response lists everything that was removed. On revision-enabled collections the entry\'s revision and working-copy files stay on disk as orphans (the Control Panel behaves the same way). This cannot be undone.')]
 #[IsDestructive]
 class EntriesDelete extends Tool
 {
