@@ -19,6 +19,7 @@ it('reports a healthy token-mode setup with exit code 0', function () {
         ->expectsOutputToContain('Auth mode: token')
         ->expectsOutputToContain('[ OK ] MCP is enabled.')
         ->expectsOutputToContain('[ OK ] MCP route is mounted.')
+        ->expectsOutputToContain('[ OK ] Configured middleware resolves.')
         ->expectsOutputToContain('[ OK ] Token store is writable')
         ->expectsOutputToContain('token(s) issued.')
         ->expectsOutputToContain('No blocking problems found.')
@@ -53,7 +54,7 @@ it('fails with exit code 1 when the token store directory is not writable', func
     } finally {
         chmod($dir, 0755);
     }
-});
+})->skip(fn () => function_exists('posix_geteuid') && posix_geteuid() === 0, 'chmod-based permission checks are a no-op for root');
 
 it('fails when tokens.yaml exists but is not writable', function () {
     // Root-issued/deploy-user ownership mismatch: the ancestor-directory
@@ -71,6 +72,69 @@ it('fails when tokens.yaml exists but is not writable', function () {
     } finally {
         chmod($file, 0644);
     }
+})->skip(fn () => function_exists('posix_geteuid') && posix_geteuid() === 0, 'chmod-based permission checks are a no-op for root');
+
+it('fails without crashing when tokens.yaml is corrupt YAML', function () {
+    // The mount-failure log sends operators here — the doctor must survive
+    // the exact file states that break authentication.
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), "abc123:\n  user: [unclosed");
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] tokens.yaml is corrupt or unreadable')
+        ->expectsOutputToContain('Problems found. Fix the [FAIL] items above.')
+        ->assertExitCode(1);
+});
+
+it('fails without crashing when tokens.yaml parses to a scalar', function () {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), 'just-a-string');
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] tokens.yaml is corrupt or unreadable')
+        ->assertExitCode(1);
+});
+
+it('warns the locked door when every token is expired', function () {
+    $this->travelTo(now()->subDays(10));
+    app(TokenRepository::class)->issue(Fixtures::makeUser(), 'stale', 1);
+    $this->travelBack();
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[WARN] 1 token(s) issued but none are active (1 expired) — the endpoint is a locked door. Run: php please mcp:token you@site.com')
+        ->assertExitCode(0);
+});
+
+it('warns the locked door when every token belongs to a deleted user', function () {
+    $user = Fixtures::makeUser();
+    app(TokenRepository::class)->issue($user, 'orphan');
+    $user->delete();
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[WARN] 1 token(s) issued but none are active (1 orphaned-user) — the endpoint is a locked door. Run: php please mcp:token you@site.com')
+        ->assertExitCode(0);
+});
+
+it('breaks down mixed live and dead tokens while staying OK', function () {
+    $repo = app(TokenRepository::class);
+
+    $this->travelTo(now()->subDays(10));
+    $repo->issue(Fixtures::makeUser(), 'stale', 1);
+    $this->travelBack();
+
+    $repo->issue(Fixtures::makeUser(), 'live');
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[ OK ] 2 token(s) issued (1 active, 1 expired).')
+        ->assertExitCode(0);
+});
+
+it('fails a middleware entry that is neither a class nor an alias', function () {
+    config(['statamic.mcp.middleware' => ['throttle:60,1', 'App\\Http\\Middleware\\Nope']]);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain("[FAIL] Configured middleware 'App\\Http\\Middleware\\Nope' is neither a class nor a registered middleware alias or group")
+        ->assertExitCode(1);
 });
 
 it('fails oauth mode naming every missing prerequisite', function () {
@@ -113,6 +177,20 @@ it('resolves the users repository driver, not the repository name', function () 
 
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('Users are file-based')
+        ->assertExitCode(1);
+});
+
+it('fails the users check for any non-eloquent driver', function () {
+    // Mirror of AuthenticateOAuth's !== 'eloquent' predicate: not-file is
+    // not good enough.
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'statamic.users.repository' => 'custom',
+        'statamic.users.repositories.custom.driver' => 'mongodb',
+    ]);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain("[FAIL] Users use the 'mongodb' driver (repository: custom)")
         ->assertExitCode(1);
 });
 

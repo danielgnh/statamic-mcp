@@ -44,6 +44,25 @@ it('answers 503 on the MCP route naming the missing Eloquent-users prerequisite'
     expect($response->json('doctor'))->toContain('mcp:doctor');
 });
 
+it('rejects a file-driven users repository regardless of its name', function () {
+    // The repository NAME proves nothing — the preflight tests the RESOLVED
+    // driver, so a file-driven repository called 'custom' still 503s here
+    // instead of failing confusingly after OAuth setup completes.
+    config([
+        'statamic.users.repository' => 'custom',
+        'statamic.users.repositories.custom.driver' => 'file',
+    ]);
+
+    $response = misconfiguredOAuthInitialize($this);
+
+    $response
+        ->assertStatus(503)
+        ->assertJsonPath('error', 'MCP OAuth mode is misconfigured.');
+
+    expect($response->json('remedy'))
+        ->toContain('eloquent:import-users');
+});
+
 it('names the missing api guard once users are eloquent', function () {
     config(['statamic.users.repository' => 'eloquent']);
 

@@ -38,7 +38,13 @@ class AuthenticateOAuth
 
     protected function preflightFailure(): ?Response
     {
-        if (config('statamic.users.repository') === 'file') {
+        // The repository NAME is arbitrary — a file-driven repository named
+        // 'custom' would pass a name check, then fail confusingly at runtime.
+        // The requirement is Eloquent users, so test the RESOLVED driver
+        // (mcp:doctor applies the same predicate).
+        $repository = config('statamic.users.repository', 'file');
+
+        if (config('statamic.users.repositories.'.$repository.'.driver') !== 'eloquent') {
             return $this->unavailable(
                 "OAuth mode requires database (Eloquent) users — a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token')."
             );

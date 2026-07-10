@@ -4,9 +4,15 @@ namespace Danielgnh\StatamicMcp\Console;
 
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Passport;
+use RuntimeException;
 use Statamic\Console\RunsInPlease;
+use Statamic\Facades\User;
+use Throwable;
 
 /**
  * One command that answers "why doesn't my MCP endpoint work?". Every [FAIL]
@@ -35,6 +41,7 @@ class Doctor extends Command
         $this->line('');
 
         $this->checkEnabled();
+        $this->checkMiddleware();
         $this->checkAppUrl();
 
         if ($mode === 'oauth') {
@@ -77,7 +84,7 @@ class Doctor extends Command
 
     protected function routeIsMounted(): bool
     {
-        $uri = ltrim(config('statamic.mcp.route', 'mcp/statamic'), '/');
+        $uri = trim(config('statamic.mcp.route', 'mcp/statamic'), '/');
 
         foreach (Route::getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
@@ -86,6 +93,47 @@ class Doctor extends Command
         }
 
         return false;
+    }
+
+    protected function checkMiddleware(): void
+    {
+        $entries = Arr::wrap(config('statamic.mcp.middleware', []));
+
+        $broken = false;
+
+        foreach ($entries as $entry) {
+            if (! is_string($entry) || $this->middlewareResolves($entry)) {
+                continue;
+            }
+
+            $broken = true;
+
+            // A typo'd class mounts fine and 500s every request — the one
+            // misconfiguration the route itself can never report.
+            $this->problem("Configured middleware '{$entry}' is neither a class nor a registered middleware alias or group — every MCP request would 500. Fix 'middleware' in the statamic.mcp config.");
+        }
+
+        if ($entries !== [] && ! $broken) {
+            $this->info('[ OK ] Configured middleware resolves.');
+        }
+    }
+
+    protected function middlewareResolves(string $entry): bool
+    {
+        $name = explode(':', $entry, 2)[0]; // strip alias parameters like throttle:60,1
+
+        if (class_exists($name)) {
+            return true;
+        }
+
+        // Aliases and groups are synced from the HTTP Kernel to the router in
+        // the Kernel's constructor — a console run may never have built it.
+        app(HttpKernel::class);
+
+        $router = app('router');
+
+        return array_key_exists($name, $router->getMiddleware())
+            || array_key_exists($name, $router->getMiddlewareGroups());
     }
 
     protected function checkAppUrl(): void
@@ -123,13 +171,63 @@ class Doctor extends Command
             $this->info('[ OK ] Token store is writable ('.$dir.').');
         }
 
-        $count = count($tokens->all());
+        // Corrupt YAML must not crash the very command that diagnoses it —
+        // authentication reads the same file and fails closed.
+        try {
+            $records = $tokens->all();
 
-        if ($count === 0) {
-            $this->warn('[WARN] No tokens issued — the endpoint is a locked door. Run: php please mcp:token you@site.com');
-        } else {
-            $this->info('[ OK ] '.$count.' token(s) issued.');
+            if (! is_array($records)) {
+                throw new RuntimeException('tokens.yaml did not parse to a token map');
+            }
+
+            [$active, $expired, $orphaned] = $this->classifyTokens($records);
+        } catch (Throwable $e) {
+            $this->problem('tokens.yaml is corrupt or unreadable ('.$e->getMessage().') — authentication fails closed. Restore it from backup, or delete it and re-issue tokens with: php please mcp:token you@site.com');
+
+            return;
         }
+
+        $total = count($records);
+
+        $breakdown = implode(', ', array_filter([
+            $expired ? $expired.' expired' : null,
+            $orphaned ? $orphaned.' orphaned-user' : null,
+        ]));
+
+        if ($total === 0) {
+            $this->warn('[WARN] No tokens issued — the endpoint is a locked door. Run: php please mcp:token you@site.com');
+        } elseif ($active === 0) {
+            // Dead tokens are worse than none: everything looks issued while
+            // every request 401s.
+            $this->warn("[WARN] {$total} token(s) issued but none are active ({$breakdown}) — the endpoint is a locked door. Run: php please mcp:token you@site.com");
+        } elseif ($active === $total) {
+            $this->info('[ OK ] '.$total.' token(s) issued.');
+        } else {
+            $this->info("[ OK ] {$total} token(s) issued ({$active} active, {$breakdown}).");
+        }
+    }
+
+    /**
+     * Active means the authentication middleware would accept it: unexpired
+     * AND its user still exists.
+     *
+     * @return array{0: int, 1: int, 2: int} [active, expired, orphaned]
+     */
+    protected function classifyTokens(array $records): array
+    {
+        $active = $expired = $orphaned = 0;
+
+        foreach ($records as $record) {
+            if (($record['expires_at'] ?? null) && Carbon::parse($record['expires_at'])->isPast()) {
+                $expired++;
+            } elseif (! User::find($record['user'] ?? '')) {
+                $orphaned++;
+            } else {
+                $active++;
+            }
+        }
+
+        return [$active, $expired, $orphaned];
     }
 
     /**
@@ -156,10 +254,18 @@ class Doctor extends Command
 
         // The repository name is arbitrary — what matters is the driver it
         // resolves to (a 'custom' repository may still be file-driven).
-        $driver = config('statamic.users.repositories.'.$repository.'.driver', $repository);
+        // AuthenticateOAuth's preflight applies the same !== 'eloquent'
+        // predicate at request time.
+        $driver = config('statamic.users.repositories.'.$repository.'.driver') ?? '(none)';
 
         if ($driver === 'file') {
             $this->problem("Users are file-based (the '{$repository}' repository resolves to the file driver) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token').");
+
+            return;
+        }
+
+        if ($driver !== 'eloquent') {
+            $this->problem("Users use the '{$driver}' driver (repository: {$repository}) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token').");
 
             return;
         }
