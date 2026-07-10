@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Statamic\Events\EntrySaved;
@@ -417,4 +418,160 @@ it('reports a listener-cancelled save instead of claiming success', function () 
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
         ->assertHasErrors(['the save was cancelled by a listener on this site — the entry was not updated']);
+});
+
+it('saves an explicit null over an empty-string value instead of a false no-op', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    // Loose == juggles null == '' — a false no-op here would silently drop
+    // the write, making explicit null unable to clear any falsy field.
+    $entry = makeUpdatableBlogEntry(['hero_image' => '']);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero_image' => null]])
+        ->assertOk()
+        ->assertDontSee('no-op');
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->data()->has('hero_image'))->toBeTrue()
+        ->and($fresh->get('hero_image'))->toBeNull();
+});
+
+it('treats a type-corrective update as dirty', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    // '1' == 1 under loose comparison — fixing a stringly-typed value must save.
+    $entry = makeUpdatableBlogEntry(['hero_image' => '1']);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero_image' => 1]])
+        ->assertOk()
+        ->assertDontSee('no-op');
+
+    expect(Entry::find($entry->id())->get('hero_image'))->toBe(1);
+});
+
+it('is a no-op when only nested associative key order differs', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makeUpdatableBlogEntry(['content' => [
+        ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Hi.']]],
+    ]]);
+
+    Event::fake([EntrySaved::class]);
+
+    // Same values, assoc keys reordered at every level — the recursive ksort
+    // normalization must see through it (list order still counts as content).
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['content' => [
+            ['content' => [['text' => 'Hi.', 'type' => 'text']], 'type' => 'paragraph'],
+        ]]])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Event::assertNotDispatched(EntrySaved::class);
+});
+
+it('severs only the written field on a localization, keeping the rest inherited', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello', 'hero_image' => 'hero.jpg'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Servus']])
+        ->assertOk();
+
+    // The annotation contract: only the written field becomes a local
+    // override; everything else keeps inheriting from the origin.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $localization->id()])
+        ->assertSee('"local_overrides":["title"]')
+        ->assertSee('"inherited_from_origin":["hero_image"]');
+
+    $fresh = Entry::find($localization->id());
+
+    expect($fresh->data()->has('hero_image'))->toBeFalse() // not copied into own data
+        ->and($fresh->value('hero_image'))->toBe('hero.jpg') // still resolved via the origin
+        ->and($fresh->get('title'))->toBe('Servus');
+});
+
+it('creates a local override when re-sending an inherited value', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello', 'hero_image' => 'hero.jpg'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+
+    // The dirty check compares OWN data, not resolved values(): re-sending a
+    // value the entry currently inherits IS a change — it pins the field as
+    // a local override that no longer follows the origin.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['hero_image' => 'hero.jpg']])
+        ->assertOk()
+        ->assertDontSee('no-op');
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $localization->id()])
+        ->assertSee('"local_overrides":["title","hero_image"]');
+
+    expect(Entry::find($localization->id())->data()->has('hero_image'))->toBeTrue();
+});
+
+it('scopes slug collisions to the localization site', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+
+    tap(
+        Entry::make()->collection('blog')->slug('greetings')->locale('en')->data(['title' => 'Greetings'])->published(true)
+    )->save();
+
+    $taken = tap(
+        Entry::make()->collection('blog')->slug('besetzt')->locale('de')->data(['title' => 'Besetzt'])->published(true)
+    )->save();
+
+    // 'greetings' exists only in en — no collision for the de localization.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Hallo'], 'slug' => 'greetings'])
+        ->assertOk()
+        ->assertSee('"slug":"greetings"');
+
+    // 'besetzt' exists in de — collision, naming the de entry.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Hallo'], 'slug' => 'besetzt'])
+        ->assertHasErrors(["slug 'besetzt' already exists in collection 'blog' (site 'de') as entry '{$taken->id()}'"]);
+});
+
+it('rejects an empty date instead of silently ignoring it', function () {
+    Fixtures::site();
+    $entry = makeUpdatableDatedEvent();
+
+    Server::actingAs(Fixtures::makeUser('edit events entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Launch Party'], 'date' => ''])
+        ->assertHasErrors(['date is empty — pass e.g. 2026-07-09 or 2026-07-09 15:30, or omit date']);
+
+    expect(Entry::find($entry->id())->date()->format('Y-m-d'))->toBe('2026-08-01');
 });
