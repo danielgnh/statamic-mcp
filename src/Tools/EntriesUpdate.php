@@ -89,6 +89,13 @@ class EntriesUpdate extends Tool
             throw new ToolException('pass date as a top-level parameter, not inside data');
         }
 
+        // Same for slug (v6's auto-injected blueprint field): entries never
+        // store it in data, and the generic unknown-field error gives no
+        // usable hint — targeted rejection instead.
+        if (array_key_exists('slug', $data)) {
+            throw new ToolException('pass slug as a top-level parameter, not inside data');
+        }
+
         $blueprint = $entry->blueprint();
         $this->rejectUnknownKeys($blueprint, $data);
 
