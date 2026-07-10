@@ -91,15 +91,16 @@ claude.ai/Claude Desktop and ChatGPT connectors need OAuth mode.
 | `terms_list` | Paginated term summaries — no publish state on terms, so no status filter. |
 | `terms_get` | Term by id (`taxonomy::slug`) or taxonomy + slug, raw or augmented. With `site`, `data` holds local overrides and `inherited` what falls back from the term's origin site (the taxonomy's first configured site). |
 | `terms_create` | Creates in the taxonomy's origin site; localize afterwards with `terms_update` + `site`. Terms have no draft state — created terms are live immediately. |
-| `terms_update` | Same merge contract as entries. `slug` renames the term: on the default site this changes the term id and moves the file; on other sites it stores a localized slug override. |
+| `terms_update` | Same merge contract as entries. `slug` renames the term: on the origin site (the taxonomy's first configured site) this changes the term id and moves the file; on other sites it stores a localized slug override. |
 | `terms_delete` | Only registered when `deletes` is enabled. Removes the term from every site at once; Statamic's reference updater then strips references from entries (runs on the queue; skipped when `statamic.system.update_references` is false). |
 | `globals_get` | Raw global variables — one set by handle, or every set you can access. With `site`, includes values inherited from the origin site. |
 | `globals_update` | Merge-patch a set's variables per site (localizations created transparently on first write). Globals have no draft state: saved values are live immediately. |
 
 Every write response states the resulting liveness ("saved as draft — not live",
 "published", "working copy created — live entry unchanged", "working copy amended —
-live entry unchanged", "created — live") and includes `cp_edit_url` linking the CP
-edit page. Collections with revisions enabled get working copies through the same
+live entry unchanged", "created — live", "updated — live") and includes `cp_edit_url`
+linking the CP edit page (delete responses omit `cp_edit_url` — the page would 404).
+Collections with revisions enabled get working copies through the same
 mechanism the CP uses — the live entry is never mutated, publishing stays in the
 Control Panel.
 
@@ -222,8 +223,9 @@ Statamic's native permission system** — the same roles UI you already use:
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Changing publish state — in
    either direction — additionally requires `publish {handle} entries`, exactly like
-   the CP. Multi-site writes require `access {site} site`. Denials name the missing
-   permission and the remedy.
+   the CP. Non-default-site writes require `access {site} site` (the default site
+   is never gated by a site permission). Denials name the missing permission and
+   the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
 
 Entry creates and updates save **drafts by default**: agents draft, humans publish
@@ -260,8 +262,12 @@ the CP).
 add `Delete blog entries` to the role. Both gates must open.
 
 **Scoping to one site of a multi-site install:** grant `Access {site} site` for only
-that site — writes to other sites are denied with the exact missing permission named.
-(Site permissions only exist on multi-site installs.)
+that site — writes to other non-default sites are denied with the exact missing
+permission named. **Know the exemption:** the default site is never gated by a site
+permission, so granting only `Access fr site` still leaves default-site content open
+to the agent's content permissions. To truly confine an agent, scope its **content**
+permissions instead, or make the agent's target site the default. (Site permissions
+only exist on multi-site installs.)
 
 ## Troubleshooting
 
