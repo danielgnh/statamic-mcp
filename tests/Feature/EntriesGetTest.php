@@ -164,7 +164,8 @@ it('errors when the site param does not match the entry own site on id lookups',
 
     Server::actingAs(Fixtures::makeUser('view blog entries', 'access de site'))
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'site' => 'en'])
-        ->assertHasErrors(["entry '{$entry->id()}' belongs to site 'de' — omit site or pass 'de'"]);
+        // de-only entry — no en localization exists, so only de is listed
+        ->assertHasErrors(["entry '{$entry->id()}' belongs to site 'de', not 'en' — pass the matching localization id instead (or omit site). Localizations: de => {$entry->id()}"]);
 });
 
 it('fetches a non-default-site entry by id with site access granted', function () {
