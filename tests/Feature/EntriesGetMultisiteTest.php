@@ -71,6 +71,31 @@ it('annotates inherited vs local fields with the origin id', function () {
         ->assertSee('"title":"Hallo"');         // local override wins
 });
 
+// Level-2+ chains: the direct origin's own data() is NOT the whole inheritance —
+// fields set only on the root must still surface, attributed as inherited.
+it('resolves inherited fields through multi-level origin chains', function () {
+    Fixtures::multisite(withThirdSite: true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    [$en, $de] = makeLocalizedBlogEntry(); // en: title + hero_image; de overrides title => Hallo
+
+    // at localizes de (en → de → at) and overrides only content
+    $at = tap(
+        $de->makeLocalization('at')->data(['content' => 'Servus aus Wien'])
+    )->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $at->id()])
+        ->assertOk()
+        ->assertSee('"origin_id":"'.$de->id().'"') // the DIRECT origin — what a severing write detaches from
+        ->assertSee('"local_overrides":["content"]')
+        ->assertSee('"inherited_from_origin":["title","hero_image"]')
+        ->assertSee('"title":"Hallo"')             // nearest origin (de) wins over the root (en)
+        ->assertSee('"hero_image":"hero.jpg"')     // set only on the root — still inherited
+        ->assertSee('"content":"Servus aus Wien"');
+});
+
 it('keeps the origin annotation out of origin entries and augmented output', function () {
     Fixtures::multisite();
     Fixtures::tags();

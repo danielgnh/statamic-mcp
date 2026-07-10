@@ -92,11 +92,22 @@ class EntriesGet extends Tool
             $data = $entry->data()->except(['updated_at', 'updated_by'])->all();
 
             if ($entry->hasOrigin()) {
-                $origin = $entry->origin();
-                $inherited = array_diff_key($origin->data()->except(['updated_at', 'updated_by'])->all(), $data);
+                // Walk the whole origin chain: each origin's data() is its OWN
+                // values only (chain resolution lives in values(), which also
+                // merges the collection cascade — not round-trippable), so a
+                // field set only on the root would otherwise vanish here.
+                // += keeps the nearest origin's value when levels collide.
+                $inherited = [];
+
+                for ($origin = $entry->origin(); $origin !== null; $origin = $origin->origin()) {
+                    $inherited += $origin->data()->except(['updated_at', 'updated_by'])->all();
+                }
+
+                $inherited = array_diff_key($inherited, $data);
 
                 $localization = [
-                    'origin_id' => $origin->id(),
+                    // the DIRECT origin — it's what a severing write detaches from
+                    'origin_id' => $entry->origin()->id(),
                     'local_overrides' => array_keys($data),
                     'inherited_from_origin' => array_keys($inherited),
                     'note' => 'inherited fields are shown from the origin — sending one back in entries_update makes it a local override',

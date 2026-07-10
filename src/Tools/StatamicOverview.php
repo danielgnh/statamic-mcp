@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
 use Laravel\Mcp\Request;
@@ -22,6 +23,8 @@ use Statamic\Facades\Taxonomy;
 #[IsIdempotent]
 class StatamicOverview extends Tool
 {
+    use ResolvesSites;
+
     public function schema(JsonSchema $schema): array
     {
         return []; // zero parameters (spec §4 row 1)
@@ -60,12 +63,10 @@ class StatamicOverview extends Tool
                 'locale' => $site->locale(),
             ];
 
-            // Mirrors ensureSiteAccess so the model is never offered a site it
-            // will be denied on: 'access {site} site' only exists on multisite,
-            // and the default site is never gated (single-site: no flag at all).
+            // The same predicate ensureSiteAccess enforces, so the model is
+            // never offered a site it will be denied on (single-site: no flag).
             if ($multisite) {
-                $shape['can_access'] = $site->handle() === Site::default()->handle()
-                    || $this->can($user, "access {$site->handle()} site");
+                $shape['can_access'] = $this->canAccessSite($user, $site->handle());
             }
 
             return $shape;
