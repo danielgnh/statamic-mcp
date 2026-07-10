@@ -3,6 +3,8 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Illuminate\Support\Facades\Event;
+use Statamic\Events\EntryCreating;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -27,7 +29,9 @@ it('creates a draft by default with a slug generated from the title', function (
     Fixtures::tags();
     Fixtures::blog();
 
-    Server::actingAs(Fixtures::makeUser('create blog entries'))
+    $user = Fixtures::makeUser('create blog entries');
+
+    Server::actingAs($user)
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'My First Post']])
         ->assertOk()
         ->assertSee('"slug":"my-first-post"')
@@ -39,7 +43,8 @@ it('creates a draft by default with a slug generated from the title', function (
 
     expect($entry)->not->toBeNull()
         ->and($entry->published())->toBeFalse()
-        ->and($entry->get('title'))->toBe('My First Post');
+        ->and($entry->get('title'))->toBe('My First Post')
+        ->and($entry->get('updated_by'))->toBe($user->id()); // CP parity: creates carry updated_by/updated_at
 });
 
 it("requires 'publish blog entries' for published: true", function () {
@@ -157,4 +162,131 @@ it('refuses to create when the server is read-only', function () {
         ->assertHasErrors();
 
     expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
+});
+
+it('normalizes the slug the way Statamic will persist it before checking collisions', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $existing = tap(
+        Entry::make()->collection('blog')->slug('hello-world')->data(['title' => 'Hello'])->published(true)
+    )->save();
+
+    // Entry::save() re-normalizes 'Hello World' to 'hello-world' — a raw-value
+    // collision query would miss this and silently produce two entries, one URL.
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Fresh'], 'slug' => 'Hello World'])
+        ->assertHasErrors(["slug 'hello-world' already exists in collection 'blog' (site 'en') as entry '{$existing->id()}' — use entries_update to modify it"]);
+});
+
+it('generates the slug with the target site language (CP parity)', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('create blog entries', 'access de site'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Über Uns'], 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"slug":"ueber-uns"'); // de transliterates Ü → Ue; en would give 'uber-uns'
+});
+
+it('rejects a title that normalizes to an empty slug', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => '🎉🎉🎉']])
+        ->assertHasErrors(['could not derive a slug from the title — pass slug explicitly']);
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
+});
+
+it('reports a listener-cancelled save instead of claiming success', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    // Approval-workflow addons cancel saves by returning false from
+    // EntryCreating/EntrySaving; Entry::save() then returns false.
+    Event::listen(EntryCreating::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hi']])
+        ->assertHasErrors(['the save was cancelled by a listener on this site — nothing was created']);
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
+});
+
+it('rejects a site the collection is not configured for', function () {
+    Fixtures::multisite();
+
+    tap(
+        Collection::make('docs')->title('Docs')->sites(['en'])->routes('/docs/{slug}')
+    )->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('doc')->setNamespace('collections.docs')->save();
+
+    Server::actingAs(Fixtures::makeUser('create docs entries', 'access de site'))
+        ->tool(EntriesCreate::class, ['collection' => 'docs', 'data' => ['title' => 'Hi'], 'site' => 'de'])
+        ->assertHasErrors(["collection 'docs' is not available in site 'de' — available sites: en"]);
+});
+
+it('applies rule placeholder replacements so unique_entry_value scopes to the collection', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    tap(
+        Collection::make('products')->title('Products')->sites(['en'])->routes('/products/{slug}')
+    )->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'sku' => ['type' => 'text', 'validate' => ['new \Statamic\Rules\UniqueEntryValue({collection}, {id}, {site})']],
+    ])->setHandle('product')->setNamespace('collections.products')->save();
+
+    // Same sku in ANOTHER collection: an unreplaced {collection} placeholder
+    // becomes null and the rule queries ALL collections — this entry must not
+    // block a products create once replacements are wired.
+    tap(
+        Entry::make()->collection('blog')->slug('other')->data(['title' => 'Other', 'sku' => 'ABC-1'])->published(true)
+    )->save();
+
+    tap(
+        Entry::make()->collection('products')->slug('first')->data(['title' => 'First', 'sku' => 'ABC-2'])->published(true)
+    )->save();
+
+    // Duplicate within products → field-level validation error.
+    Server::actingAs(Fixtures::makeUser('create products entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'products', 'data' => ['title' => 'Dupe', 'sku' => 'ABC-2']])
+        ->assertHasErrors()
+        ->assertSee('validation failed');
+
+    // Same sku existing only in blog → scoped rule passes.
+    Server::actingAs(Fixtures::makeUser('create products entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'products', 'data' => ['title' => 'Fine', 'sku' => 'ABC-1']])
+        ->assertOk();
+});
+
+it('rejects reserved keys in data even when the blueprint defines them', function () {
+    Fixtures::site();
+
+    tap(
+        Collection::make('pages')->title('Pages')->sites(['en'])->routes('/pages/{slug}')
+    )->save();
+
+    // A 'published' blueprint field would otherwise let a create-only user
+    // persist publish state through data (data keys shadow front matter).
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'published' => ['type' => 'toggle'],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hi', 'published' => true]])
+        ->assertHasErrors(['field published is reserved — never writable via data']);
 });

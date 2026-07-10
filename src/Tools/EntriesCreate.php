@@ -7,7 +7,6 @@ use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -15,6 +14,8 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Site;
+use Statamic\Support\Str;
 
 #[Name('entries_create')]
 #[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Saves an unpublished draft by default; published: true requires the publish permission for the collection. slug is generated from data.title when omitted. Dated collections require date.')]
@@ -80,6 +81,17 @@ class EntriesCreate extends Tool
         $collection = Collection::findByHandle($collectionHandle);
         $blueprint = $collection->entryBlueprint(); // the collection's default blueprint
 
+        // resolveSite() only checks the site exists and is accessible — the
+        // collection itself may not be configured for it.
+        if (! $collection->sites()->contains($site)) {
+            throw new ToolException(sprintf(
+                "collection '%s' is not available in site '%s' — available sites: %s",
+                $collectionHandle,
+                $site,
+                $collection->sites()->sort()->implode(', '),
+            ));
+        }
+
         // Dated collections inject a required 'date' blueprint field — the
         // tool models it as a top-level param (entries_get returns it
         // top-level too), so reject the ambiguous data-key spelling and
@@ -94,8 +106,13 @@ class EntriesCreate extends Tool
         $this->rejectUnknownKeys($blueprint, $data);
 
         // The injected date field is required — satisfy it with the resolved
-        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright).
-        $this->validateAgainstBlueprint($blueprint, $date ? [...$data, 'date' => $date] : $data);
+        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright). The
+        // replacements mirror the CP's store path (no id yet on create).
+        $this->validateAgainstBlueprint(
+            $blueprint,
+            $date ? [...$data, 'date' => $date] : $data,
+            ['collection' => $collectionHandle, 'site' => $site],
+        );
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
 
@@ -110,7 +127,12 @@ class EntriesCreate extends Tool
             $entry->date($date);
         }
 
-        $entry->save();
+        // CP parity: created entries carry updated_by/updated_at. save()
+        // returns false when an EntryCreating/EntrySaving listener cancels
+        // (approval addons do this) — never report success for it.
+        if (! $entry->updateLastModified($user)->save()) {
+            throw new ToolException('the save was cancelled by a listener on this site — nothing was created');
+        }
 
         $payload = [
             'id' => $entry->id(),
@@ -161,7 +183,16 @@ class EntriesCreate extends Tool
                 throw new ToolException('pass slug, or include a title in data so a slug can be generated from it');
             }
 
-            $slug = Str::slug($title);
+            $slug = $title;
+        }
+
+        // Entry::save() re-normalizes through Routable::slug() with the site's
+        // language — run the exact same call here so the collision check sees
+        // what will actually be persisted (and Über → ueber under de, CP parity).
+        $slug = Str::slug($slug, '-', Site::get($site)->lang());
+
+        if ($slug === '') {
+            throw new ToolException('could not derive a slug from the title — pass slug explicitly');
         }
 
         $existing = Entry::query()
