@@ -8,6 +8,7 @@ use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
 /**
@@ -61,7 +62,7 @@ class SourceDownloader
             $body = $response->body();
 
             if (strlen($body) > $maxBytes) {
-                throw new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $this->maxKilobytes()));
+                throw $this->sizeLimitException();
             }
 
             if ($body === '') {
@@ -187,14 +188,14 @@ class SourceDownloader
                 // (Guzzle wraps callback throws; unwrapped in the catch below.
                 // Http::fake() never runs these — the body-length check in
                 // download() is the layer tests exercise.)
-                'on_headers' => function ($response) use ($maxBytes): void {
+                'on_headers' => function (ResponseInterface $response) use ($maxBytes): void {
                     if ((int) $response->getHeaderLine('Content-Length') > $maxBytes) {
-                        throw new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $this->maxKilobytes()));
+                        throw $this->sizeLimitException();
                     }
                 },
-                'progress' => function ($downloadTotal, int $downloaded) use ($maxBytes): void {
+                'progress' => function (int $downloadTotal, int $downloaded) use ($maxBytes): void {
                     if ($downloaded > $maxBytes) {
-                        throw new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $this->maxKilobytes()));
+                        throw $this->sizeLimitException();
                     }
                 },
             ])->timeout(self::TIMEOUT_SECONDS)->get($url);
@@ -208,6 +209,11 @@ class SourceDownloader
 
             throw new ToolException(sprintf('could not download source_url: %s', $e->getMessage()));
         }
+    }
+
+    private function sizeLimitException(): ToolException
+    {
+        return new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $this->maxKilobytes()));
     }
 
     private function maxKilobytes(): int

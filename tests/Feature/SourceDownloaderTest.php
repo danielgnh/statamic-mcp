@@ -85,6 +85,18 @@ it('revalidates every redirect hop and refuses a redirect to a private address',
     downloaderWithPublicDns()->download('https://images.example.com/a.png');
 })->throws(ToolException::class, 'private or reserved address');
 
+it('follows a valid redirect with a relative Location and derives the basename from the final url', function () {
+    Http::fake([
+        'https://images.example.com/old.png' => Http::response('', 302, ['Location' => '/moved/hero2.png']),
+        'https://images.example.com/moved/hero2.png' => Http::response('BYTES', 200),
+    ]);
+
+    [$contents, $basename] = downloaderWithPublicDns()->download('https://images.example.com/old.png');
+
+    expect($contents)->toBe('BYTES');
+    expect($basename)->toBe('hero2.png');
+});
+
 it('rejects a redirect without a Location header', function () {
     Http::fake(['https://images.example.com/*' => Http::response('', 302)]);
 
