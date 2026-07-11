@@ -41,7 +41,7 @@ class McpTokensController extends CpController
         ]);
     }
 
-    public function destroy(Request $request, TokenRepository $tokens, string $tokenId): RedirectResponse
+    public function destroy(TokenRepository $tokens, string $tokenId): RedirectResponse
     {
         $record = $tokens->find($tokenId);
 
@@ -50,8 +50,13 @@ class McpTokensController extends CpController
         $user = User::current();
 
         // Owner-or-super, enforced server-side — the view hiding other users'
-        // rows is cosmetic, this is the actual gate.
-        abort_unless($user->isSuper() || $record['user'] === (string) $user->id(), 403);
+        // rows is cosmetic, this is the actual gate. 'user' is coalesced
+        // because tokens.yaml is hand-editable and a pruned key must fail
+        // closed (403), not warn — same convention as McpTokensUtility::presentTokens.
+        // The ignore exists because find()'s docblock over-promises complete
+        // records; widening it is the logged token-record type-honesty v1.1 item.
+        // @phpstan-ignore nullCoalesce.offset (hand-edited tokens.yaml can lack 'user'; docblock widening deferred to v1.1)
+        abort_unless($user->isSuper() || ($record['user'] ?? null) === (string) $user->id(), 403);
 
         try {
             $tokens->revoke($tokenId);

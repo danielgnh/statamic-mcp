@@ -198,6 +198,27 @@ it('flashes old input when the store is busy on issuance', function () {
         ->assertSessionHasInput('name', 'typed-name');
 });
 
+it('flashes an error when the store is busy on revocation', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->mock(TokenRepository::class, function ($mock) use ($user) {
+        $mock->shouldReceive('find')->with('busy-token')->andReturn([
+            'user' => (string) $user->id(),
+            'name' => 'x',
+            'hash' => 'h',
+            'created_at' => now()->toIso8601String(),
+            'expires_at' => null,
+        ]);
+        $mock->shouldReceive('revoke')->andThrow(new LockTimeoutException);
+    });
+
+    $this->actingAs($user)
+        ->from(cp_route('utilities.mcp-tokens'))
+        ->delete(cp_route('utilities.mcp-tokens.destroy', 'busy-token'))
+        ->assertRedirect(cp_route('utilities.mcp-tokens'))
+        ->assertSessionHas('error');
+});
+
 it('lets a user revoke their own token', function () {
     $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
 
