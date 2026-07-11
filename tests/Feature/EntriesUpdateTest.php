@@ -124,6 +124,24 @@ it('does not false-fail required fields on partial updates', function () {
         ->assertHasNoErrors();
 });
 
+it('updates entries on a blueprint that marks slug as required', function () {
+    Fixtures::site();
+    Fixtures::pages();
+
+    $entry = tap(
+        Entry::make()->collection('pages')->slug('about-us')->data(['title' => 'About Us'])->published(true)
+    )->save();
+
+    // Entries never store slug in data, so merged validation must be fed the
+    // entry's own slug — otherwise a required slug field fails every update.
+    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'About']])
+        ->assertOk()
+        ->assertHasNoErrors();
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('About');
+});
+
 it('is a no-op when merged data equals current data', function () {
     Fixtures::site();
     Fixtures::tags();

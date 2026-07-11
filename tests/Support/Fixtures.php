@@ -58,6 +58,23 @@ class Fixtures
         ])->setHandle('article')->setNamespace('collections.blog')->save();
     }
 
+    // The CP's blueprint builder lets editors mark slug required — Statamic's
+    // own injected slug field is only max:200, so this needs its own fixture.
+    public static function pages(): void
+    {
+        tap(
+            Collection::make('pages')
+                ->title('Pages')
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'slug' => ['type' => 'slug', 'validate' => 'required|max:200'],
+        ])->setHandle('page')->setNamespace('collections.pages')->save();
+    }
+
     public static function tags(): void
     {
         tap(Taxonomy::make('tags')->title('Tags'))->save();

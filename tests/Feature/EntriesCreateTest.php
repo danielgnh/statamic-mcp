@@ -124,14 +124,43 @@ it('rejects unknown data keys with valid handles and a did-you-mean hint', funct
         ->assertHasErrors(["unknown field hero_imge — valid handles: content, hero_image, title, topic — did you mean 'hero_image' instead of 'hero_imge'?"]);
 });
 
+it('creates entries on a blueprint that marks slug as required', function () {
+    Fixtures::site();
+    Fixtures::pages();
+
+    // The resolved slug must reach blueprint validation — slug is barred from
+    // data and lives as a top-level param, so without the merge a required
+    // slug field would be unsatisfiable (catch-22).
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'About Us']])
+        ->assertOk()
+        ->assertSee('"slug":"about-us"');
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Contact'], 'slug' => 'get-in-touch'])
+        ->assertOk()
+        ->assertSee('"slug":"get-in-touch"');
+});
+
+it('rejects slug inside data with a targeted message', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hi', 'slug' => 'hi']])
+        ->assertHasErrors(['pass slug as a top-level parameter, not inside data']);
+});
+
 it('returns field-level validation errors from the blueprint', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
 
-    // title is required by the article blueprint
+    // title is required by the article blueprint (slug passed explicitly —
+    // its resolution runs first and would otherwise mask the field errors)
     Server::actingAs(Fixtures::makeUser('create blog entries'))
-        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['hero_image' => 'x.jpg']])
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['hero_image' => 'x.jpg'], 'slug' => 'post'])
         ->assertHasErrors()
         ->assertSee('validation failed');
 });

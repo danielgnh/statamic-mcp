@@ -114,20 +114,36 @@ class EntriesCreate extends Tool
             throw new ToolException('pass date as a top-level parameter, not inside data');
         }
 
+        // Same for slug (v6's auto-injected blueprint field): entries never
+        // store it in data, and the generic unknown-field error gives no
+        // usable hint — targeted rejection instead.
+        if (array_key_exists('slug', $data)) {
+            throw new ToolException('pass slug as a top-level parameter, not inside data');
+        }
+
         $date = $this->resolveDate($validated['date'] ?? null, $collection);
 
         $this->rejectUnknownKeys($blueprint, $data);
 
+        $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
+
         // The injected date field is required — satisfy it with the resolved
-        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright). The
-        // replacements mirror the CP's store path (no id yet on create).
+        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright). Slug
+        // likewise: the CP form always submits it into validation, so a
+        // blueprint that marks slug required must see the resolved value —
+        // without it that field is unsatisfiable (slug is barred from data).
+        // The replacements mirror the CP's store path (no id yet on create).
+        $values = [...$data, 'slug' => $slug];
+
+        if ($date) {
+            $values['date'] = $date;
+        }
+
         $this->validateAgainstBlueprint(
             $blueprint,
-            $date ? [...$data, 'date' => $date] : $data,
+            $values,
             ['collection' => $collectionHandle, 'site' => $site],
         );
-
-        $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
 
         $entry = Entry::make()
             ->collection($collectionHandle)
