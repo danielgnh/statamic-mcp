@@ -85,6 +85,12 @@ it('revalidates every redirect hop and refuses a redirect to a private address',
     downloaderWithPublicDns()->download('https://images.example.com/a.png');
 })->throws(ToolException::class, 'private or reserved address');
 
+it('rejects a redirect without a Location header', function () {
+    Http::fake(['https://images.example.com/*' => Http::response('', 302)]);
+
+    downloaderWithPublicDns()->download('https://images.example.com/a.png');
+})->throws(ToolException::class, 'redirected without a Location header');
+
 it('follows at most 3 redirects', function () {
     Http::fake([
         'https://images.example.com/*' => Http::response('', 302, ['Location' => 'https://images.example.com/again.png']),

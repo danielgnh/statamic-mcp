@@ -168,15 +168,21 @@ class SourceDownloader
         $port = parse_url($url, PHP_URL_PORT)
             ?? (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80);
 
+        // Pinning is only meaningful (and only needed) when the host came
+        // from DNS: literal-IP hosts were validated directly and curl will
+        // connect to exactly that address anyway.
+        $literalHost = filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false;
+
         try {
             return Http::withOptions([
                 // Hops are revalidated by download()'s loop, never by curl.
                 'allow_redirects' => false,
                 // Pin the connection to the validated IP — closes the DNS
-                // rebinding window between check and use (spec §5). curl's
-                // RESOLVE syntax is IPv4/IPv6-agnostic but pinning a
-                // bracketed host is not; IPv6 literals were validated above.
-                'curl' => str_contains($ip, ':') ? [] : [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ip}"]],
+                // rebinding window between check and use (spec §5), for
+                // IPv6-only hosts too (address bracketed per libcurl syntax).
+                'curl' => $literalHost ? [] : [CURLOPT_RESOLVE => [
+                    sprintf('%s:%d:%s', $host, $port, str_contains($ip, ':') ? "[{$ip}]" : $ip),
+                ]],
                 // Content-Length is advisory — abort mid-transfer at the cap.
                 // (Guzzle wraps callback throws; unwrapped in the catch below.
                 // Http::fake() never runs these — the body-length check in
