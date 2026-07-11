@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\File;
 
 beforeEach(function () {
@@ -177,4 +178,80 @@ it('403s issuance without the utility permission', function () {
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+it('flashes old input when the store is busy on issuance', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->mock(TokenRepository::class, function ($mock) {
+        $mock->shouldReceive('issue')->andThrow(new LockTimeoutException);
+    });
+
+    $this->actingAs($user)
+        ->from(cp_route('utilities.mcp-tokens'))
+        ->post(cp_route('utilities.mcp-tokens.store'), [
+            'name' => 'typed-name',
+            'expiry' => '30',
+        ])
+        ->assertRedirect(cp_route('utilities.mcp-tokens'))
+        ->assertSessionHas('error')
+        ->assertSessionHasInput('name', 'typed-name');
+});
+
+it('lets a user revoke their own token', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $plain = app(TokenRepository::class)->issue($user, 'to-revoke');
+
+    $this->actingAs($user)
+        ->delete(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+it("403s revoking another user's token and leaves it intact", function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $other = Fixtures::makeUser();
+
+    $plain = app(TokenRepository::class)->issue($other, 'not-yours');
+
+    $this->actingAs($user)
+        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->assertForbidden();
+
+    expect(app(TokenRepository::class)->all())->toHaveCount(1);
+});
+
+it("lets a super admin revoke anyone's token", function () {
+    $super = Fixtures::makeSuper();
+    $other = Fixtures::makeUser();
+
+    $plain = app(TokenRepository::class)->issue($other, 'audit-revoke');
+
+    $this->actingAs($super)
+        ->delete(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+it('404s revoking an unknown token id', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->actingAs($user)
+        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', 'nosuchtoken'))
+        ->assertNotFound();
+});
+
+it('403s revocation without the utility permission, even for own tokens', function () {
+    $user = Fixtures::makeUser('access cp'); // no utility permission
+
+    $plain = app(TokenRepository::class)->issue($user, 'own-but-ungated');
+
+    $this->actingAs($user)
+        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->assertForbidden();
+
+    expect(app(TokenRepository::class)->all())->toHaveCount(1);
 });
