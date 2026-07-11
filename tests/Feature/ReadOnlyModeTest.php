@@ -14,6 +14,7 @@ use Laravel\Mcp\Request;
 use Statamic\Facades\Entry;
 
 const READ_TOOLS = [
+    'assets_get',
     'assets_list',
     'blueprints_get',
     'entries_get',
@@ -80,10 +81,14 @@ function readOnlyToolNames(string $token): array
 {
     $sessionId = readOnlyInitialize($token);
 
+    // laravel/mcp paginates tools/list at 15 per page by default (spec
+    // ServerContext::perPage); the tool set has grown past that, so request
+    // the server's max page size to see the whole advertised set in one call.
     $response = readOnlyPost([
         'jsonrpc' => '2.0',
         'id' => 2,
         'method' => 'tools/list',
+        'params' => ['per_page' => 50],
     ], $token, $sessionId);
 
     $response->assertOk();
@@ -91,7 +96,7 @@ function readOnlyToolNames(string $token): array
     return collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
 }
 
-it('advertises only the eight read tools over HTTP in read_only mode', function () {
+it('advertises only the nine read tools over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
 
     $user = Fixtures::makeUser();
@@ -99,7 +104,7 @@ it('advertises only the eight read tools over HTTP in read_only mode', function 
 
     $names = readOnlyToolNames($token);
 
-    // Exact set equality: ONLY the eight read tools remain...
+    // Exact set equality: ONLY the nine read tools remain...
     expect($names)->toBe(READ_TOOLS);
 
     // ...and every write/delete tool is absent BY NAME — if the exact-set
@@ -107,7 +112,7 @@ it('advertises only the eight read tools over HTTP in read_only mode', function 
     expect($names)->not->toContain(...WRITE_TOOLS, ...DELETE_TOOLS);
 });
 
-it('advertises the thirteen non-delete tools with the zero-config default', function () {
+it('advertises the fourteen non-delete tools with the zero-config default', function () {
     // Default config: read_only=false, deletes=false.
     $user = Fixtures::makeUser();
     $token = app(TokenRepository::class)->issue($user, 'rw')->token;
@@ -119,7 +124,7 @@ it('advertises the thirteen non-delete tools with the zero-config default', func
     expect($names)->not->toContain(...DELETE_TOOLS);
 });
 
-it('advertises all fifteen tools when deletes are enabled', function () {
+it('advertises all sixteen tools when deletes are enabled', function () {
     config(['statamic.mcp.deletes' => true]);
 
     $user = Fixtures::makeUser();
