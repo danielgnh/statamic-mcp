@@ -164,11 +164,20 @@ class EntriesUpdate extends Tool
 
         // The injected date field on dated collections is required — satisfy
         // it with a Carbon (Statamic\Rules\DateFieldtype accepts Carbon,
-        // rejects plain strings). Replacements mirror the CP's update path,
-        // so unique_entry_value excludes this entry itself.
+        // rejects plain strings). Slug likewise: entries never store it in
+        // data, so a blueprint that marks slug required must be fed the
+        // effective value (the new slug, or the entry's current one).
+        // Replacements mirror the CP's update path, so unique_entry_value
+        // excludes this entry itself.
+        $values = [...$merged, 'slug' => $slug ?? $basis->slug()];
+
+        if ($collection->dated()) {
+            $values['date'] = $date ?? $basis->date();
+        }
+
         $this->validateAgainstBlueprint(
             $blueprint,
-            $collection->dated() ? [...$merged, 'date' => $date ?? $basis->date()] : $merged,
+            $values,
             ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
         );
 
