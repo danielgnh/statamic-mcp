@@ -29,7 +29,8 @@ class McpTokensController extends CpController
             $plain = $tokens->issue(User::current(), $validated['name'] ?? null, $days);
         } catch (LockTimeoutException) {
             return redirect(cp_route('utilities.mcp-tokens'))
-                ->with('error', __('The token store is busy — please try again.'));
+                ->with('error', __('The token store is busy — please try again.'))
+                ->withInput();
         }
 
         return redirect(cp_route('utilities.mcp-tokens'))->with('statamic-mcp.plain_token', [
@@ -38,5 +39,27 @@ class McpTokensController extends CpController
             'name' => $plain->name,
             'expiresAt' => $plain->expiresAt?->toFormattedDateString(),
         ]);
+    }
+
+    public function destroy(Request $request, TokenRepository $tokens, string $tokenId): RedirectResponse
+    {
+        $record = $tokens->find($tokenId);
+
+        abort_if($record === null, 404);
+
+        $user = User::current();
+
+        // Owner-or-super, enforced server-side — the view hiding other users'
+        // rows is cosmetic, this is the actual gate.
+        abort_unless($user->isSuper() || $record['user'] === (string) $user->id(), 403);
+
+        try {
+            $tokens->revoke($tokenId);
+        } catch (LockTimeoutException) {
+            return redirect(cp_route('utilities.mcp-tokens'))
+                ->with('error', __('The token store is busy — please try again.'));
+        }
+
+        return redirect(cp_route('utilities.mcp-tokens'))->with('success', __('Token revoked.'));
     }
 }
