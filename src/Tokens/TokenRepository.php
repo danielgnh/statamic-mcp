@@ -2,53 +2,58 @@
 
 namespace Danielgnh\StatamicMcp\Tokens;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Statamic\Contracts\Auth\User;
 use Statamic\Facades\YAML;
 
 /**
- * Single-writer assumption: issuance and revocation are expected from the CLI
- * (`php please mcp:token*` commands), so writes are serialized by LOCK_EX alone.
- * Any future WEB-triggered issuance path must add real locking around the whole
- * read-modify-write (flock on the file, or Cache::lock) — otherwise interleaved
- * revoke() + issue() can write back pre-revoke state and resurrect a token.
- * The torn-write failure mode fails closed: corrupt YAML breaks authentication,
- * it never opens it up.
+ * Every mutation serializes the FULL read-modify-write behind Cache::lock —
+ * CLI commands and the CP utility can write concurrently, and interleaved
+ * revoke() + issue() must never write back pre-revoke state and resurrect a
+ * token. Lock acquisition fails closed (LockTimeoutException, nothing
+ * written); the torn-write failure mode also fails closed: corrupt YAML
+ * breaks authentication, it never opens it up.
  */
 class TokenRepository
 {
+    public function __construct(protected int $lockWaitSeconds = 5) {}
+
     public function issue(User $user, ?string $name = null, ?int $expiresDays = null): PlainToken
     {
-        $tokenId = Str::lower(Str::random(12));
-        $secret = Str::random(40);
-
-        $expiresAt = $expiresDays ? Carbon::now()->addDays($expiresDays) : null;
-
-        $tokens = $this->read();
-
-        while (isset($tokens[$tokenId])) {
+        return $this->withLock(function () use ($user, $name, $expiresDays) {
             $tokenId = Str::lower(Str::random(12));
-        }
+            $secret = Str::random(40);
 
-        $tokens[$tokenId] = [
-            'user' => (string) $user->id(),
-            'name' => $name,
-            'hash' => hash('sha256', $secret),
-            'created_at' => Carbon::now()->toIso8601String(),
-            'expires_at' => $expiresAt?->toIso8601String(),
-        ];
+            $expiresAt = $expiresDays ? Carbon::now()->addDays($expiresDays) : null;
 
-        $this->write($tokens);
+            $tokens = $this->read();
 
-        return new PlainToken(
-            tokenId: $tokenId,
-            token: "mcp_{$tokenId}_{$secret}",
-            userId: (string) $user->id(),
-            name: $name,
-            expiresAt: $expiresAt,
-        );
+            while (isset($tokens[$tokenId])) {
+                $tokenId = Str::lower(Str::random(12));
+            }
+
+            $tokens[$tokenId] = [
+                'user' => (string) $user->id(),
+                'name' => $name,
+                'hash' => hash('sha256', $secret),
+                'created_at' => Carbon::now()->toIso8601String(),
+                'expires_at' => $expiresAt?->toIso8601String(),
+            ];
+
+            $this->write($tokens);
+
+            return new PlainToken(
+                tokenId: $tokenId,
+                token: "mcp_{$tokenId}_{$secret}",
+                userId: (string) $user->id(),
+                name: $name,
+                expiresAt: $expiresAt,
+            );
+        });
     }
 
     /**
@@ -72,17 +77,32 @@ class TokenRepository
 
     public function revoke(string $tokenId): bool
     {
-        $tokens = $this->read();
+        return $this->withLock(function () use ($tokenId) {
+            $tokens = $this->read();
 
-        if (! array_key_exists($tokenId, $tokens)) {
-            return false;
-        }
+            if (! array_key_exists($tokenId, $tokens)) {
+                return false;
+            }
 
-        unset($tokens[$tokenId]);
+            unset($tokens[$tokenId]);
 
-        $this->write($tokens);
+            $this->write($tokens);
 
-        return true;
+            return true;
+        });
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $operation
+     * @return T
+     *
+     * @throws LockTimeoutException fail closed — no partial write
+     */
+    protected function withLock(callable $operation): mixed
+    {
+        return Cache::lock('statamic-mcp-token-store', 10)->block($this->lockWaitSeconds, $operation);
     }
 
     protected function path(): string
