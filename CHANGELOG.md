@@ -6,8 +6,16 @@ adheres to [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
 
-- Added: MCP Tokens utility — issue and revoke your own tokens from the Control Panel (Tools → Utilities), gated by the "Access MCP Tokens utility" permission. Super admins see all tokens.
-- Changed: token-store writes are serialized behind an atomic lock, making concurrent CLI + CP issuance/revocation safe.
+### Added
+
+- MCP Tokens utility — issue and revoke your own tokens from the Control Panel
+  (Tools → Utilities), gated by the "Access MCP Tokens utility" permission.
+  Super admins see all tokens.
+
+### Changed
+
+- Token-store writes are serialized behind an atomic lock, making concurrent
+  CLI + CP issuance/revocation safe.
 
 ## [1.0.0] - 2026-07-10
 
@@ -64,4 +72,5 @@ adheres to [Semantic Versioning](https://semver.org).
   token mode pipeline is fully integration-tested. See the workflow notes in
   `.github/workflows/tests.yml`.
 
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/danielgnh/statamic-mcp/releases/tag/v1.0.0
