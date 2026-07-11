@@ -17,3 +17,11 @@ parameters:
         -
             identifier: method.notFound
             message: '#^Call to an undefined method Statamic\\Contracts\\#'
+        # Statamic\Contracts\Assets\AssetContainer::asset() is PHPDoc'd as
+        # returning non-nullable \Statamic\Assets\Asset, but the concrete
+        # implementation (Statamic\Assets\AssetContainer::asset(), v6 source)
+        # returns null when the asset doesn't exist — the contract's PHPDoc is
+        # simply wrong. Scoped to the one call site that null-checks it.
+        -
+            identifier: booleanNot.alwaysFalse
+            path: src/Tools/Concerns/ResolvesAssets.php

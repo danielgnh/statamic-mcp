@@ -27,5 +27,6 @@ class Server extends McpServer
         Tools\TermsDelete::class,
         Tools\GlobalsGet::class,
         Tools\GlobalsUpdate::class,
+        Tools\AssetsList::class,
     ];
 }
