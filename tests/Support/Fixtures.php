@@ -2,8 +2,11 @@
 
 namespace Danielgnh\StatamicMcp\Tests\Support;
 
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
 use Statamic\Contracts\Auth\User as UserContract;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
@@ -147,5 +150,31 @@ class Fixtures
         return tap(
             User::make()->email(Str::lower(Str::random(8)).'@site.test')->makeSuper()
         )->save();
+    }
+
+    /**
+     * A container on a fake disk (with url so $asset->url() works) plus an
+     * asset blueprint with an 'alt' field, mirroring a default install.
+     */
+    public static function assetContainer(string $handle = 'images'): AssetContainerContract
+    {
+        Storage::fake($handle, ['url' => "/assets/{$handle}"]);
+
+        $container = tap(AssetContainer::make($handle)->disk($handle)->title(Str::title($handle)))->save();
+
+        Blueprint::makeFromFields([
+            'alt' => ['type' => 'text'],
+        ])->setHandle($handle)->setNamespace('assets')->save();
+
+        return $container;
+    }
+
+    /**
+     * A real 1x1 transparent PNG (68 bytes) — valid image bytes without
+     * requiring GD in the test suite.
+     */
+    public static function tinyPng(): string
+    {
+        return base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
     }
 }

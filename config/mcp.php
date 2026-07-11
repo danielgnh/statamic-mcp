@@ -29,8 +29,20 @@ return [
         'collections' => true,
         'taxonomies' => true,
         'globals' => true,
+        'asset_containers' => true,
     ],
 
     // Default page size for list tools (hard-capped at 100 in code).
     'per_page' => 25,
+
+    'uploads' => [
+        // Hard per-upload cap in kilobytes, for both source_url downloads
+        // and decoded content_base64. Container validation rules still
+        // apply on top.
+        'max_size' => 10240,
+
+        // Exact-host allowlist for assets_upload source_url. null = any
+        // public host. Private/reserved/loopback IPs are ALWAYS blocked.
+        'source_allowlist' => null,
+    ],
 ];

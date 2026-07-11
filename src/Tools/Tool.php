@@ -6,8 +6,10 @@ use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Tool as BaseTool;
+use Statamic\Contracts\Assets\Asset as AssetContract;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Taxonomy;
@@ -28,6 +30,8 @@ abstract class Tool extends BaseTool
     public const LIVENESS_LIVE = 'updated — live'; // terms/globals have no draft state
 
     public const LIVENESS_CREATED = 'created — live'; // used later by terms_create
+
+    public const LIVENESS_UPLOADED = 'uploaded — live'; // assets have no draft state
 
     final public function handle(Request $request): Response
     {
@@ -63,7 +67,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
      *
      * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
      * by design (spec §4); the error lists only exposed handles.
@@ -78,7 +82,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
      * @return list<string> handles that exist AND pass config('statamic.mcp.resources.{$type}')
      */
     protected function exposedHandles(string $type): array
@@ -93,6 +97,7 @@ abstract class Tool extends BaseTool
             'collections' => Collection::handles()->all(),
             'taxonomies' => Taxonomy::handles()->all(),
             'globals' => GlobalSet::all()->map->handle()->values()->all(),
+            'asset_containers' => AssetContainer::all()->map->handle()->values()->all(),
         };
 
         return $configured === true
@@ -184,7 +189,7 @@ abstract class Tool extends BaseTool
      * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm, and
      * Variables in 6.x source.
      */
-    protected function liveness(EntryContract|LocalizedTerm|Variables $saved, string $state): array
+    protected function liveness(EntryContract|LocalizedTerm|Variables|AssetContract $saved, string $state): array
     {
         return [
             'result' => $state,
