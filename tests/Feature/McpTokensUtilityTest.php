@@ -114,3 +114,67 @@ it('warns about plain http and shows the endpoint in the help panel', function (
         ->assertSee('unencrypted', false)
         ->assertSee('http:\/\/localhost\/mcp\/statamic', false);
 });
+
+it('issues a token for the current user and shows the secret exactly once', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $response = $this->actingAs($user)->post(cp_route('utilities.mcp-tokens.store'), [
+        'name' => 'cp-issued',
+        'expiry' => '30',
+    ]);
+
+    $response->assertRedirect(cp_route('utilities.mcp-tokens'));
+
+    $records = app(TokenRepository::class)->all();
+
+    expect($records)->toHaveCount(1);
+
+    $record = array_values($records)[0];
+
+    expect($record['user'])->toBe((string) $user->id())
+        ->and($record['name'])->toBe('cp-issued')
+        ->and($record['expires_at'])->not->toBeNull();
+
+    // First GET after the redirect: the flashed secret is visible.
+    $this->get(cp_route('utilities.mcp-tokens'))
+        ->assertOk()
+        ->assertSee('mcp_'.array_keys($records)[0].'_', false)
+        ->assertSee('ONLY time', false);
+
+    // Second GET: the flash is gone — the secret never appears again.
+    $this->get(cp_route('utilities.mcp-tokens'))
+        ->assertOk()
+        ->assertDontSee('mcp_'.array_keys($records)[0].'_', false);
+});
+
+it('rejects an expiry outside the presets', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->actingAs($user)
+        ->from(cp_route('utilities.mcp-tokens'))
+        ->post(cp_route('utilities.mcp-tokens.store'), ['expiry' => '7'])
+        ->assertSessionHasErrors('expiry');
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+it('rejects a name over 100 characters', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->actingAs($user)
+        ->from(cp_route('utilities.mcp-tokens'))
+        ->post(cp_route('utilities.mcp-tokens.store'), ['name' => str_repeat('x', 101), 'expiry' => 'never'])
+        ->assertSessionHasErrors('name');
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+it('403s issuance without the utility permission', function () {
+    $user = Fixtures::makeUser('access cp'); // CP access but no utility permission
+
+    $this->actingAs($user)
+        ->postJson(cp_route('utilities.mcp-tokens.store'), ['expiry' => 'never'])
+        ->assertForbidden();
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
