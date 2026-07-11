@@ -28,6 +28,8 @@ it('lists assets with summary columns', function () {
         ->assertSee('"url":"/assets/images/hero.png"')
         ->assertSee('"id":"images::notes.txt"')
         ->assertSee('"is_image":false')
+        ->assertSee('"folder":null')
+        ->assertSee('"dimensions":null')
         ->assertSee('"total":2');
 });
 
@@ -80,6 +82,21 @@ it('filters to a folder subtree', function () {
         ->assertSee('"folder":"blog"')
         ->assertDontSee('"path":"root.txt"')
         ->assertSee('"total":2');
+});
+
+it('treats underscores in folder names literally, not as wildcards', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    Storage::disk('images')->put('my_assets/in.txt', 'in');
+    Storage::disk('images')->put('myxassets/out.txt', 'out');
+
+    Server::actingAs(Fixtures::makeUser('view images assets'))
+        ->tool(AssetsList::class, ['container' => 'images', 'folder' => 'my_assets'])
+        ->assertOk()
+        ->assertSee('"path":"my_assets/in.txt"')
+        ->assertDontSee('"path":"myxassets/out.txt"')
+        ->assertSee('"total":1');
 });
 
 it('rejects folder traversal', function () {

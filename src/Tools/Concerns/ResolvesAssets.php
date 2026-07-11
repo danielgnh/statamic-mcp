@@ -24,13 +24,7 @@ trait ResolvesAssets
         $container = in_array($handle, $available, true) ? AssetContainer::findByHandle($handle) : null;
 
         if ($container === null) {
-            sort($available);
-
-            throw new ToolException(sprintf(
-                "asset container '%s' not found — available: %s",
-                $handle,
-                $available === [] ? '(none exposed)' : implode(', ', $available),
-            ));
+            throw new ToolException($this->notFoundMessage('asset container', $handle, $available));
         }
 
         return $container;
