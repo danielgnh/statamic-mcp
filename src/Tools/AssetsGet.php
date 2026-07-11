@@ -27,6 +27,8 @@ class AssetsGet extends Tool
 
     protected function execute(Request $request): Response
     {
+        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
+        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'container' => 'required|string',

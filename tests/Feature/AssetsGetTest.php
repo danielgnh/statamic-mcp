@@ -25,6 +25,17 @@ it('returns full asset detail including raw blueprint data', function () {
         ->assertSee('"cp_edit_url"');
 });
 
+it('normalizes a leading slash on path', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Storage::disk('images')->put('hero.png', Fixtures::tinyPng());
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(AssetsGet::class, ['container' => 'images', 'path' => '/hero.png'])
+        ->assertOk()
+        ->assertSee('"id":"images::hero.png"');
+});
+
 it('reports a missing path with a pointer to assets_list', function () {
     Fixtures::site();
     Fixtures::assetContainer('images');
