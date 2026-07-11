@@ -9,3 +9,5 @@
 
 # innobrain/soak-time (machine-local composer plugin) evidence file — ignored like composer.lock
 /composer-integrity.lock
+
+/.worktrees
