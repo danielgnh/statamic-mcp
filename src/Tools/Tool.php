@@ -197,7 +197,7 @@ abstract class Tool extends BaseTool
         ];
     }
 
-    private function notFoundMessage(string $what, string $given, array $available): string
+    protected function notFoundMessage(string $what, string $given, array $available): string
     {
         sort($available);
 
