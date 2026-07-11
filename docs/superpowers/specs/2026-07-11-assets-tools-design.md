@@ -73,7 +73,7 @@ No `data` param by design: alt text is `assets_update`'s job, the tool descripti
 
 ### assets_delete
 
-CP parity: deletes file + metadata, no cascade and **no reference scan** (the CP doesn't scan either); the tool description states that referencing entries keep a now-dangling path. Response: `deleted: true`, `id`, `result: 'deleted'`.
+CP parity: deletes file + metadata via `Asset::delete()` (cancellable `AssetDeleting` reported honestly). References in entry fields are cleaned by Statamic's own reference updater (`UpdateAssetReferences` on `AssetDeleted` — queued, skipped when `statamic.system.update_references` is false); the tool notes this the same way `terms_delete` does. Response: `deleted: true`, `id`, `result`, `note`.
 
 ### statamic_overview
 
