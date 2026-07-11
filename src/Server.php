@@ -28,5 +28,6 @@ class Server extends McpServer
         Tools\GlobalsGet::class,
         Tools\GlobalsUpdate::class,
         Tools\AssetsList::class,
+        Tools\AssetsGet::class,
     ];
 }
