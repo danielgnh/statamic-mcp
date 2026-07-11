@@ -120,6 +120,28 @@ class Fixtures
         )->save();
     }
 
+    /**
+     * A user WITHOUT 'access mcp' — only the given permissions, via a
+     * dedicated throwaway role. For testing warnings/denials that makeUser's
+     * always-included 'access mcp' would mask.
+     */
+    public static function makeBareUser(string ...$permissions): UserContract
+    {
+        $handle = 'role_'.Str::lower(Str::random(8));
+
+        $role = Role::make($handle)->title('Bare Test Role');
+
+        foreach ($permissions as $permission) {
+            $role->addPermission($permission);
+        }
+
+        $role->save();
+
+        return tap(
+            User::make()->email(Str::lower(Str::random(8)).'@site.test')->assignRole($handle)
+        )->save();
+    }
+
     public static function makeSuper(): UserContract
     {
         return tap(
