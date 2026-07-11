@@ -1081,7 +1081,9 @@ git add -A && git commit -m "feat: add assets_get tool"
 - Modify: `src/Server.php`
 - Test: `tests/Feature/AssetsUploadTest.php`
 
-The full pipeline (spec §3): gates → container `allowUploads()` → bytes → filename/extension → collision refusal → CP-parity validation (`AllowedFile` + container `validationRules()`) → `makeAsset()->upload()` with honest `AssetCreating`-cancellation reporting. The `source_url` branch is wired in Task 6; this task builds everything else against `content_base64`.
+The full pipeline (spec §3): gates → bytes → filename/extension → collision refusal → CP-parity validation (`AllowedFile` + container `validationRules()`) → `makeAsset()->upload()` with honest `AssetCreating`-cancellation reporting. The `source_url` branch is wired in Task 6; this task builds everything else against `content_base64`.
+
+> **Errata (2026-07-11, found during execution):** the `allowUploads()` gate and its test were dropped — the method doesn't exist in Statamic v6 (a v5-ism; the only CP gate is `AssetPolicy::store` = the upload permission). Spec §2/§3 corrected. Ignore `allowUploads` fragments in the verbatim blocks below.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2125,7 +2127,6 @@ it('lists exposed asset containers with capability flags', function () {
         ->assertOk()
         ->assertSee('"asset_containers"')
         ->assertSee('"handle":"images"')
-        ->assertSee('"allow_uploads":true')
         ->assertSee('"can_upload":true')
         ->assertSee('"can_edit":false')
         ->assertDontSee('"can_delete"'); // deletes disabled by default
@@ -2196,7 +2197,6 @@ In `src/Tools/StatamicOverview.php`:
                 $resource = [
                     'handle' => $handle,
                     'title' => $container->title(),
-                    'allow_uploads' => $container->allowUploads(),
                     'can_upload' => $this->can($user, "upload {$handle} assets"),
                     'can_edit' => $this->can($user, "edit {$handle} assets"),
                 ];
@@ -2343,7 +2343,7 @@ Follow the README's existing structure (tools table + config docs). Add the five
 ],
 ```
 
-**SSRF policy (fail-closed).** `source_url` fetching only allows `http`/`https`, resolves DNS itself and refuses any host with a private, loopback, link-local, CGN, or otherwise reserved address (IPv4 and IPv6), pins the connection to the validated IP, revalidates every redirect hop (max 3), and aborts downloads that exceed `max_size` — `Content-Length` is not trusted. Set `source_allowlist` to pin uploads to known hosts; container-level `allow_uploads` and validation rules apply on top, exactly as in the Control Panel.
+**SSRF policy (fail-closed).** `source_url` fetching only allows `http`/`https`, resolves DNS itself and refuses any host with a private, loopback, link-local, CGN, or otherwise reserved address (IPv4 and IPv6), pins the connection to the validated IP, revalidates every redirect hop (max 3), and aborts downloads that exceed `max_size` — `Content-Length` is not trusted. Set `source_allowlist` to pin uploads to known hosts; container-level validation rules apply on top, exactly as in the Control Panel.
 
 Container exposure works like every other resource: `'resources' => ['asset_containers' => true]` (or an array of handles). Upgrading from v1.0? Re-publish the config or add the key — a missing `asset_containers` key exposes nothing.
 ```

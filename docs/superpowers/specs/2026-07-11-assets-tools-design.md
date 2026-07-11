@@ -27,7 +27,7 @@ Rename, move, folder CRUD as first-class tools, `reupload` (replace file content
 
 - **Permission tree** (`Auth/CorePermissions.php`): `view {container} assets` → `upload {container} assets`, `edit {container} assets` → children `move/rename/delete {container} assets`. Registered per container handle, same shape as collections — `ensurePermission()` works as-is.
 - **Upload path** (`Assets/Asset.php::upload(UploadedFile)`): dispatches cancellable `AssetCreating` (returns `false` on cancellation — must be reported honestly, same as `entries_create`'s listener-cancelled save), runs the `Uploader` (filename sanitization, SVG sanitization per `statamic.assets.svg_sanitization_on_upload`), saves, writes `.meta.yaml`, dispatches `AssetUploaded` + `AssetCreated`. Using it = full CP parity.
-- **Container API** (`Assets/AssetContainer.php`): `allowUploads()`, `validationRules()` (site-configured Laravel rules applied to CP uploads — e.g. `mimes:jpg,png`, `max:...`), `makeAsset($path)`, `editUrl()`. `Asset::editUrl()` also exists → liveness blocks work unchanged.
+- **Container API** (`Assets/AssetContainer.php`): `validationRules()` (site-configured Laravel rules applied to CP uploads — e.g. `mimes:jpg,png`, `max:...`), `makeAsset($path)`, `editUrl()`. `Asset::editUrl()` also exists → liveness blocks work unchanged. **Correction (2026-07-11, Task 5):** `allowUploads()` does NOT exist in v6 — it survives only as a string in `queryableMethods()`; the CP's sole upload gate is `AssetPolicy::store` = the `upload {container} assets` permission. No per-container toggle exists or is needed.
 - **Asset identity**: `container::path` is the canonical id; the assets *fieldtype* stores paths **relative to the container root** (e.g. `['blog/hero.jpg']`) since a field is bound to one container.
 - **No draft state**: assets are live on save — liveness follows the terms/globals convention (`LIVENESS_LIVE`-style constants).
 
@@ -58,7 +58,7 @@ Exactly one of `source_url` / `content_base64` (both or neither → targeted err
 Pipeline (order matters; every failure is a `ToolException` naming the fix):
 
 1. Gates: `ensureWritesEnabled()` → `ensureExposed('asset_containers', …)` → `ensurePermission(upload)`.
-2. Container must report `allowUploads()`; otherwise a targeted error ("container '…' does not allow uploads").
+2. ~~Container must report `allowUploads()`~~ — dropped (see §2 correction): v6 has no per-container upload toggle; the `upload {container} assets` permission is the whole gate, matching `AssetPolicy::store`.
 3. Acquire bytes → temp file (§5 for the URL path; strict base64 decode for the inline path — invalid input rejected, size cap applied post-decode).
 4. Wrap as `UploadedFile`; require an extension; collision check on the destination path — existing asset → error naming it (`use assets_delete first or pick another filename`).
 5. Validate against `['file', ...$container->validationRules()]` — the same rules the CP applies.
@@ -79,7 +79,7 @@ CP parity: deletes file + metadata via `Asset::delete()` (cancellable `AssetDele
 
 ### statamic_overview
 
-Gains `asset_containers`: per exposed container `handle`, `title`, `allow_uploads`, and capability flags `can_view`, `can_upload`, `can_edit`, `can_delete` from the same `can()` predicate collections use.
+Gains `asset_containers`: per exposed container `handle`, `title`, and capability flags `can_view`, `can_upload`, `can_edit`, `can_delete` from the same `can()` predicate collections use. (No `allow_uploads` flag — see §2 correction.)
 
 ### blueprints_get
 
@@ -125,7 +125,7 @@ The only place this server makes outbound requests on agent-supplied input. Rule
 - `read_only` hides/blocks upload+update+delete; `deletes` gate on delete; stale-cache re-check inside `execute()`.
 - `Storage::fake` containers throughout; `Http::fake` for URL uploads.
 - SSRF: private-IP host, redirect-to-private, allowlist miss, >3 redirects, oversize aborts (lying Content-Length included), bad scheme.
-- Upload: invalid base64, missing filename (base64), both/neither source params, extension-less filename, container `validationRules()` rejection, `allow_uploads: false` container, collision error, `AssetCreating` cancellation, folder normalization (`../` rejected), meta written, events dispatched.
+- Upload: invalid base64, missing filename (base64), both/neither source params, extension-less filename, container `validationRules()` rejection, collision error, `AssetCreating` cancellation, folder normalization (`../` rejected), meta written, events dispatched.
 - Update: blueprint validation (unknown key rejected, alt set), raw-not-augmented response.
 - List/get: pagination bounds, folder filter, dimensions/alt presence, unexposed container indistinguishable from missing.
 - `statamic_overview` flags and `blueprints_get` assets note.
