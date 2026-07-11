@@ -113,7 +113,8 @@ it('warns about plain http and shows the endpoint in the help panel', function (
         ->get(cp_route('utilities.mcp-tokens'))
         ->assertOk()
         ->assertSee('unencrypted', false)
-        ->assertSee('http:\/\/localhost\/mcp\/statamic', false);
+        ->assertSee('http:\/\/localhost\/mcp\/statamic', false)
+        ->assertSee('mcpServers', false);
 });
 
 it('issues a token for the current user and shows the secret exactly once', function () {
