@@ -86,7 +86,7 @@
                             <td class="py-1">{{ $token['expires_at']?->toFormattedDateString() ?? __('never') }}</td>
                             <td class="py-1">{{ $token['expired'] ? __('Expired') : __('Active') }}</td>
                             <td class="py-1 text-right">
-                                <form method="POST" action="{{ cp_route('utilities.mcp-tokens.destroy', $token['id']) }}" onsubmit="return confirm('{{ __('Revoke this token?') }}')">
+                                <form method="POST" action="{{ cp_route('utilities.mcp-tokens.destroy', $token['id']) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Revoke this token?')) }})">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="text-red-600">{{ __('Revoke') }}</button>
