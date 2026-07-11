@@ -12,7 +12,7 @@ collections, taxonomies, and blueprints. Built on the first-party
 
 **Design principle:** a small boring core, auth as the flagship feature, one config
 file as the entire customization story. No parallel permission system, no hand-rolled
-OAuth, no database tables, no CP UI.
+OAuth, no database tables; the only CP surface is the optional MCP Tokens utility.
 
 ## Requirements
 
@@ -115,6 +115,19 @@ php please mcp:token you@site.com --name="Claude" --expires-days=90   # issue
 php please mcp:tokens                                                 # list
 php please mcp:token:revoke {tokenId}                                 # revoke
 ```
+
+### Self-service from the Control Panel
+
+Users can issue and revoke their own tokens at **Tools → Utilities → MCP Tokens**
+— no console access needed. Grant the **Access MCP Tokens utility** permission to
+a role to enable it. Super admins additionally see (and can revoke) everyone's
+tokens. Issuing a token *for another user* remains a console operation
+(`php please mcp:token their@email.com`).
+
+Concurrent token writes — CLI and CP alike — are serialized behind one of Laravel's
+cache locks, so the default cache store must support atomic locks and be shared by
+every writer. Array/null cache stores, or per-server caches on multi-server
+deploys, degrade to no cross-process locking.
 
 A token authenticates as the Statamic user it was issued for. Delete the user and the
 token dies with them — no orphan bookkeeping.
