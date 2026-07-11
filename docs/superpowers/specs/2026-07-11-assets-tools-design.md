@@ -71,6 +71,8 @@ No `data` param by design: alt text is `assets_update`'s job, the tool descripti
 
 `data` = raw values validated against the **container's asset blueprint** through the existing `ValidatesBlueprintData` concern — unknown keys rejected with the known-fields error, exactly like entries. Merges into the asset's data, saves, responds with the updated raw data + `result: 'updated — live'` + `cp_edit_url`. (New `LIVENESS_UPLOADED = 'uploaded — live'` constant; reuse `LIVENESS_LIVE` for update. `liveness()`'s union type gains the Asset contract.)
 
+**`focus` exception (decided 2026-07-11, Task 4 review):** the CP's focal-point editor writes a `focus` key into asset data *outside* the blueprint (`AssetsController@update` merges it around field processing), so `assets_get` legitimately returns it on CP-touched assets. `assets_update` therefore accepts `focus` as a pass-through key exempt from the unknown-key rejection — CP parity, and it keeps the get → edit → update round-trip lossless. It is still merged and saved like any other key.
+
 ### assets_delete
 
 CP parity: deletes file + metadata via `Asset::delete()` (cancellable `AssetDeleting` reported honestly). References in entry fields are cleaned by Statamic's own reference updater (`UpdateAssetReferences` on `AssetDeleted` — queued, skipped when `statamic.system.update_references` is false); the tool notes this the same way `terms_delete` does. Response: `deleted: true`, `id`, `result`, `note`.
