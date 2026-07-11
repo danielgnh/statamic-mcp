@@ -76,6 +76,8 @@ class AssetsUpload extends Tool
 
         $folder = $this->normalizeFolder($validated['folder'] ?? null);
 
+        // Bytes come before the collision check on purpose: URL uploads only
+        // know their final filename after redirects resolve.
         [$contents, $derivedName] = $sourceUrl !== null
             ? app(SourceDownloader::class)->download($sourceUrl)
             : [$this->decodeBase64($base64), null];
@@ -130,7 +132,7 @@ class AssetsUpload extends Tool
             throw new ToolException('content_base64 is not valid base64 — encode the raw file bytes');
         }
 
-        $maxKb = (int) config('statamic.mcp.uploads.max_size', 10240);
+        $maxKb = SourceDownloader::maxKilobytes();
 
         if (strlen($contents) > $maxKb * 1024) {
             throw new ToolException(sprintf('decoded file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $maxKb));
@@ -162,7 +164,15 @@ class AssetsUpload extends Tool
     {
         $temp = tempnam(sys_get_temp_dir(), 'statamic-mcp-upload-');
 
-        file_put_contents($temp, $contents);
+        if ($temp === false) {
+            throw new ToolException('could not stage the upload to a temp file — check disk space on the server');
+        }
+
+        if (file_put_contents($temp, $contents) !== strlen($contents)) {
+            @unlink($temp);
+
+            throw new ToolException('could not stage the upload to a temp file — check disk space on the server');
+        }
 
         // test: true because these bytes never arrived via PHP's upload
         // machinery — without it isValid() fails and Statamic refuses them.
