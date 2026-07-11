@@ -50,10 +50,10 @@
             <div>
                 <label class="block text-sm font-medium" for="mcp-token-expiry">{{ __('Expires') }}</label>
                 <select name="expiry" id="mcp-token-expiry" class="select-input">
-                    <option value="never">{{ __('Never') }}</option>
-                    <option value="30">{{ __('30 days') }}</option>
-                    <option value="90">{{ __('90 days') }}</option>
-                    <option value="365">{{ __('365 days') }}</option>
+                    <option value="never" @selected(old('expiry') === 'never')>{{ __('Never') }}</option>
+                    <option value="30" @selected(old('expiry') === '30')>{{ __('30 days') }}</option>
+                    <option value="90" @selected(old('expiry') === '90')>{{ __('90 days') }}</option>
+                    <option value="365" @selected(old('expiry') === '365')>{{ __('365 days') }}</option>
                 </select>
                 @error('expiry') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
             </div>
@@ -103,7 +103,10 @@
         <h2 class="font-bold">{{ __('Connecting a client') }}</h2>
         <p class="text-sm">{{ __('MCP endpoint') }}: <code>{{ $endpoint }}</code></p>
         <p class="text-sm">{{ __('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead — see the README client-compatibility matrix.') }}</p>
+        <h3 class="font-bold text-sm">{{ __('Claude Code') }}</h3>
         <pre class="overflow-x-auto rounded bg-gray-900 p-2 text-xs text-white">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
+        <h3 class="font-bold text-sm">{{ __('Cursor (.cursor/mcp.json)') }}</h3>
+        <pre class="overflow-x-auto rounded bg-gray-900 p-2 text-xs text-white">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
     </div>
 
 </div>
