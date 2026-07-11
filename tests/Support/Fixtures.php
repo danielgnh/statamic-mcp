@@ -170,7 +170,7 @@ class Fixtures
     }
 
     /**
-     * A real 1x1 transparent PNG (68 bytes) — valid image bytes without
+     * A real 1x1 transparent PNG (70 bytes) — valid image bytes without
      * requiring GD in the test suite.
      */
     public static function tinyPng(): string

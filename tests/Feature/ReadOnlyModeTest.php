@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Danielgnh\StatamicMcp\Tools\AssetsUpload;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
@@ -26,6 +27,7 @@ const READ_TOOLS = [
 ];
 
 const WRITE_TOOLS = [
+    'assets_upload',
     'entries_create',
     'entries_update',
     'globals_update',
@@ -39,6 +41,7 @@ const DELETE_TOOLS = [
 ];
 
 const WRITE_TOOL_CLASSES = [
+    'assets_upload' => AssetsUpload::class,
     'entries_create' => EntriesCreate::class,
     'entries_update' => EntriesUpdate::class,
     'entries_delete' => EntriesDelete::class,
@@ -112,7 +115,7 @@ it('advertises only the nine read tools over HTTP in read_only mode', function (
     expect($names)->not->toContain(...WRITE_TOOLS, ...DELETE_TOOLS);
 });
 
-it('advertises the fourteen non-delete tools with the zero-config default', function () {
+it('advertises the fifteen non-delete tools with the zero-config default', function () {
     // Default config: read_only=false, deletes=false.
     $user = Fixtures::makeUser();
     $token = app(TokenRepository::class)->issue($user, 'rw')->token;
@@ -124,7 +127,7 @@ it('advertises the fourteen non-delete tools with the zero-config default', func
     expect($names)->not->toContain(...DELETE_TOOLS);
 });
 
-it('advertises all sixteen tools when deletes are enabled', function () {
+it('advertises all seventeen tools when deletes are enabled', function () {
     config(['statamic.mcp.deletes' => true]);
 
     $user = Fixtures::makeUser();

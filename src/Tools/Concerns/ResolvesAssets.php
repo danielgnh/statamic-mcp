@@ -32,7 +32,7 @@ trait ResolvesAssets
 
     protected function resolveAsset(AssetContainerContract $container, string $path): AssetContract
     {
-        $asset = $container->asset(ltrim($path, '/'));
+        $asset = $this->findAsset($container, $path);
 
         if (! $asset) {
             throw new ToolException(sprintf(
@@ -43,6 +43,18 @@ trait ResolvesAssets
         }
 
         return $asset;
+    }
+
+    /**
+     * Nullable lookup — the honest signature. The contract PHPDocs asset() as
+     * returning a non-nullable Asset, but the concrete implementation
+     * (Statamic\Assets\AssetContainer::asset(), v6 source) returns null when
+     * the path doesn't exist; this wrapper is the one place that lie is
+     * corrected, so callers get a type PHPStan can reason about.
+     */
+    protected function findAsset(AssetContainerContract $container, string $path): ?AssetContract
+    {
+        return $container->asset(ltrim($path, '/'));
     }
 
     /**

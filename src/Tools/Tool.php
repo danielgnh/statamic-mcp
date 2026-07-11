@@ -186,8 +186,8 @@ abstract class Tool extends BaseTool
 
     /**
      * Liveness block appended to every write response (spec §4): pass a
-     * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm, and
-     * Variables in 6.x source.
+     * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm,
+     * Variables, and Asset in 6.x source.
      */
     protected function liveness(EntryContract|LocalizedTerm|Variables|AssetContract $saved, string $state): array
     {
