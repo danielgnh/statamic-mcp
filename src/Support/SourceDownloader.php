@@ -34,7 +34,7 @@ class SourceDownloader
      */
     public function download(string $url): array
     {
-        $maxBytes = $this->maxKilobytes() * 1024;
+        $maxBytes = self::maxKilobytes() * 1024;
 
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
             $ip = $this->validated($url);
@@ -69,7 +69,9 @@ class SourceDownloader
                 throw new ToolException('source_url returned an empty body — nothing was uploaded');
             }
 
-            return [$body, basename((string) parse_url($url, PHP_URL_PATH))];
+            // URL path segments are percent-encoded; decode so 'hero%20image.png'
+            // stages as 'hero image.png' before Statamic's filename sanitizer.
+            return [$body, rawurldecode(basename((string) parse_url($url, PHP_URL_PATH)))];
         }
 
         throw new ToolException(sprintf('source_url redirected more than %d times — aborted', self::MAX_REDIRECTS));
@@ -213,10 +215,10 @@ class SourceDownloader
 
     private function sizeLimitException(): ToolException
     {
-        return new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', $this->maxKilobytes()));
+        return new ToolException(sprintf('source_url file exceeds the %d KB limit (statamic.mcp.uploads.max_size)', self::maxKilobytes()));
     }
 
-    private function maxKilobytes(): int
+    public static function maxKilobytes(): int
     {
         return (int) config('statamic.mcp.uploads.max_size', 10240);
     }
