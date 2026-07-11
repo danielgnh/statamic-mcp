@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Console\Doctor;
 use Danielgnh\StatamicMcp\Console\IssueToken;
 use Danielgnh\StatamicMcp\Console\ListTokens;
 use Danielgnh\StatamicMcp\Console\RevokeToken;
+use Danielgnh\StatamicMcp\CP\McpTokensUtility;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
@@ -41,6 +42,8 @@ class ServiceProvider extends AddonServiceProvider
         if (! config('statamic.mcp.enabled')) {
             return;
         }
+
+        McpTokensUtility::register();
 
         try {
             $this->registerMcpRoutes();
