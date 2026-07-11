@@ -14,9 +14,12 @@ use Statamic\Facades\YAML;
  * Every mutation serializes the FULL read-modify-write behind Cache::lock —
  * CLI commands and the CP utility can write concurrently, and interleaved
  * revoke() + issue() must never write back pre-revoke state and resurrect a
- * token. Lock acquisition fails closed (LockTimeoutException, nothing
- * written); the torn-write failure mode also fails closed: corrupt YAML
- * breaks authentication, it never opens it up.
+ * token. Mutual exclusion is only as good as the default cache store: it must
+ * support atomic locks and be shared by every writer (array/null stores, or
+ * per-server caches in front of a shared tokens.yaml, degrade to no
+ * cross-process locking). Lock acquisition fails closed (LockTimeoutException,
+ * nothing written); the torn-write failure mode also fails closed: corrupt
+ * YAML breaks authentication, it never opens it up.
  */
 class TokenRepository
 {
