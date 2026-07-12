@@ -16,6 +16,18 @@ adheres to [Semantic Versioning](https://semver.org).
 
 - Token-store writes are serialized behind an atomic lock, making concurrent
   CLI + CP issuance/revocation safe.
+- The MCP Tokens utility is rebuilt on Statamic v6's UI component kit
+  (`ui-panel`, `ui-card`, `ui-alert`, `ui-badge`, `ui-field`, `ui-input`,
+  `ui-button`) — native CP look including dark mode, a copy-to-clipboard
+  button on the one-time token reveal, and toast notifications instead of
+  inline flash banners.
+
+### Fixed
+
+- User-controlled strings on the MCP Tokens utility page (token names, owner
+  emails) are rendered inertly for the CP's runtime Vue template compiler
+  (`v-pre`) — previously a token name containing Vue interpolation syntax
+  would execute as an expression in the viewing admin's session.
 
 ## [1.0.0] - 2026-07-10
 
