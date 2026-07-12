@@ -229,6 +229,30 @@ it('rejects an unknown blueprint handle, listing available blueprints', function
         ->assertHasErrors(["blueprint 'story' not found — available: article"]);
 });
 
+it('gives assets fields an actionable example pointing at the assets tools', function () {
+    Fixtures::site();
+
+    Collection::make('posts')->title('Posts')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'hero' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+        'gallery' => ['type' => 'assets', 'container' => 'images'],
+    ])->setHandle('post')->setNamespace('collections.posts')->save();
+
+    $user = Fixtures::makeUser();
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
+        ->assertOk()
+        // max_files 1 stores a single string; multi stores a list (vendor Fieldtypes\Assets::process)
+        ->assertSee('"hero":"REPLACE-WITH-REAL-ASSET-PATH"')
+        ->assertSee('"gallery":["REPLACE-WITH-REAL-ASSET-PATH"]')
+        ->assertSee("container 'images'")
+        ->assertSee('assets_list')
+        ->assertSee('assets_upload');
+});
+
 it('rejects an unknown type via validation', function () {
     Fixtures::site();
 
