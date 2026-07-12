@@ -28,4 +28,4 @@ it('serves token-mode requests while every oauth prerequisite is missing', funct
     ])
         ->assertOk()
         ->assertSee('Statamic');
-});
+})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
