@@ -12,7 +12,7 @@ collections, taxonomies, and blueprints. Built on the first-party
 
 **Design principle:** a small boring core, auth as the flagship feature, one config
 file as the entire customization story. No parallel permission system, no hand-rolled
-OAuth, no database tables; the only CP surface is the optional MCP Tokens utility.
+OAuth, no database tables; the only CP surface is the optional MCP Access utility (tokens + OAuth connections).
 
 ## Requirements
 
@@ -141,7 +141,7 @@ php please mcp:token:revoke {tokenId}                                 # revoke
 
 ### Self-service from the Control Panel
 
-Users can issue and revoke their own tokens at **Tools → Utilities → MCP Tokens**
+Users can issue and revoke their own tokens at **Tools → Utilities → MCP Access**
 — no console access needed. Grant the **Access MCP Tokens utility** permission to
 a role to enable it. Super admins additionally see (and can revoke) everyone's
 tokens. Issuing a token *for another user* remains a console operation
@@ -230,6 +230,23 @@ so permission enforcement is identical to token mode.
 If any prerequisite is missing, the MCP endpoint answers **503 with the exact remedy**
 (and a pointer to `mcp:doctor`) — the rest of your site is untouched, and token mode
 keeps working if you switch back.
+
+### Seeing and disconnecting connections
+
+The **MCP Access** utility (Tools → Utilities) shows one row per connected
+user + client pair, derived live from Passport's tables: client name (from
+dynamic client registration), user, first connected, last token refresh, and
+whether the connection is still usable — a live refresh token counts, since
+the connector can come back without re-consent. Users see and disconnect
+their own connections; supers see everyone's.
+
+**Disconnect** revokes the pair's access tokens *and* their refresh tokens.
+The connector gets a 401 on its next request and must re-run the OAuth flow
+(login + consent) to reconnect. Passport does not track per-request usage,
+so "last refreshed" reflects token issuance, not the last MCP call.
+
+Dead rows accumulate as tokens expire and rotate — that is Passport's
+housekeeping, not the addon's: schedule [`passport:purge`](https://laravel.com/docs/passport#purging-tokens).
 
 ## Configuration
 
