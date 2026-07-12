@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- `php please mcp:setup` — interactive onboarding wizard for both auth modes. The
+  OAuth path checks, confirms, and applies every Passport prerequisite (users →
+  database, Passport install, user model trait/contract, `api` guard, `.env` flip —
+  last, so aborted runs never leave a broken mode live) and verifies with
+  `mcp:doctor`. File edits are anchor-based with a printed manual fallback; the
+  wizard is idempotent.
 - Assets tools: `assets_list`, `assets_get`, `assets_upload`, `assets_update`,
   and `assets_delete` (delete gated behind `'deletes' => true` like the other
   delete tools). Uploads accept a `source_url` — downloaded server-side behind

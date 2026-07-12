@@ -109,6 +109,24 @@ Collections with revisions enabled get working copies through the same
 mechanism the CP uses — the live entry is never mutated, publishing stays in the
 Control Panel.
 
+## Quick start: the setup wizard
+
+```bash
+php please mcp:setup
+```
+
+One interactive command for either mode: pick **token** and it issues your first
+token with ready-to-paste client snippets; pick **OAuth** and it checks, confirms,
+and applies every Passport prerequisite below — migrating users to the database,
+installing Passport, preparing the user model, adding the `api` guard, and flipping
+`STATAMIC_MCP_AUTH` (deliberately last, so an aborted run never leaves a broken
+mode live). It never edits a file without showing the change and asking first; a
+file it doesn't recognize gets the exact manual snippet instead. Re-running is
+safe — satisfied steps are skipped. It finishes by running `mcp:doctor` as proof.
+
+The manual steps below remain as the reference path — they are exactly what the
+wizard does (and what it prints when it bails on a non-standard file).
+
 ## Auth mode 1: `token` (default)
 
 Works on **every** install, including the default file-based users. Tokens look like
@@ -141,7 +159,8 @@ token dies with them — no orphan bookkeeping.
 
 OAuth mode delegates everything to `laravel/mcp` + Laravel Passport (dynamic client
 registration, PKCE, metadata discovery, consent screen). This addon ships **zero**
-OAuth code — just this setup path:
+OAuth code — just this setup path. Prefer the wizard: `php please mcp:setup`
+automates all four steps below.
 
 > **The trade-off, plainly:** OAuth mode requires database (Eloquent) users because
 > Passport requires an Eloquent model — a Passport constraint, not ours. File-based
