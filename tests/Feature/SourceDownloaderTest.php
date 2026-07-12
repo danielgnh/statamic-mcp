@@ -19,6 +19,14 @@ it('downloads a file and derives the basename from the final url', function () {
     expect($basename)->toBe('hero.png');
 });
 
+it('percent-decodes the derived basename', function () {
+    Http::fake(['https://images.example.com/*' => Http::response('BYTES', 200)]);
+
+    [, $basename] = downloaderWithPublicDns()->download('https://images.example.com/hero%20image.png');
+
+    expect($basename)->toBe('hero image.png');
+});
+
 it('rejects non-http schemes', function () {
     downloaderWithPublicDns()->download('ftp://images.example.com/hero.png');
 })->throws(ToolException::class, 'source_url must use http or https');
