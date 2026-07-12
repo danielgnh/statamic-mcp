@@ -15,7 +15,7 @@
 --}}
 <div class="max-w-5xl 3xl:max-w-6xl mx-auto" data-max-width-wrapper>
 
-    <ui-header title="{{ __('MCP Tokens') }}" icon="key">
+    <ui-header title="{{ __('MCP Access') }}" icon="key">
         <template #actions>
             <ui-modal title="{{ __('How to connect') }}" icon="info">
                 <template #trigger>
@@ -97,6 +97,59 @@
                     <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer '.$plainToken['token']]]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                 </div>
             </ui-card>
+        </ui-panel>
+    @endif
+
+    @if ($oauthMode)
+        <ui-panel heading="{{ $isSuper ? __('All connections') : __('Your connections') }}">
+            @unless ($oauthReady)
+                <ui-card>
+                    <ui-alert variant="warning" text="{{ __('OAuth mode is enabled but not fully configured — run php please mcp:doctor for the exact remedy.') }}"></ui-alert>
+                </ui-card>
+            @elseif ($connections->isEmpty())
+                <ui-card>
+                    <ui-empty-state-item icon="link" heading="{{ __('No connections yet') }}" description="{{ __('Connections appear here when a connector (claude.ai, ChatGPT) adds this site and a user completes the consent flow.') }}"></ui-empty-state-item>
+                </ui-card>
+            @else
+                <ui-card inset class="overflow-x-auto">
+                    <table class="data-table data-table--contained" data-table>
+                        <thead>
+                            <tr>
+                                <th>{{ __('Client') }}</th>
+                                @if ($isSuper)<th>{{ __('User') }}</th>@endif
+                                <th>{{ __('Connected') }}</th>
+                                <th>{{ __('Last refreshed') }}</th>
+                                <th>{{ __('Status') }}</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($connections as $connection)
+                                <tr>
+                                    <td><span v-pre>{{ $connection['client_name'] }}</span></td>
+                                    @if ($isSuper)<td><span v-pre>{{ $connection['email'] }}</span></td>@endif
+                                    <td>{{ $connection['connected_at']->toFormattedDateString() }}</td>
+                                    <td>{{ $connection['last_refreshed_at']->diffForHumans() }}</td>
+                                    <td>
+                                        @if ($connection['active'])
+                                            <ui-badge color="green" pill>{{ __('Active') }}</ui-badge>
+                                        @else
+                                            <ui-badge color="red" pill>{{ __('Expired') }}</ui-badge>
+                                        @endif
+                                    </td>
+                                    <td class="text-right">
+                                        <form method="POST" action="{{ cp_route('utilities.mcp-tokens.connections.destroy', [$connection['client_id'], $connection['user_id']]) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Disconnect this client? It will have to re-authorize before it can reconnect.')) }})">
+                                            @csrf
+                                            @method('DELETE')
+                                            <ui-button type="submit" size="sm" variant="danger" text="{{ __('Disconnect') }}"></ui-button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </ui-card>
+            @endif
         </ui-panel>
     @endif
 
