@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\CP;
 
+use Danielgnh\StatamicMcp\Http\Controllers\McpConnectionsController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class McpTokensUtility
                 ->view('statamic-mcp::utilities.mcp-tokens', fn (Request $request) => static::viewData($request))
                 ->routes(function ($router) {
                     $router->post('/', [McpTokensController::class, 'store'])->name('store');
+                    $router->delete('connections/{clientId}/{userId}', [McpConnectionsController::class, 'destroy'])->name('connections.destroy');
                     $router->delete('{tokenId}', [McpTokensController::class, 'destroy'])->name('destroy');
                 });
         });
