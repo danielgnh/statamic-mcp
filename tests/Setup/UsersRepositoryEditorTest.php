@@ -42,6 +42,26 @@ it('skips when already eloquent', function () {
     expect((new UsersRepositoryEditor)->apply($this->path))->toBe(EditResult::Skipped);
 });
 
+it('ignores commented-out repository lines', function () {
+    file_put_contents($this->path, <<<'PHP'
+<?php
+
+return [
+
+    // 'repository' => 'eloquent',
+    'repository' => 'file',
+
+];
+PHP);
+
+    $result = (new UsersRepositoryEditor)->apply($this->path);
+    $contents = file_get_contents($this->path);
+
+    expect($result)->toBe(EditResult::Applied)
+        ->and($contents)->toContain("// 'repository' => 'eloquent',")
+        ->and($contents)->toContain("    'repository' => 'eloquent',");
+});
+
 it('bails on a file without the expected anchor, leaving it untouched', function () {
     $weird = "<?php\n\nreturn [\n    'repository' => env('USERS_REPO'),\n];\n";
     file_put_contents($this->path, $weird);
