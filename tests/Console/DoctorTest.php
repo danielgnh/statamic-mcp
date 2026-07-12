@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Support\Facades\File;
+use Laravel\Passport\Passport;
 
 beforeEach(function () {
     // Other tests in the run may have issued tokens into the shared
@@ -147,7 +148,7 @@ it('fails oauth mode naming every missing prerequisite', function () {
         ->expectsOutputToContain('Users are file-based')
         ->expectsOutputToContain("No 'api' guard is defined — Laravel 12 and 13 ship none")
         ->assertExitCode(1);
-});
+})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
 
 it('names the exact api guard config to add', function () {
     config(['statamic.mcp.auth' => 'oauth']);
@@ -210,7 +211,7 @@ it('passes the users and guard checks independently of Passport', function () {
         // it the Passport [FAIL] already owns that remedy (T27 CI leg pins it).
         ->doesntExpectOutputToContain('HasApiTokens')
         ->assertExitCode(1);
-});
+})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
 
 it('warns when APP_URL is the Laravel default', function () {
     $this->artisan('statamic:mcp:doctor')
