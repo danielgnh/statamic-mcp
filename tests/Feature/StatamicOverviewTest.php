@@ -71,7 +71,8 @@ it('hides global sets the user may not edit', function () {
     Server::actingAs($user)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertSee('"globals":[],"user"');
+        // asset_containers sits between globals and user since v1.1
+        ->assertSee('"globals":[],"asset_containers":[],"user"');
 });
 
 it('lists global sets the user may edit', function () {
@@ -180,4 +181,43 @@ it('guards the real MCP endpoint end to end', function () {
         ->assertOk()
         ->assertSee('collections')
         ->assertSee('"isError":false', escape: false);
+});
+
+it('lists exposed asset containers with capability flags', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    $user = Fixtures::makeUser('view images assets', 'upload images assets');
+
+    Server::actingAs($user)
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"asset_containers":[{"handle":"images","title":"Images","can_upload":true,"can_edit":false}]');
+});
+
+it('hides asset containers the user cannot view and includes can_delete when deletes are enabled', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser('view images assets', 'delete images assets');
+
+    Server::actingAs($user)
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"handle":"images"')
+        ->assertSee('"can_delete":true')
+        ->assertDontSee('"handle":"private"');
+});
+
+it('omits unexposed asset containers entirely', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['statamic.mcp.resources.asset_containers' => []]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"asset_containers":[]');
 });

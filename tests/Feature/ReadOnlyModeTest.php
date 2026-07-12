@@ -2,6 +2,9 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Danielgnh\StatamicMcp\Tools\AssetsDelete;
+use Danielgnh\StatamicMcp\Tools\AssetsUpdate;
+use Danielgnh\StatamicMcp\Tools\AssetsUpload;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
@@ -14,6 +17,8 @@ use Laravel\Mcp\Request;
 use Statamic\Facades\Entry;
 
 const READ_TOOLS = [
+    'assets_get',
+    'assets_list',
     'blueprints_get',
     'entries_get',
     'entries_list',
@@ -24,6 +29,8 @@ const READ_TOOLS = [
 ];
 
 const WRITE_TOOLS = [
+    'assets_update',
+    'assets_upload',
     'entries_create',
     'entries_update',
     'globals_update',
@@ -32,11 +39,15 @@ const WRITE_TOOLS = [
 ];
 
 const DELETE_TOOLS = [
+    'assets_delete',
     'entries_delete',
     'terms_delete',
 ];
 
 const WRITE_TOOL_CLASSES = [
+    'assets_delete' => AssetsDelete::class,
+    'assets_update' => AssetsUpdate::class,
+    'assets_upload' => AssetsUpload::class,
     'entries_create' => EntriesCreate::class,
     'entries_update' => EntriesUpdate::class,
     'entries_delete' => EntriesDelete::class,
@@ -79,10 +90,14 @@ function readOnlyToolNames(string $token): array
 {
     $sessionId = readOnlyInitialize($token);
 
+    // laravel/mcp paginates tools/list at 15 per page by default (spec
+    // ServerContext::perPage); the tool set has grown past that, so request
+    // the server's max page size to see the whole advertised set in one call.
     $response = readOnlyPost([
         'jsonrpc' => '2.0',
         'id' => 2,
         'method' => 'tools/list',
+        'params' => ['per_page' => 50],
     ], $token, $sessionId);
 
     $response->assertOk();
@@ -90,7 +105,7 @@ function readOnlyToolNames(string $token): array
     return collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
 }
 
-it('advertises only the seven read tools over HTTP in read_only mode', function () {
+it('advertises only the nine read tools over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
 
     $user = Fixtures::makeUser();
@@ -98,7 +113,7 @@ it('advertises only the seven read tools over HTTP in read_only mode', function 
 
     $names = readOnlyToolNames($token);
 
-    // Exact set equality: ONLY the seven read tools remain...
+    // Exact set equality: ONLY the nine read tools remain...
     expect($names)->toBe(READ_TOOLS);
 
     // ...and every write/delete tool is absent BY NAME — if the exact-set
@@ -106,7 +121,7 @@ it('advertises only the seven read tools over HTTP in read_only mode', function 
     expect($names)->not->toContain(...WRITE_TOOLS, ...DELETE_TOOLS);
 });
 
-it('advertises the twelve non-delete tools with the zero-config default', function () {
+it('advertises every non-delete tool with the zero-config default', function () {
     // Default config: read_only=false, deletes=false.
     $user = Fixtures::makeUser();
     $token = app(TokenRepository::class)->issue($user, 'rw')->token;
@@ -118,7 +133,7 @@ it('advertises the twelve non-delete tools with the zero-config default', functi
     expect($names)->not->toContain(...DELETE_TOOLS);
 });
 
-it('advertises all fourteen tools when deletes are enabled', function () {
+it('advertises the full tool set when deletes are enabled', function () {
     config(['statamic.mcp.deletes' => true]);
 
     $user = Fixtures::makeUser();
@@ -127,6 +142,31 @@ it('advertises all fourteen tools when deletes are enabled', function () {
     expect(readOnlyToolNames($token))->toBe(
         collect([...READ_TOOLS, ...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all()
     );
+});
+
+it('serves the full tool set on one page for clients that never paginate', function () {
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'no-pagination')->token;
+
+    $sessionId = readOnlyInitialize($token);
+
+    // Deliberately NO per_page: laravel/mcp would page at 15 by default and a
+    // cursor-less client would silently miss the overflow — the Server's
+    // defaultPaginationLength override must make one page hold everything.
+    $response = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/list',
+        'params' => (object) [],
+    ], $token, $sessionId);
+
+    $response->assertOk();
+
+    $names = collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
+
+    expect($names)->toBe(collect([...READ_TOOLS, ...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all());
 });
 
 it('still serves read tool calls over HTTP in read_only mode', function () {

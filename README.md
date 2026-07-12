@@ -77,11 +77,11 @@ as of mid-2026 — client capabilities shift, the code doesn't care:
 **Rule of thumb:** developer tools work with token mode today; individual-plan
 claude.ai/Claude Desktop and ChatGPT connectors need OAuth mode.
 
-## The tools (14)
+## The tools (19)
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, and global sets exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
 | `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
 | `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
 | `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes; the returned data is always the live entry. |
@@ -95,6 +95,11 @@ claude.ai/Claude Desktop and ChatGPT connectors need OAuth mode.
 | `terms_delete` | Only registered when `deletes` is enabled. Removes the term from every site at once; Statamic's reference updater then strips references from entries (runs on the queue; skipped when `statamic.system.update_references` is false). |
 | `globals_get` | Raw global variables — one set by handle, or every set you can access. With `site`, includes values inherited from the origin site. |
 | `globals_update` | Merge-patch a set's variables per site (localizations created transparently on first write). Globals have no draft state: saved values are live immediately. |
+| `assets_list` | Paginated asset summaries per container (id, path, basename, folder, url, is_image, size, dimensions, alt), ordered by path. Optional `folder` filters to a subtree. |
+| `assets_get` | One asset's full detail: the summary columns plus raw blueprint data (alt text, custom fields — the shape `assets_update` accepts), mime type, last modified, CP edit link. |
+| `assets_upload` | Upload from a `source_url` (server-side download with fail-closed SSRF guards — see below) or inline `content_base64` for small files. Optional `folder` created on demand. Never overwrites — collisions are errors. Uploads are live immediately. |
+| `assets_update` | Merge-patch an asset's metadata (alt text + custom blueprint fields) — the file itself is untouched. `focus` (the CP's focal point) passes through for lossless round-trips. |
+| `assets_delete` | Only registered when `deletes` is enabled. Removes the file and its metadata; Statamic's reference updater then strips references from entries (queued; skipped when `statamic.system.update_references` is false). |
 
 Every write response states the resulting liveness ("saved as draft — not live",
 "published", "working copy created — live entry unchanged", "working copy amended —
@@ -223,6 +228,25 @@ php artisan vendor:publish --tag=statamic-mcp-config   # → config/statamic/mcp
 | `deletes` | `false` (`STATAMIC_MCP_DELETES`) | Delete tools are not even registered unless `true`. |
 | `resources` | all `true` | Exposure allowlist per type: `true` = all handles, or an array like `'collections' => ['blog', 'pages']`. Controls **exposure only** — who may read/write is decided by the user's Statamic roles. |
 | `per_page` | `25` | Default page size for list tools (hard-capped at 100 in code). |
+| `uploads.max_size` | `10240` | Hard per-upload cap in **kilobytes** for `assets_upload`, both transports. Container validation rules still apply on top. |
+| `uploads.source_allowlist` | `null` | Exact-host allowlist for `assets_upload` `source_url`. `null` = any public host; private/reserved addresses are always blocked. |
+
+### Asset uploads and the SSRF policy
+
+`assets_upload` accepts a `source_url` (the server downloads the file) or inline
+`content_base64` (small files). URL fetching is **fail-closed**: only `http`/`https`;
+the server resolves DNS itself and refuses any host with a private, loopback,
+link-local, carrier-grade-NAT, or otherwise reserved address (IPv4 and IPv6,
+cloud metadata endpoints included); the connection is pinned to the validated IP
+(no DNS-rebinding window); every redirect hop (max 3) is re-validated; and
+downloads abort past `uploads.max_size` — `Content-Length` is never trusted.
+Set `uploads.source_allowlist` to pin uploads to known hosts. Container-level
+validation rules (e.g. `mimes:jpg,png`) and Statamic's global file guards apply
+on top, exactly as in the Control Panel.
+
+Upgrading from v1.0? Re-publish the config or add `'asset_containers' => true`
+to `resources` — a published config **without** the key exposes no containers
+(safe by default).
 
 ## Security model: the token IS the user
 
