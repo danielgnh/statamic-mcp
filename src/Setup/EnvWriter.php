@@ -22,7 +22,7 @@ class EnvWriter
                 return EditResult::Skipped;
             }
 
-            file_put_contents($path, preg_replace($pattern, $key.'='.$value, $contents, 1));
+            file_put_contents($path, preg_replace_callback($pattern, fn () => $key.'='.$value, $contents, 1));
 
             return EditResult::Applied;
         }
