@@ -7,19 +7,30 @@
 
     Success/error session flashes surface as CP toasts automatically
     (HandleInertiaRequests), so this view renders no flash banners.
+
+    The utilities/Show wrapper only sets the document title — the visible page
+    header and the width wrapper are each page's own job (core's Email/Cache
+    utilities do the same), hence ui-header and the max-w wrapper here.
+    Vertical rhythm comes from ui-panel's built-in bottom margin.
 --}}
-<div class="max-w-3xl space-y-6">
+<div class="max-w-5xl 3xl:max-w-6xl mx-auto" data-max-width-wrapper>
 
-    @if ($lacksAccessMcp)
-        <ui-alert variant="warning" text="{{ __('Your account does not have the "Access MCP" permission — tokens you issue will authenticate but every request will be denied until an administrator grants it to one of your roles.') }}"></ui-alert>
-    @endif
+    <ui-header title="{{ __('MCP Tokens') }}" icon="key"></ui-header>
 
-    @if ($oauthMode)
-        <ui-alert text="{{ __('This site is in OAuth mode — bearer tokens are not accepted until the auth mode is switched back to token. You can still manage tokens here.') }}"></ui-alert>
-    @endif
+    @if ($lacksAccessMcp || $oauthMode || $insecureUrl)
+        <div class="space-y-4 mb-8">
+            @if ($lacksAccessMcp)
+                <ui-alert variant="warning" text="{{ __('Your account does not have the "Access MCP" permission — tokens you issue will authenticate but every request will be denied until an administrator grants it to one of your roles.') }}"></ui-alert>
+            @endif
 
-    @if ($insecureUrl)
-        <ui-alert variant="warning" text="{{ __('The MCP endpoint is not HTTPS — bearer tokens travel unencrypted. Set APP_URL to your real https:// site URL.') }}"></ui-alert>
+            @if ($oauthMode)
+                <ui-alert text="{{ __('This site is in OAuth mode — bearer tokens are not accepted until the auth mode is switched back to token. You can still manage tokens here.') }}"></ui-alert>
+            @endif
+
+            @if ($insecureUrl)
+                <ui-alert variant="warning" text="{{ __('The MCP endpoint is not HTTPS — bearer tokens travel unencrypted. Set APP_URL to your real https:// site URL.') }}"></ui-alert>
+            @endif
+        </div>
     @endif
 
     @if ($plainToken)
