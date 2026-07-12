@@ -15,7 +15,55 @@
 --}}
 <div class="max-w-5xl 3xl:max-w-6xl mx-auto" data-max-width-wrapper>
 
-    <ui-header title="{{ __('MCP Tokens') }}" icon="key"></ui-header>
+    <ui-header title="{{ __('MCP Tokens') }}" icon="key">
+        <template #actions>
+            <ui-modal title="{{ __('How to connect') }}" icon="info">
+                <template #trigger>
+                    <ui-button icon="info" text="{{ __('How to connect') }}"></ui-button>
+                </template>
+
+                <ui-field label="{{ __('MCP endpoint') }}">
+                    <ui-input read-only copyable model-value="{{ $endpoint }}"></ui-input>
+                </ui-field>
+
+                <ui-description text="{{ __('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead — see the README client-compatibility matrix.') }}"></ui-description>
+
+                <ui-subheading text="{{ __('Claude Code') }}"></ui-subheading>
+                <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
+
+                <ui-subheading text="{{ __('Cursor (.cursor/mcp.json)') }}"></ui-subheading>
+                <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+            </ui-modal>
+
+            {{-- A failed native POST redirects back with errors and the modal
+                 closed — the static `open` attribute reopens it on mount so
+                 the validation messages are actually seen. --}}
+            <ui-modal title="{{ __('Issue a new token') }}" icon="key" @if ($errors->hasAny(['name', 'expiry'])) open @endif>
+                <template #trigger>
+                    <ui-button variant="primary" icon="plus" text="{{ __('Create token') }}"></ui-button>
+                </template>
+
+                <form method="POST" action="{{ cp_route('utilities.mcp-tokens.store') }}" class="space-y-4">
+                    @csrf
+                    <ui-field label="{{ __('Name (optional)') }}" @if ($errors->has('name')) error="{{ $errors->first('name') }}" @endif>
+                        <ui-input name="name" maxlength="100" placeholder="{{ __('e.g. claude-code laptop') }}" model-value="{{ old('name') }}"></ui-input>
+                    </ui-field>
+                    <ui-field label="{{ __('Expires') }}" @if ($errors->has('expiry')) error="{{ $errors->first('expiry') }}" @endif>
+                        {{-- ui-select is v-model-only and cannot join a native form post, so this stays a native select dressed in the ui-input classes. --}}
+                        <select name="expiry" class="block h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-base text-gray-925 shadow-ui-sm antialiased dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                            <option value="never" @selected(old('expiry') === 'never')>{{ __('Never') }}</option>
+                            <option value="30" @selected(old('expiry') === '30')>{{ __('30 days') }}</option>
+                            <option value="90" @selected(old('expiry') === '90')>{{ __('90 days') }}</option>
+                            <option value="365" @selected(old('expiry') === '365')>{{ __('365 days') }}</option>
+                        </select>
+                    </ui-field>
+                    <div class="flex justify-end">
+                        <ui-button type="submit" variant="primary" text="{{ __('Create token') }}"></ui-button>
+                    </div>
+                </form>
+            </ui-modal>
+        </template>
+    </ui-header>
 
     @if ($lacksAccessMcp || $oauthMode || $insecureUrl)
         <div class="space-y-4 mb-8">
@@ -52,33 +100,10 @@
         </ui-panel>
     @endif
 
-    <ui-panel heading="{{ __('Issue a new token') }}">
-        <ui-card>
-            <form method="POST" action="{{ cp_route('utilities.mcp-tokens.store') }}" class="flex items-end gap-3">
-                @csrf
-                <div class="flex-1">
-                    <ui-field label="{{ __('Name (optional)') }}" @if ($errors->has('name')) error="{{ $errors->first('name') }}" @endif>
-                        <ui-input name="name" maxlength="100" placeholder="{{ __('e.g. claude-code laptop') }}" model-value="{{ old('name') }}"></ui-input>
-                    </ui-field>
-                </div>
-                <ui-field label="{{ __('Expires') }}" @if ($errors->has('expiry')) error="{{ $errors->first('expiry') }}" @endif>
-                    {{-- ui-select is v-model-only and cannot join a native form post, so this stays a native select dressed in the ui-input classes. --}}
-                    <select name="expiry" class="block h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-base text-gray-925 shadow-ui-sm antialiased dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-                        <option value="never" @selected(old('expiry') === 'never')>{{ __('Never') }}</option>
-                        <option value="30" @selected(old('expiry') === '30')>{{ __('30 days') }}</option>
-                        <option value="90" @selected(old('expiry') === '90')>{{ __('90 days') }}</option>
-                        <option value="365" @selected(old('expiry') === '365')>{{ __('365 days') }}</option>
-                    </select>
-                </ui-field>
-                <ui-button type="submit" variant="primary" text="{{ __('Create token') }}"></ui-button>
-            </form>
-        </ui-card>
-    </ui-panel>
-
     <ui-panel heading="{{ $isSuper ? __('All tokens') : __('Your tokens') }}">
         @if ($tokens->isEmpty())
             <ui-card>
-                <ui-empty-state-item icon="key" heading="{{ __('No tokens yet') }}" description="{{ __('Issue your first token above to connect an MCP client.') }}"></ui-empty-state-item>
+                <ui-empty-state-item icon="key" heading="{{ __('No tokens yet') }}" description="{{ __('Use the Create token button to issue your first token and connect an MCP client.') }}"></ui-empty-state-item>
             </ui-card>
         @else
             <ui-card inset class="overflow-x-auto">
@@ -125,26 +150,6 @@
                 </table>
             </ui-card>
         @endif
-    </ui-panel>
-
-    <ui-panel heading="{{ __('Connecting a client') }}">
-        <ui-card class="space-y-4">
-            <ui-field label="{{ __('MCP endpoint') }}">
-                <ui-input read-only copyable model-value="{{ $endpoint }}"></ui-input>
-            </ui-field>
-
-            <ui-description text="{{ __('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead — see the README client-compatibility matrix.') }}"></ui-description>
-
-            <div class="space-y-2">
-                <ui-subheading text="{{ __('Claude Code') }}"></ui-subheading>
-                <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
-            </div>
-
-            <div class="space-y-2">
-                <ui-subheading text="{{ __('Cursor (.cursor/mcp.json)') }}"></ui-subheading>
-                <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
-            </div>
-        </ui-card>
     </ui-panel>
 
 </div>
