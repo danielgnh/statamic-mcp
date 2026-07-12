@@ -44,6 +44,14 @@ it('skips when the value is already set', function () {
         ->and(file_get_contents($this->path))->toBe("STATAMIC_MCP_AUTH=oauth\n");
 });
 
+it('treats regex metacharacters in the value as literal text', function () {
+    file_put_contents($this->path, "APP_KEY=old\n");
+
+    (new EnvWriter)->apply($this->path, 'APP_KEY', 'pa$1s\2s');
+
+    expect(file_get_contents($this->path))->toBe('APP_KEY=pa$1s\2s'."\n");
+});
+
 it('bails when the file does not exist', function () {
     expect((new EnvWriter)->apply('/nonexistent/.env', 'K', 'v'))->toBe(EditResult::Bailed);
 });
