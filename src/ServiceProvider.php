@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Console\Doctor;
 use Danielgnh\StatamicMcp\Console\IssueToken;
 use Danielgnh\StatamicMcp\Console\ListTokens;
 use Danielgnh\StatamicMcp\Console\RevokeToken;
+use Danielgnh\StatamicMcp\Console\Setup;
 use Danielgnh\StatamicMcp\CP\McpTokensUtility;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
@@ -27,6 +28,7 @@ class ServiceProvider extends AddonServiceProvider
         ListTokens::class,
         RevokeToken::class,
         Doctor::class,
+        Setup::class,
     ];
 
     public function bootAddon()
