@@ -2,13 +2,13 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
+use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
-use Laravel\Passport\Passport;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
 use Throwable;
@@ -29,8 +29,12 @@ class Doctor extends Command
 
     protected bool $failed = false;
 
-    public function handle(TokenRepository $tokens): int
+    protected OAuthPrerequisites $prereqs;
+
+    public function handle(TokenRepository $tokens, OAuthPrerequisites $prereqs): int
     {
+        $this->prereqs = $prereqs;
+
         $mode = config('statamic.mcp.auth', 'token');
 
         $this->line('Statamic MCP doctor');
@@ -231,7 +235,7 @@ class Doctor extends Command
      */
     protected function checkOAuth(): void
     {
-        $passportInstalled = class_exists(Passport::class);
+        $passportInstalled = $this->prereqs->passportInstalled();
 
         if ($passportInstalled) {
             $this->info('[ OK ] Laravel Passport is installed.');
@@ -245,13 +249,8 @@ class Doctor extends Command
 
     protected function checkOAuthUsers(bool $passportInstalled): void
     {
-        $repository = config('statamic.users.repository', 'file');
-
-        // The repository name is arbitrary — what matters is the driver it
-        // resolves to (a 'custom' repository may still be file-driven).
-        // AuthenticateOAuth's preflight applies the same !== 'eloquent'
-        // predicate at request time.
-        $driver = config('statamic.users.repositories.'.$repository.'.driver') ?? '(none)';
+        $repository = $this->prereqs->usersRepository();
+        $driver = $this->prereqs->usersDriver() ?? '(none)';
 
         if ($driver === 'file') {
             $this->problem("Users are file-based (the '{$repository}' repository resolves to the file driver) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token').");
@@ -276,27 +275,26 @@ class Doctor extends Command
 
     protected function checkUserModelTrait(): void
     {
-        $provider = config('auth.guards.api.provider') ?? 'users';
-        $model = config('auth.providers.'.$provider.'.model');
+        $model = $this->prereqs->userModel();
 
-        if ($model && class_exists($model) && in_array('Laravel\\Passport\\HasApiTokens', class_uses_recursive($model), true)) {
+        if ($this->prereqs->userModelHasTrait()) {
             $this->info('[ OK ] User model '.$model.' uses the HasApiTokens trait.');
         } else {
+            $provider = config('auth.guards.api.provider') ?? 'users';
+
             $this->problem('User model '.($model ?: "(none configured in auth.providers.{$provider}.model)").' is missing the Laravel\\Passport\\HasApiTokens trait — add it per the README OAuth guide.');
         }
     }
 
     protected function checkApiGuard(): void
     {
-        $guard = config('auth.guards.api');
-
-        if (! $guard) {
+        if (! $this->prereqs->apiGuardDefined()) {
             $this->problem("No 'api' guard is defined — Laravel 12 and 13 ship none. In config/auth.php add 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'.");
 
             return;
         }
 
-        $driver = $guard['driver'] ?? '(none)';
+        $driver = $this->prereqs->apiGuardDriver() ?? '(none)';
 
         if ($driver !== 'passport') {
             // Wrong driver is worse than none: OAuth discovery and token

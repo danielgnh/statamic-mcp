@@ -17,3 +17,13 @@ parameters:
         -
             identifier: method.notFound
             message: '#^Call to an undefined method Statamic\\Contracts\\#'
+
+        # laravel/passport is a SUGGESTED dependency (required only for OAuth
+        # mode on the host site), so its classes are absent from this package's
+        # vendor/. The single static call lives behind a class_exists() guard
+        # in passportKeysExist(); scoped to that one file so any other unknown
+        # class anywhere in src/ still fails the build.
+        -
+            identifier: class.notFound
+            message: '#unknown class Laravel\\Passport\\Passport#'
+            path: src/Support/OAuthPrerequisites.php

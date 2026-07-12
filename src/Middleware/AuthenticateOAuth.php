@@ -3,9 +3,9 @@
 namespace Danielgnh\StatamicMcp\Middleware;
 
 use Closure;
+use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Laravel\Passport\Passport;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -38,13 +38,12 @@ class AuthenticateOAuth
 
     protected function preflightFailure(): ?Response
     {
-        // The repository NAME is arbitrary — a file-driven repository named
-        // 'custom' would pass a name check, then fail confusingly at runtime.
-        // The requirement is Eloquent users, so test the RESOLVED driver
-        // (mcp:doctor applies the same predicate).
-        $repository = config('statamic.users.repository', 'file');
+        $prereqs = app(OAuthPrerequisites::class);
 
-        if (config('statamic.users.repositories.'.$repository.'.driver') !== 'eloquent') {
+        // The requirement is Eloquent users, so OAuthPrerequisites tests the
+        // RESOLVED driver, not the repository name (mcp:doctor applies the
+        // same predicate).
+        if (! $prereqs->usersAreEloquent()) {
             return $this->unavailable(
                 "OAuth mode requires database (Eloquent) users — a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token')."
             );
@@ -54,13 +53,13 @@ class AuthenticateOAuth
         // 'api' guard would let OAuth discovery and token issuance complete,
         // then 401-loop on tokens the guard ignores — misconfiguration
         // presenting as credential failure.
-        if (config('auth.guards.api.driver') !== 'passport') {
+        if (! $prereqs->apiGuardIsPassport()) {
             return $this->unavailable(
                 "OAuth mode requires an 'api' guard. In config/auth.php add 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'."
             );
         }
 
-        if (! class_exists(Passport::class)) {
+        if (! $prereqs->passportInstalled()) {
             return $this->unavailable(
                 "OAuth mode requires Laravel Passport. Run 'composer require laravel/passport' and follow the OAuth setup in the statamic-mcp README, or switch to token mode ('auth' => 'token')."
             );
