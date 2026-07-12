@@ -27,3 +27,10 @@ parameters:
             identifier: class.notFound
             message: '#unknown class Laravel\\Passport\\Passport#'
             path: src/Support/OAuthPrerequisites.php
+
+        # Same suggested-dependency story for the connections repository: every
+        # Passport symbol use sits behind ready()'s class_exists guard, and the
+        # Passport CI leg analyses and runs this file with the real package.
+        -
+            message: '#Laravel\\Passport#'
+            path: src/OAuth/ConnectionRepository.php

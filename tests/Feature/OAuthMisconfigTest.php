@@ -10,8 +10,10 @@ uses(UsesOAuthMode::class);
 
 // The preflight reads config at request time, so runtime config() honestly
 // simulates a site working through the prerequisites one by one. Passport is
-// deliberately absent from require-dev, so class_exists() is genuinely false —
-// checking the config prerequisites first keeps every 503 branch reachable.
+// deliberately absent from require-dev, so class_exists() is genuinely false in
+// the main CI leg; the one test that asserts that absence skips itself when the
+// Passport CI leg installs the package. Checking the config prerequisites first
+// keeps every 503 branch reachable.
 
 function misconfiguredOAuthInitialize($test): TestResponse
 {
@@ -115,7 +117,7 @@ it('names Passport when only the package is missing', function () {
     expect($response->json('remedy'))
         ->toContain('laravel/passport')
         ->toContain("'auth' => 'token'");
-});
+})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
 
 it('leaves every other route of the site untouched', function () {
     // Structural: the preflight is mounted on the MCP route and nowhere else.
