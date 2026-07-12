@@ -144,6 +144,31 @@ it('advertises the full tool set when deletes are enabled', function () {
     );
 });
 
+it('serves the full tool set on one page for clients that never paginate', function () {
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'no-pagination')->token;
+
+    $sessionId = readOnlyInitialize($token);
+
+    // Deliberately NO per_page: laravel/mcp would page at 15 by default and a
+    // cursor-less client would silently miss the overflow — the Server's
+    // defaultPaginationLength override must make one page hold everything.
+    $response = readOnlyPost([
+        'jsonrpc' => '2.0',
+        'id' => 2,
+        'method' => 'tools/list',
+        'params' => (object) [],
+    ], $token, $sessionId);
+
+    $response->assertOk();
+
+    $names = collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
+
+    expect($names)->toBe(collect([...READ_TOOLS, ...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all());
+});
+
 it('still serves read tool calls over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
 

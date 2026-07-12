@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\AssetsDelete;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Mcp\Request;
 use Statamic\Events\AssetDeleting;
 use Statamic\Facades\Asset;
 
@@ -49,6 +50,21 @@ it('is blocked by read_only even with deletes enabled', function () {
     Server::actingAs(Fixtures::makeSuper())
         ->tool(AssetsDelete::class, ['container' => 'images', 'path' => 'hero.png'])
         ->assertHasErrors();
+
+    expect(Storage::disk('images')->exists('hero.png'))->toBeTrue();
+});
+
+it('re-checks the deletes gate inside the handler, not just at registration', function () {
+    config(['statamic.mcp.deletes' => false]);
+
+    // Call handle() directly, bypassing tools/list — exactly what a client
+    // with a stale tool cache does after the server flipped deletes off.
+    // The harness enforces shouldRegister(), so only a direct call can pin
+    // the in-handler re-check (spec §6 layer 1).
+    $response = (new AssetsDelete)->handle(new Request(['container' => 'images', 'path' => 'hero.png']));
+
+    expect($response->isError())->toBeTrue()
+        ->and((string) $response->content())->toContain('statamic.mcp.deletes');
 
     expect(Storage::disk('images')->exists('hero.png'))->toBeTrue();
 });
