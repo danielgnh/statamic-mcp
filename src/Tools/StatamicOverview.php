@@ -12,13 +12,14 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use Statamic\Contracts\Auth\User as UserContract;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, and global sets exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -39,6 +40,7 @@ class StatamicOverview extends Tool
             'collections' => $this->collections($user),
             'taxonomies' => $this->taxonomies($user),
             'globals' => $this->globals($user),
+            'asset_containers' => $this->assetContainers($user),
             'user' => [
                 'email' => $user->email(),
                 'roles' => $user->roles()->map->handle()->values()->all(),
@@ -143,6 +145,32 @@ class StatamicOverview extends Tool
                 'title' => $sets->get($handle)->title(),
                 'can_edit' => true, // the visibility filter above IS the edit-permission check
             ])
+            ->values()
+            ->all();
+    }
+
+    private function assetContainers(UserContract $user): array
+    {
+        $containers = AssetContainer::all()->keyBy->handle();
+
+        return $this->sortedExposed('asset_containers')
+            ->filter(fn (string $handle) => $this->can($user, "view {$handle} assets"))
+            ->map(function (string $handle) use ($containers, $user) {
+                $resource = [
+                    'handle' => $handle,
+                    'title' => $containers->get($handle)->title(),
+                    // no allow_uploads flag: v6 has no per-container upload
+                    // toggle — the upload permission is the whole gate (spec §2)
+                    'can_upload' => $this->can($user, "upload {$handle} assets"),
+                    'can_edit' => $this->can($user, "edit {$handle} assets"),
+                ];
+
+                if ($this->deletesEnabled()) {
+                    $resource['can_delete'] = $this->can($user, "delete {$handle} assets");
+                }
+
+                return $resource;
+            })
             ->values()
             ->all();
     }
