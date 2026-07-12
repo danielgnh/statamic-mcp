@@ -37,7 +37,7 @@ class OAuthPrerequisites
 
     public function apiGuardDefined(): bool
     {
-        return config('auth.guards.api') !== null;
+        return (bool) config('auth.guards.api');
     }
 
     public function apiGuardDriver(): ?string
