@@ -142,9 +142,16 @@ it('walks a fresh install through every oauth step', function () {
     Process::assertRan('php artisan passport:keys');
     Process::assertRan('php please mcp:doctor');
 
+    // The wizard resolves the OAuthenticatable FQCN from the environment: in
+    // the main CI legs Passport is absent (null, the fresh-install branch);
+    // the Passport CI leg detects the real interface. Mirror that split.
+    $oauthenticatable = interface_exists('Laravel\Passport\Contracts\OAuthenticatable')
+        ? 'Laravel\Passport\Contracts\OAuthenticatable'
+        : null;
+
     expect($fakes[UsersRepositoryEditor::class]->applied)->toBe([config_path('statamic/users.php')])
         ->and($fakes[AuthGuardEditor::class]->applied)->toBe([config_path('auth.php')])
-        ->and($fakes[UserModelEditor::class]->applied)->toBe([[$modelPath, null]])
+        ->and($fakes[UserModelEditor::class]->applied)->toBe([[$modelPath, $oauthenticatable]])
         ->and($fakes[EnvWriter::class]->writes)->toBe([['STATAMIC_MCP_AUTH', 'oauth']]);
 });
 
