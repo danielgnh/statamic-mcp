@@ -83,7 +83,7 @@ Gains `asset_containers`: per exposed container `handle`, `title`, and capabilit
 
 ### blueprints_get
 
-The `assets` fieldtype's `example_notes` fallback becomes actionable: name the field's configured container, point at `assets_list`/`assets_upload`, and state the stored value shape — paths relative to the container root, e.g. `["blog/hero.jpg"]` (list even when `max_files: 1`).
+The `assets` fieldtype's `example_notes` fallback becomes actionable: name the field's configured container, point at `assets_list`/`assets_upload`, and state the stored value shape — paths relative to the container root. **Correction (2026-07-12, final review):** the fieldtype stores a **single string** when `max_files: 1` and a list otherwise (vendor `Fieldtypes\Assets::process()`), not "list even when max_files: 1" as this spec originally said; the example mirrors that.
 
 ## 4. Config delta
 
