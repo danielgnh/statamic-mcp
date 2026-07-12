@@ -33,6 +33,14 @@ adheres to [Semantic Versioning](https://semver.org).
 - MCP Tokens utility — issue and revoke your own tokens from the Control Panel
   (Tools → Utilities), gated by the "Access MCP Tokens utility" permission.
   Super admins see all tokens.
+- OAuth connections panel in the CP utility (retitled **MCP Access**; handle
+  and permission unchanged): one row per connected user + client pair from
+  Passport's tables — client name, connected/last-refreshed dates, an
+  Active/Expired status that honestly counts live refresh tokens — plus a
+  Disconnect action that revokes the pair's access *and* refresh tokens.
+  Owner-or-super gated, same as tokens.
+- Passport CI leg: the test suite now also runs with `laravel/passport`
+  installed, activating the OAuth-connection tests that skip in the main leg.
 
 ### Changed
 
