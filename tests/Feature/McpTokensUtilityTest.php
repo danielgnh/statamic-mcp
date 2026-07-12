@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\File;
+use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
     config(['statamic.editions.pro' => true, 'cache.default' => 'array']);
@@ -50,6 +51,26 @@ it('shows a super admin all tokens with their owners', function () {
         ->assertOk()
         ->assertSee('theirs-beta', false)
         ->assertSee($other->email(), false);
+});
+
+// The utility view is compiled as a Vue template at runtime by the CP's
+// dynamic-html-renderer, so Blade's HTML escaping alone is not enough: curly
+// braces in user input survive it and would execute as Vue expressions in the
+// viewer's session (supers see all users' tokens — privilege escalation).
+// Every user-sourced string must render inside a v-pre span.
+it('renders user-controlled token names inertly for the vue runtime compiler', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    app(TokenRepository::class)->issue($user, '{{ 7*7 }}');
+
+    // Assert on the decoded Inertia prop — the raw response JSON-encodes the
+    // HTML with JSON_HEX_TAG, so angle brackets never appear literally in it.
+    $this->actingAs($user)
+        ->get(cp_route('utilities.mcp-tokens'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('utilities/Show')
+            ->where('html', fn ($html) => str_contains($html, '<span v-pre>{{ 7*7 }}</span>')));
 });
 
 it('marks expired tokens as expired', function () {
