@@ -4,8 +4,9 @@ namespace Danielgnh\StatamicMcp\Setup;
 
 /**
  * Flips 'repository' => '...' to 'eloquent' in config/statamic/users.php.
- * Anchor-based: only the first quoted 'repository' assignment is touched;
- * anything else (env() calls, missing key) bails to the manual snippet.
+ * Anchor-based: only the first quoted 'repository' assignment at the start of
+ * a line is touched — commented-out lines are ignored; anything else (env()
+ * calls, missing key) bails to the manual snippet.
  */
 class UsersRepositoryEditor
 {
@@ -17,7 +18,7 @@ class UsersRepositoryEditor
 
         $contents = file_get_contents($path);
 
-        if (! preg_match("/'repository'\s*=>\s*'([^']+)'/", $contents, $matches)) {
+        if (! preg_match("/^\s*'repository'\s*=>\s*'([^']+)'/m", $contents, $matches)) {
             return EditResult::Bailed;
         }
 
@@ -25,9 +26,9 @@ class UsersRepositoryEditor
             return EditResult::Skipped;
         }
 
-        file_put_contents($path, preg_replace(
-            "/'repository'\s*=>\s*'[^']+'/",
-            "'repository' => 'eloquent'",
+        file_put_contents($path, preg_replace_callback(
+            "/^(\s*)'repository'\s*=>\s*'[^']+'/m",
+            fn (array $m) => $m[1]."'repository' => 'eloquent'",
             $contents,
             1
         ));
