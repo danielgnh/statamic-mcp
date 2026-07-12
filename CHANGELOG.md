@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- Assets tools: `assets_list`, `assets_get`, `assets_upload`, `assets_update`,
+  and `assets_delete` (delete gated behind `'deletes' => true` like the other
+  delete tools). Uploads accept a `source_url` — downloaded server-side behind
+  a fail-closed SSRF guard (public hosts only, DNS pinning, per-hop redirect
+  revalidation, streaming size cap) — or inline `content_base64`; collisions
+  are refused, never overwritten. `assets_update` merges blueprint-validated
+  metadata (alt text etc.) and passes the CP's `focus` key through for
+  lossless round-trips.
+- `resources.asset_containers` exposure key and an `uploads` config block
+  (`max_size` in KB, `source_allowlist`). A previously published config
+  without the new key exposes no containers — add it or re-publish.
+- `statamic_overview` now lists exposed asset containers with `can_upload` /
+  `can_edit` / `can_delete` flags; `blueprints_get` gives assets fields an
+  actionable example naming the container and the assets tools.
+- `tools/list` now returns the full tool set in one page (the default
+  15-per-page cut-off would hide tools from clients that never paginate).
 - MCP Tokens utility — issue and revoke your own tokens from the Control Panel
   (Tools → Utilities), gated by the "Access MCP Tokens utility" permission.
   Super admins see all tokens.
