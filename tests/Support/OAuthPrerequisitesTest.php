@@ -46,6 +46,12 @@ it('reports the api guard state', function () {
     expect((new OAuthPrerequisites)->apiGuardIsPassport())->toBeTrue();
 });
 
+it('treats an empty api guard definition as undefined', function () {
+    config(['auth.guards.api' => []]);
+
+    expect((new OAuthPrerequisites)->apiGuardDefined())->toBeFalse();
+});
+
 it('resolves the user model from the api guard provider', function () {
     config(['auth.guards.api' => ['driver' => 'passport', 'provider' => 'special']]);
     config(['auth.providers.special.model' => 'App\Models\SpecialUser']);
