@@ -1,6 +1,7 @@
 <?php
 
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
+use Laravel\Passport\Passport;
 
 it('resolves the users driver through the configured repository', function () {
     config(['statamic.users.repository' => 'custom']);
@@ -66,12 +67,13 @@ it('falls back to the users provider when the api guard names none', function ()
     expect((new OAuthPrerequisites)->userModel())->toBe('App\Models\User');
 });
 
-// Passport is not in require-dev, so in this suite these are always false —
-// which is exactly the branch a fresh host site exercises.
+// Passport is not in require-dev, so in the main CI legs these are always
+// false — exactly the branch a fresh host site exercises. The Passport CI
+// leg installs the real package, so there this test skips instead.
 it('reports passport as absent in a suite without passport', function () {
     $prereqs = new OAuthPrerequisites;
 
     expect($prereqs->passportInstalled())->toBeFalse()
         ->and($prereqs->passportKeysExist())->toBeFalse()
         ->and($prereqs->userModelHasTrait())->toBeFalse();
-});
+})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
