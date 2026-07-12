@@ -42,7 +42,9 @@ adheres to [Semantic Versioning](https://semver.org).
   (`ui-panel`, `ui-card`, `ui-alert`, `ui-badge`, `ui-field`, `ui-input`,
   `ui-button`) — native CP look including dark mode, a copy-to-clipboard
   button on the one-time token reveal, and toast notifications instead of
-  inline flash banners.
+  inline flash banners. Token issuance and the "How to connect" guide live
+  in modals behind header action buttons, keeping the page itself to the
+  token list.
 
 ### Fixed
 

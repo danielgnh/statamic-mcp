@@ -764,6 +764,8 @@ Append to `tests/Feature/McpConnectionsTest.php`:
 // ── Panel rendering ──
 
 it('hides the connections panel entirely in token mode', function () {
+    config(['statamic.mcp.auth' => 'token']);
+
     $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
 
     $this->actingAs($user)
@@ -855,8 +857,6 @@ it('shows an empty state when oauth is ready but nothing has connected', functio
         ->assertSee('No connections yet', false);
 })->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
 ```
-
-Note the first two tests need `statamic.mcp.auth` default `token` — `beforeEach` sets `oauthReadyConfig()` (which flips it to oauth) only when Passport exists, so in the Passport leg the token-mode test must reset: add `config(['statamic.mcp.auth' => 'token'])` as the first line of the `hides the connections panel entirely in token mode` test.
 
 - [ ] **Step 2: Run to verify failure**
 
