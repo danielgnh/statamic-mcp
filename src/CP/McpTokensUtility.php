@@ -2,7 +2,9 @@
 
 namespace Danielgnh\StatamicMcp\CP;
 
+use Danielgnh\StatamicMcp\Http\Controllers\McpConnectionsController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
+use Danielgnh\StatamicMcp\OAuth\ConnectionRepository;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -22,12 +24,13 @@ class McpTokensUtility
     {
         Utility::extend(function () {
             Utility::register('mcp_tokens')
-                ->title(__('MCP Tokens'))
+                ->title(__('MCP Access'))
                 ->icon('key')
-                ->description(__('Issue and revoke your own MCP access tokens.'))
+                ->description(__('Manage MCP access tokens and OAuth connector connections.'))
                 ->view('statamic-mcp::utilities.mcp-tokens', fn (Request $request) => static::viewData($request))
                 ->routes(function ($router) {
                     $router->post('/', [McpTokensController::class, 'store'])->name('store');
+                    $router->delete('connections/{clientId}/{userId}', [McpConnectionsController::class, 'destroy'])->name('connections.destroy');
                     $router->delete('{tokenId}', [McpTokensController::class, 'destroy'])->name('destroy');
                 });
         });
@@ -38,15 +41,21 @@ class McpTokensUtility
         $user = User::current();
         $isSuper = $user->isSuper();
         $endpoint = url(config('statamic.mcp.route'));
+        $oauthMode = config('statamic.mcp.auth') === 'oauth';
+        $connections = app(ConnectionRepository::class);
 
         return [
             'tokens' => static::presentTokens(
                 app(TokenRepository::class)->all(),
                 $isSuper ? null : (string) $user->id()
             ),
+            'connections' => $oauthMode
+                ? static::presentConnections($connections->all(), $isSuper ? null : (string) $user->id())
+                : collect(),
+            'oauthReady' => $oauthMode && $connections->ready(),
             'isSuper' => $isSuper,
             'lacksAccessMcp' => ! $isSuper && ! $user->hasPermission('access mcp'),
-            'oauthMode' => config('statamic.mcp.auth') === 'oauth',
+            'oauthMode' => $oauthMode,
             'insecureUrl' => ! Str::startsWith($endpoint, 'https://'),
             'endpoint' => $endpoint,
             'plainToken' => session('statamic-mcp.plain_token'),
@@ -77,6 +86,21 @@ class McpTokensUtility
                 ];
             })
             ->sortByDesc('created_at')
+            ->values();
+    }
+
+    /**
+     * Rows arrive shaped and sorted from the repository — this only filters
+     * visibility (own-only unless super) and attaches the display email,
+     * mirroring presentTokens.
+     */
+    protected static function presentConnections(Collection $connections, ?string $onlyUserId): Collection
+    {
+        return $connections
+            ->filter(fn ($connection) => $onlyUserId === null || $connection['user_id'] === $onlyUserId)
+            ->map(fn ($connection) => array_merge($connection, [
+                'email' => User::find($connection['user_id'])?->email() ?? $connection['user_id'],
+            ]))
             ->values();
     }
 }
