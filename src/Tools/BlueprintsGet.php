@@ -193,6 +193,7 @@ class BlueprintsGet extends Tool
             'entries' => [['REPLACE-WITH-REAL-ENTRY-ID'], null],
             'terms' => [['REPLACE-WITH-REAL-TERM-ID'], null],
             'users' => [['REPLACE-WITH-REAL-USER-ID'], null],
+            'assets' => $this->assetsFieldExample($field),
             default => [null, sprintf(
                 "no example generated for fieldtype '%s' — read a real value from existing content before writing this field",
                 $field->type(),
@@ -247,5 +248,27 @@ class BlueprintsGet extends Tool
         $first = array_is_list($options) ? $options[0] : array_key_first($options);
 
         return [$wrapInArray ? [$first] : $first, null];
+    }
+
+    /**
+     * Assets fields store paths relative to the field's container root —
+     * a single string when max_files is 1, a list otherwise (vendor
+     * Fieldtypes\Assets::process). Point the agent at the assets tools
+     * instead of the generic null fallback.
+     *
+     * @return array{0: mixed, 1: string}
+     */
+    private function assetsFieldExample(Field $field): array
+    {
+        $container = $field->config()['container'] ?? null;
+        $single = (int) ($field->config()['max_files'] ?? 0) === 1;
+
+        $note = sprintf(
+            'stores asset paths relative to the container root%s — %s. Find existing paths with assets_list, or upload new files with assets_upload, then use the returned path (not the id or url).',
+            $container ? sprintf(" (container '%s')", $container) : ' (no container configured on the field — statamic_overview lists the available ones)',
+            $single ? 'max_files is 1, so pass a single string path' : 'pass a list of path strings',
+        );
+
+        return [$single ? 'REPLACE-WITH-REAL-ASSET-PATH' : ['REPLACE-WITH-REAL-ASSET-PATH'], $note];
     }
 }
