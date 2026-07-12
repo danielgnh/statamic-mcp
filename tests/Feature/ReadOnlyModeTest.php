@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Danielgnh\StatamicMcp\Tools\AssetsUpdate;
 use Danielgnh\StatamicMcp\Tools\AssetsUpload;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
@@ -27,6 +28,7 @@ const READ_TOOLS = [
 ];
 
 const WRITE_TOOLS = [
+    'assets_update',
     'assets_upload',
     'entries_create',
     'entries_update',
@@ -41,6 +43,7 @@ const DELETE_TOOLS = [
 ];
 
 const WRITE_TOOL_CLASSES = [
+    'assets_update' => AssetsUpdate::class,
     'assets_upload' => AssetsUpload::class,
     'entries_create' => EntriesCreate::class,
     'entries_update' => EntriesUpdate::class,

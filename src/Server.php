@@ -30,5 +30,6 @@ class Server extends McpServer
         Tools\AssetsList::class,
         Tools\AssetsGet::class,
         Tools\AssetsUpload::class,
+        Tools\AssetsUpdate::class,
     ];
 }
