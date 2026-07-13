@@ -56,7 +56,7 @@ class ServiceProvider extends AddonServiceProvider
         try {
             $this->registerMcpRoutes();
         } catch (Throwable $e) {
-            report($e); // misconfiguration must never brick the host site (spec §5)
+            report($e); // misconfiguration must never brick the host site
 
             Log::warning('Statamic MCP failed to mount; run `php please mcp:doctor`', [
                 'exception' => $e->getMessage(),
@@ -89,7 +89,7 @@ class ServiceProvider extends AddonServiceProvider
                 // implement AuthenticatesRequests.
                 ? [AuthenticateOAuth::class]
                 : [AuthenticateMcpToken::class]),
-            EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes (spec §5)
+            EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes
         ];
 
         Mcp::web(config('statamic.mcp.route'), Server::class)->middleware($middleware);

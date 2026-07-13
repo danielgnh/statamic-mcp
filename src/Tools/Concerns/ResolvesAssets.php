@@ -14,7 +14,7 @@ trait ResolvesAssets
      * ensureExposed() — its message singularizes 'asset_containers' to
      * 'asset_container' (underscore), whereas the human-facing wording here
      * is 'asset container' (space). Exists-but-unexposed and missing are
-     * still indistinguishable by design (spec §4): the error lists only
+     * still indistinguishable by design: the error lists only
      * exposed handles either way.
      */
     protected function resolveContainer(string $handle): AssetContainerContract

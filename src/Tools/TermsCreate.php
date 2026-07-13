@@ -127,7 +127,7 @@ class TermsCreate extends Tool
             'taxonomy' => $taxonomyHandle,
             'slug' => $slug,
             'site' => $defaultSite,
-            // Terms have no draft state (spec §4 rows 8-12) — a created term
+            // Terms have no draft state — a created term
             // is live immediately.
             ...$this->liveness($localized, self::LIVENESS_CREATED),
         ]);

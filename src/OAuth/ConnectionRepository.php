@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\OAuth;
 
+use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -20,16 +21,17 @@ class ConnectionRepository
 {
     /**
      * The same prerequisites AuthenticateOAuth preflights and mcp:doctor
-     * checks, plus the migrated table — oauth mode switched on before
-     * `php artisan migrate` must not break the page.
+     * checks — delegated to OAuthPrerequisites so the three can never drift —
+     * plus the migrated table: oauth mode switched on before `php artisan
+     * migrate` must not break the page.
      */
     public function ready(): bool
     {
-        $repository = config('statamic.users.repository', 'file');
+        $prereqs = app(OAuthPrerequisites::class);
 
-        return config('statamic.users.repositories.'.$repository.'.driver') === 'eloquent'
-            && config('auth.guards.api.driver') === 'passport'
-            && class_exists(Passport::class)
+        return $prereqs->usersAreEloquent()
+            && $prereqs->apiGuardIsPassport()
+            && $prereqs->passportInstalled()
             && Schema::hasTable('oauth_access_tokens');
     }
 
@@ -50,42 +52,73 @@ class ConnectionRepository
         }
 
         $tokenModel = Passport::tokenModel();
-        $tokens = $tokenModel::query()->get();
 
-        if ($tokens->isEmpty()) {
+        // One row per (user, client) pair, aggregated in the database — the
+        // full historical token table never lands in memory, only the
+        // connections it collapses to.
+        $pairs = $tokenModel::query()
+            ->select('user_id', 'client_id')
+            ->selectRaw('MIN(created_at) as connected_at')
+            ->selectRaw('MAX(created_at) as last_refreshed_at')
+            ->groupBy('user_id', 'client_id')
+            ->get();
+
+        if ($pairs->isEmpty()) {
             return collect();
         }
 
         $clientModel = Passport::clientModel();
         $clients = $clientModel::query()
-            ->whereIn('id', $tokens->pluck('client_id')->unique())
+            ->whereIn('id', $pairs->pluck('client_id')->unique())
             ->get()
             ->keyBy(fn ($client) => (string) $client->getKey());
 
-        $refreshModel = Passport::refreshTokenModel();
-        $refreshable = $refreshModel::query()
-            ->whereIn('access_token_id', $tokens->pluck('id'))
-            ->where('revoked', false)
-            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->pluck('access_token_id')
-            ->flip();
+        $activePairs = $this->activePairKeys($tokenModel);
 
-        return $tokens
-            ->groupBy(fn ($token) => $token->user_id.'|'.$token->client_id)
-            ->map(function (Collection $group) use ($clients, $refreshable) {
-                $first = $group->first();
-
-                return [
-                    'user_id' => (string) $first->user_id,
-                    'client_id' => (string) $first->client_id,
-                    'client_name' => $clients->get((string) $first->client_id)->name ?? __('Unknown client'),
-                    'connected_at' => $group->min('created_at'),
-                    'last_refreshed_at' => $group->max('created_at'),
-                    'active' => $group->contains(fn ($token) => $this->usable($token, $refreshable)),
-                ];
-            })
+        return $pairs
+            ->map(fn ($pair) => [
+                'user_id' => (string) $pair->user_id,
+                'client_id' => (string) $pair->client_id,
+                'client_name' => $clients->get((string) $pair->client_id)->name ?? __('Unknown client'),
+                'connected_at' => Carbon::parse($pair->connected_at),
+                'last_refreshed_at' => Carbon::parse($pair->last_refreshed_at),
+                'active' => $activePairs->has($pair->user_id.'|'.$pair->client_id),
+            ])
             ->sortByDesc('last_refreshed_at')
             ->values();
+    }
+
+    /**
+     * The set of "{user_id}|{client_id}" pairs that still have a way in,
+     * resolved in the database so the scan is bounded by live tokens, never
+     * the whole history. A pair is active when it holds a token that is not
+     * revoked AND (not expired, OR backed by a live refresh token) — the same
+     * predicate the old in-PHP usable() applied, one Passport row at a time.
+     *
+     * @param  class-string<Token>  $tokenModel
+     * @return Collection<string, int> flipped for O(1) has() lookups
+     */
+    protected function activePairKeys(string $tokenModel): Collection
+    {
+        // Non-revoked, unexpired refresh tokens keep an otherwise-expired
+        // access token alive (the refresh grant needs no re-consent).
+        $refreshModel = Passport::refreshTokenModel();
+        $liveRefreshTokenIds = $refreshModel::query()
+            ->where('revoked', false)
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->pluck('access_token_id');
+
+        return $tokenModel::query()
+            ->select('user_id', 'client_id')
+            ->distinct()
+            ->where('revoked', false)
+            ->where(fn ($query) => $query
+                ->whereNull('expires_at')
+                ->orWhere('expires_at', '>', now())
+                ->orWhereIn('id', $liveRefreshTokenIds))
+            ->get()
+            ->map(fn ($token) => $token->user_id.'|'.$token->client_id)
+            ->flip();
     }
 
     /**
@@ -117,20 +150,5 @@ class ConnectionRepository
         $tokenModel::query()->whereIn('id', $ids)->update(['revoked' => true]);
 
         return true;
-    }
-
-    /**
-     * @param  Token  $token
-     * @param  Collection<array-key, int>  $refreshable
-     */
-    protected function usable(object $token, Collection $refreshable): bool
-    {
-        if ($token->revoked) {
-            return false;
-        }
-
-        $expired = $token->expires_at !== null && $token->expires_at->isPast();
-
-        return ! $expired || $refreshable->has((string) $token->getKey());
     }
 }

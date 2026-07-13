@@ -72,14 +72,14 @@ class AssetsUpdate extends Tool
         // 'focus' is exempt: the CP's focal-point editor writes it into data
         // OUTSIDE the blueprint (AssetsController@update merges it around
         // field processing), so a get → edit → update round-trip must carry
-        // it (spec §3 focus exception).
+        // it.
         $blueprint = $asset->blueprint();
         $this->rejectUnknownKeys($blueprint, Arr::except($patch, ['focus']));
 
         $existing = $asset->data()->all();
         $merged = array_merge($existing, $patch);
 
-        // Strict compare over normalized values (T14 pattern): assoc key
+        // Strict compare over normalized values: assoc key
         // order is irrelevant, but types matter — loose == would turn an
         // explicit null-clear of a falsy value into a false no-op.
         if ($this->normalize($merged) === $this->normalize($existing)) {

@@ -12,7 +12,7 @@ use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
 /**
- * SSRF-guarded download of an agent-supplied source_url (spec §5) — the one
+ * SSRF-guarded download of an agent-supplied source_url — the one
  * place this server makes outbound requests on model input. Fail-closed:
  * scheme, allowlist, and public-IP checks run per redirect hop, the
  * connection is pinned to the validated IP, and the byte cap is enforced
@@ -181,7 +181,7 @@ class SourceDownloader
                 // Hops are revalidated by download()'s loop, never by curl.
                 'allow_redirects' => false,
                 // Pin the connection to the validated IP — closes the DNS
-                // rebinding window between check and use (spec §5), for
+                // rebinding window between check and use, for
                 // IPv6-only hosts too (address bracketed per libcurl syntax).
                 'curl' => $literalHost ? [] : [CURLOPT_RESOLVE => [
                     sprintf('%s:%d:%s', $host, $port, str_contains($ip, ':') ? "[{$ip}]" : $ip),

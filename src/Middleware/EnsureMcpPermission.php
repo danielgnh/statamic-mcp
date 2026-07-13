@@ -3,15 +3,15 @@
 namespace Danielgnh\StatamicMcp\Middleware;
 
 use Closure;
+use Danielgnh\StatamicMcp\Support\ActingUser;
 use Illuminate\Http\Request;
-use Statamic\Facades\User;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureMcpPermission
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $user = $request->user() ? User::fromUser($request->user()) : null;
+        $user = ActingUser::resolve($request->user());
 
         if (! $user || (! $user->isSuper() && ! $user->hasPermission('access mcp'))) {
             return response()->json([

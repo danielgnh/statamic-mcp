@@ -35,7 +35,7 @@ trait ComparesPatchData
     /**
      * The one raw-path artifact an agent can accidentally round-trip: the
      * truncated {__preview, truncated, note} shape the get tools substitute
-     * for long Bard/markdown values (T11 quality review).
+     * for long Bard/markdown values.
      *
      * @param  array<string, mixed>  $data
      * @param  string  $getTool  the tool to point the agent back to, e.g. 'entries_get'

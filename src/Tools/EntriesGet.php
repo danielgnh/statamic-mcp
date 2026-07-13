@@ -218,7 +218,7 @@ class EntriesGet extends Tool
 
     /**
      * Long Bard/markdown values become {__preview, truncated, note} objects
-     * unless explicitly requested via fields (spec §4 row 4).
+     * unless explicitly requested via fields.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $requestedFields

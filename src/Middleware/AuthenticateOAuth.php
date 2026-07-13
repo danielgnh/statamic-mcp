@@ -23,7 +23,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * The config-read checks run before class_exists(Passport) so every failure
  * branch stays honestly reachable in a suite without Passport installed;
- * mcp:doctor (T24) checks the same prerequisites without short-circuiting.
+ * mcp:doctor checks the same prerequisites without short-circuiting.
  */
 class AuthenticateOAuth
 {

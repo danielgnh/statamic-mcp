@@ -13,7 +13,7 @@ trait ResolvesSites
     /**
      * The requested site (default: Site::default()), validated against the
      * configured sites, with 'access {site} site' enforced for non-default
-     * sites on multisite installs (spec §6). Pass $validSites to limit the
+     * sites on multisite installs. Pass $validSites to limit the
      * check to a resource's own configured sites (taxonomies, global sets);
      * when omitted, every configured site is valid (entries).
      *
