@@ -212,6 +212,102 @@ it('skips every oauth step on an already-configured install', function () {
         ->and($fakes[EnvWriter::class]->writes)->toBe([]);
 });
 
+it('runs every oauth step unattended with --oauth --yes --migrate-users', function () {
+    Process::fake();
+    $fakes = fakeEditors();
+    freshInstallPrereqs();
+
+    $modelPath = (new ReflectionClass(SetupWizardTestUser::class))->getFileName();
+
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--yes' => true, '--migrate-users' => true])
+        ->assertExitCode(0);
+
+    Process::assertRan('php please auth:migration');
+    Process::assertRan('php artisan migrate');
+    Process::assertRan('php please eloquent:import-users');
+    Process::assertRan('composer require laravel/passport');
+    Process::assertRan('php artisan passport:keys');
+    Process::assertRan('php please mcp:doctor');
+    // The optional consent views publish defaults to "no" — --yes keeps that.
+    Process::assertDidntRun('php artisan vendor:publish --tag=mcp-views');
+
+    $oauthenticatable = interface_exists('Laravel\Passport\Contracts\OAuthenticatable')
+        ? 'Laravel\Passport\Contracts\OAuthenticatable'
+        : null;
+
+    expect($fakes[UsersRepositoryEditor::class]->applied)->toBe([config_path('statamic/users.php')])
+        ->and($fakes[AuthGuardEditor::class]->applied)->toBe([config_path('auth.php')])
+        ->and($fakes[UserModelEditor::class]->applied)->toBe([[$modelPath, $oauthenticatable]])
+        ->and($fakes[EnvWriter::class]->writes)->toBe([['STATAMIC_MCP_AUTH', 'oauth']]);
+});
+
+it('refuses to migrate file users under --yes without --migrate-users', function () {
+    Process::fake();
+    fakeEditors();
+    freshInstallPrereqs();
+
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--yes' => true])
+        ->expectsOutputToContain('Re-run with --migrate-users')
+        ->expectsOutputToContain('Setup stopped.')
+        ->assertExitCode(1);
+
+    Process::assertDidntRun('php please auth:migration');
+    Process::assertDidntRun('composer require laravel/passport');
+});
+
+it('needs no --migrate-users under --yes when users are already eloquent', function () {
+    Process::fake();
+    $fakes = fakeEditors();
+
+    app()->instance(OAuthPrerequisites::class, new class extends OAuthPrerequisites
+    {
+        public function usersAreEloquent(): bool
+        {
+            return true;
+        }
+
+        public function passportInstalled(): bool
+        {
+            return false;
+        }
+
+        public function apiGuardIsPassport(): bool
+        {
+            return false;
+        }
+
+        public function passportKeysExist(): bool
+        {
+            return false;
+        }
+
+        public function userModel(): ?string
+        {
+            return SetupWizardTestUser::class;
+        }
+
+        public function userModelHasTrait(): bool
+        {
+            return false;
+        }
+    });
+
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--yes' => true])
+        ->assertExitCode(0);
+
+    Process::assertDidntRun('php please auth:migration');
+    Process::assertRan('composer require laravel/passport');
+
+    expect($fakes[UsersRepositoryEditor::class]->applied)->toBe([])
+        ->and($fakes[EnvWriter::class]->writes)->toBe([['STATAMIC_MCP_AUTH', 'oauth']]);
+});
+
+it('rejects --oauth combined with --token', function () {
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--token' => true])
+        ->expectsOutputToContain('not both')
+        ->assertExitCode(1);
+});
+
 it('stops before composer when the user declines the users migration', function () {
     Process::fake();
     fakeEditors();

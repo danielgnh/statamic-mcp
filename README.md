@@ -36,6 +36,11 @@ every OAuth prerequisite — and finishes by running `mcp:doctor` as proof:
 php please mcp:setup
 ```
 
+It's scriptable too — `--oauth --yes` (or `--token --user=you@site.com --yes`) runs
+unattended, which is what the bundled [Laravel Boost](https://laravel.com/docs/boost)
+guidelines teach AI coding agents to use. Boost users get them automatically on
+`boost:install`.
+
 ## Connecting a client
 
 ```bash
