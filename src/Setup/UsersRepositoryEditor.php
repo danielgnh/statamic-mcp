@@ -3,14 +3,15 @@
 namespace Danielgnh\StatamicMcp\Setup;
 
 /**
- * Flips 'repository' => '...' to 'eloquent' in config/statamic/users.php.
- * Anchor-based: only the first quoted 'repository' assignment at the start of
- * a line is touched — commented-out lines are ignored; anything else (env()
- * calls, missing key) bails to the manual snippet.
+ * Flips 'repository' => '...' in config/statamic/users.php — to 'eloquent'
+ * during setup, back to the original when the installer reverts a failed
+ * import. Anchor-based: only the first quoted 'repository' assignment at the
+ * start of a line is touched — commented-out lines are ignored; anything else
+ * (env() calls, missing key) bails to the manual snippet.
  */
 class UsersRepositoryEditor
 {
-    public function apply(string $path): EditResult
+    public function apply(string $path, string $repository = 'eloquent'): EditResult
     {
         if (! is_file($path) || ! is_writable($path)) {
             return EditResult::Bailed;
@@ -22,13 +23,13 @@ class UsersRepositoryEditor
             return EditResult::Bailed;
         }
 
-        if ($matches[1] === 'eloquent') {
+        if ($matches[1] === $repository) {
             return EditResult::Skipped;
         }
 
         file_put_contents($path, preg_replace_callback(
             "/^(\s*)'repository'\s*=>\s*'[^']+'/m",
-            fn (array $m) => $m[1]."'repository' => 'eloquent'",
+            fn (array $m) => $m[1]."'repository' => '{$repository}'",
             $contents,
             1
         ));
@@ -36,8 +37,8 @@ class UsersRepositoryEditor
         return EditResult::Applied;
     }
 
-    public function snippet(): string
+    public function snippet(string $repository = 'eloquent'): string
     {
-        return "'repository' => 'eloquent',";
+        return "'repository' => '{$repository}',";
     }
 }

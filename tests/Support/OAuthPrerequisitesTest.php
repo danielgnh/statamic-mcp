@@ -1,7 +1,17 @@
 <?php
 
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Passport;
+
+class PrereqsUuidUser
+{
+    use HasUuids;
+}
+
+class PrereqsPlainUser {}
 
 it('resolves the users driver through the configured repository', function () {
     config(['statamic.users.repository' => 'custom']);
@@ -65,6 +75,82 @@ it('falls back to the users provider when the api guard names none', function ()
     config(['auth.providers.users.model' => 'App\Models\User']);
 
     expect((new OAuthPrerequisites)->userModel())->toBe('App\Models\User');
+});
+
+it('resolves the import model through the cp guard, not the api guard', function () {
+    // eloquent:import-users writes through the CP guard's provider — a site
+    // can point the api guard at a different model entirely.
+    config([
+        'statamic.users.guards.cp' => 'special',
+        'auth.guards.special' => ['driver' => 'session', 'provider' => 'cp_users'],
+        'auth.providers.cp_users.model' => PrereqsUuidUser::class,
+        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
+        'auth.providers.users.model' => PrereqsPlainUser::class,
+    ]);
+
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->importUserModel())->toBe(PrereqsUuidUser::class)
+        ->and($prereqs->importModelHasUuids())->toBeTrue()
+        ->and($prereqs->userModel())->toBe(PrereqsPlainUser::class);
+});
+
+it('detects a missing HasUuids trait on the import model', function () {
+    config([
+        'statamic.users.guards.cp' => 'web',
+        'auth.guards.web' => ['driver' => 'session', 'provider' => 'users'],
+        'auth.providers.users.model' => PrereqsPlainUser::class,
+    ]);
+
+    expect((new OAuthPrerequisites)->importModelHasUuids())->toBeFalse();
+});
+
+it('rejects an integer users id column and accepts a uuid one', function () {
+    $prereqs = new OAuthPrerequisites;
+
+    // No table at all: whatever creates it later creates it bigint.
+    expect($prereqs->usersIdColumnAcceptsUuids())->toBeFalse()
+        ->and($prereqs->usersIdColumnType())->toBeNull();
+
+    // Laravel's stock users table shape — the schema that dooms the import.
+    Schema::create('users', function ($table) {
+        $table->id();
+        $table->string('email');
+    });
+
+    expect($prereqs->usersIdColumnAcceptsUuids())->toBeFalse()
+        ->and($prereqs->usersIdColumnType())->not->toBeNull();
+
+    Schema::drop('users');
+
+    Schema::create('users', function ($table) {
+        $table->uuid('id')->primary();
+        $table->string('email');
+    });
+
+    expect($prereqs->usersIdColumnAcceptsUuids())->toBeTrue();
+
+    Schema::drop('users');
+});
+
+it('reports whether any eloquent users exist', function () {
+    $prereqs = new OAuthPrerequisites;
+
+    // Missing table reports false instead of throwing.
+    expect($prereqs->eloquentUsersExist())->toBeFalse();
+
+    Schema::create('users', function ($table) {
+        $table->uuid('id')->primary();
+        $table->string('email');
+    });
+
+    expect($prereqs->eloquentUsersExist())->toBeFalse();
+
+    DB::table('users')->insert(['id' => 'ae0bbcf0-1d75-4f50-a1e3-6f4c3e9f0000', 'email' => 'user@site.com']);
+
+    expect($prereqs->eloquentUsersExist())->toBeTrue();
+
+    Schema::drop('users');
 });
 
 // Passport is not in require-dev, so in the main CI legs these are always

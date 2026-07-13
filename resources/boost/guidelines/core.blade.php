@@ -32,5 +32,7 @@ idempotent — re-running skips satisfied steps.
 ### Rules
 
 - If the site stores users in files, OAuth setup must first migrate them to the database. `--yes` deliberately refuses to do this on its own: **ask the developer for explicit approval** (and a backup), then re-run with `--migrate-users`.
+- Statamic file users are keyed by **UUID** and `eloquent:import-users` preserves those ids — the user model needs the `HasUuids` trait and `users.id` must be a UUID column. On a stock Laravel schema (bigint `users.id`) the wizard stops and prints the exact conversion steps: add `HasUuids` to the model, migrate `users.id` (and every referencing foreign key) to UUID, `php artisan migrate`, re-run. This is expected and solvable — apply the steps rather than abandoning OAuth setup.
+- Never flip `config/statamic/users.php` to `'eloquent'` by hand while the users table is empty — control panel login reads that table and everyone gets locked out. The wizard flips it only after verifying imported users actually exist, and reverts if they don't.
 - Never hand-edit `config/auth.php`, `config/statamic/users.php`, or the User model for MCP setup — the wizard applies those edits deterministically and prints a manual snippet when a file is non-standard.
 - The connected user needs the **Access MCP** permission (or super).

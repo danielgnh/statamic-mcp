@@ -47,7 +47,19 @@ only human decision.
 
 ## Manual setup
 
-**Step 1 — Migrate users to the database** (skip if already on Eloquent users):
+**Step 1 — Migrate users to the database** (skip if already on Eloquent users).
+
+> **The UUID prerequisite — read this first.** Statamic file users are keyed by UUID,
+> and `eloquent:import-users` preserves those ids: it requires the `HasUuids` trait on
+> your user model, and the ids can only land in a UUID `users.id` column. Laravel's
+> stock users table has a **bigint** auto-increment id — and Statamic ships no
+> migration converting it. Before anything else: add
+> `Illuminate\Database\Eloquent\Concerns\HasUuids` to `App\Models\User`, write a
+> migration converting `users.id` to `$table->uuid('id')->primary()` (plus every
+> column referencing it, e.g. `sessions.user_id`), and run `php artisan migrate`.
+> The wizard checks all of this and prints these exact steps when they're missing;
+> it also patches the generated Statamic auth migration's `user_id` foreign keys to
+> `foreignUuid` for you.
 
 ```bash
 php please auth:migration        # generates the users migration
@@ -56,7 +68,11 @@ php please eloquent:import-users # imports your file users
 ```
 
 Set `'repository' => 'eloquent'` in `config/statamic/users.php` per the
-[Statamic guide](https://statamic.dev/tips/storing-users-in-a-database).
+[Statamic guide](https://statamic.dev/tips/storing-users-in-a-database) — but note
+the importer must run with the eloquent repository configured, and **it exits 0 even
+when it refuses to import**. Verify rows actually landed in the users table before
+walking away: an eloquent repository over an empty table locks everyone out of the
+control panel (the wizard verifies this and reverts the flip automatically).
 
 **Step 2 — Install Passport** and prepare the user model:
 

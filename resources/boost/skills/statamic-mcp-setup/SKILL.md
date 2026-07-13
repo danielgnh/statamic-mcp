@@ -58,6 +58,29 @@ php please mcp:setup --oauth --yes --migrate-users
 The wizard is idempotent — re-running skips satisfied steps, so it is always safe to
 run again after fixing a problem.
 
+### If the wizard stops on the users schema (UUID ids)
+
+Statamic file users are keyed by **UUID**, and `eloquent:import-users` preserves those
+ids. A stock Laravel `users` table (bigint auto-increment `id`) can never hold them —
+Statamic ships no converting migration. The wizard detects this and refuses **before
+touching anything**, printing the remedy. This is a known, solvable state — apply the
+steps, don't abort:
+
+1. Add `Illuminate\Database\Eloquent\Concerns\HasUuids` to `App\Models\User`.
+2. Write a migration converting `users.id` to a UUID primary key
+   (`$table->uuid('id')->primary()`) **and every column referencing it** —
+   `sessions.user_id` on a stock app, plus `role_user.user_id` / `group_user.user_id`
+   if a previous attempt already created those tables. On an empty or throwaway
+   `users` table, drop-and-recreate is the simplest correct conversion.
+3. `php artisan migrate`, then re-run the wizard with `--migrate-users`.
+
+When the schema is ready, the wizard handles the rest itself: it patches the
+generated Statamic auth migration's `user_id` foreign keys to `foreignUuid`, and it
+verifies the import actually landed users before leaving the eloquent repository
+active — if the import comes up empty, it reverts `config/statamic/users.php` so CP
+login keeps working. **Never flip the repository to `eloquent` by hand while the
+users table is empty** — that locks everyone out of the control panel.
+
 ## Verify and connect
 
 After setup, `php please mcp:doctor` must be green. The connector URL is the site URL
@@ -68,6 +91,8 @@ OAuth server and register themselves; no credentials are pasted anywhere.
 ## Troubleshooting
 
 - **503 from the endpoint** — the response body names the missing prerequisite and its remedy; `mcp:doctor` shows the full picture.
+- **Nobody can log into the Control Panel after an OAuth attempt** — `config/statamic/users.php` says `'repository' => 'eloquent'` but the users table is empty (an import that never ran). Set it back to `'file'` to restore login, then follow the UUID schema steps above.
+- **`php artisan migrate` crashes on a duplicate `super` column** — a leftover `*_statamic_auth_tables.php` from an interrupted run; `mcp:doctor` names which duplicate to delete.
 - **OAuth flow completes but every request 401s** — the `api` guard in `config/auth.php` exists but its driver is not `passport` (a leftover session/sanctum guard). The wizard fixes this; re-run it.
 - **Wizard prints a manual snippet instead of editing** — the target file is non-standard and the wizard refused to guess. Show the snippet to the developer and let them place it; do not restructure their file yourself.
 - **403 from tools** — the acting user lacks the **Access MCP** permission; grant it on their role in the Control Panel.

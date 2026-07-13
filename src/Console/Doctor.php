@@ -46,6 +46,7 @@ class Doctor extends Command
         $this->checkEnabled();
         $this->checkMiddleware();
         $this->checkAppUrl();
+        $this->checkAuthMigrations();
 
         if ($mode === 'oauth') {
             $this->checkOAuth();
@@ -276,13 +277,13 @@ class Doctor extends Command
         $driver = $this->prereqs->usersDriver() ?? '(none)';
 
         if ($driver === 'file') {
-            $this->problem("Users are file-based (the '{$repository}' repository resolves to the file driver) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token').");
+            $this->problem("Users are file-based (the '{$repository}' repository resolves to the file driver) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please mcp:setup --oauth' to migrate them (it checks every prerequisite first), or switch to token mode ('auth' => 'token').".$this->uuidReadinessNote());
 
             return;
         }
 
         if ($driver !== 'eloquent') {
-            $this->problem("Users use the '{$driver}' driver (repository: {$repository}) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please auth:migration' then 'php please eloquent:import-users', or switch to token mode ('auth' => 'token').");
+            $this->problem("Users use the '{$driver}' driver (repository: {$repository}) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please mcp:setup --oauth' to migrate them (it checks every prerequisite first), or switch to token mode ('auth' => 'token').".$this->uuidReadinessNote());
 
             return;
         }
@@ -294,6 +295,35 @@ class Doctor extends Command
         if ($passportInstalled) {
             $this->checkUserModelTrait();
         }
+    }
+
+    /**
+     * The migration remedy above is only honest if the schema can actually
+     * take it: Statamic file users are keyed by UUID, eloquent:import-users
+     * preserves those ids, and Laravel's stock users table (bigint id) can
+     * never hold them — the conflict that strands an unattended setup. Name
+     * the conversion here so the operator (or their agent) knows the real
+     * first step.
+     */
+    protected function uuidReadinessNote(): string
+    {
+        $blockers = [];
+
+        if (! $this->prereqs->importModelHasUuids()) {
+            $blockers[] = 'the user model '.($this->prereqs->importUserModel() ?? 'App\Models\User').' is missing the HasUuids trait';
+        }
+
+        if (! $this->prereqs->usersIdColumnAcceptsUuids()) {
+            $table = config('statamic.users.tables.users', 'users');
+            $type = $this->prereqs->usersIdColumnType() ?? 'missing';
+            $blockers[] = "the '{$table}' table id column is '{$type}', not a UUID";
+        }
+
+        if ($blockers === []) {
+            return '';
+        }
+
+        return ' Note: the import preserves file-user UUID ids, but '.implode(' and ', $blockers).' — add the HasUuids trait and convert the id column (plus referencing foreign keys) to UUID first; the setup wizard prints the exact steps.';
     }
 
     protected function checkUserModelTrait(): void

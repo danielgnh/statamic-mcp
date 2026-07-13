@@ -132,6 +132,13 @@ class Setup extends Command
 
         $this->components->warn('OAuth mode requires database users (a Passport constraint). This migrates your user data — back up first if in doubt.');
 
+        // Refuse a doomed run BEFORE asking for (or spending) the caller's
+        // approval: on the schema mismatch there is nothing this wizard can
+        // safely do except name the exact fix.
+        if (! $this->schemaCanTakeUuidImport()) {
+            return false;
+        }
+
         // A data migration never rides along silently: --yes alone won't run
         // it — the caller must say --migrate-users too.
         if (! $this->confirmStep('Migrate users to the database now?', whenYes: (bool) $this->option('migrate-users'))) {
@@ -148,10 +155,21 @@ class Setup extends Command
         // duplicate column instead of moving on.
         if ($this->prereqs->usersTableMigrated()) {
             $this->components->twoColumnDetail('Statamic auth tables', 'skipped — already migrated');
-        } elseif (! $this->runProcess('php please auth:migration')
-            || ! $this->runProcess('php artisan migrate')) {
-            return false;
+        } else {
+            if (! $this->runProcess('php please auth:migration')) {
+                return false;
+            }
+
+            $this->patchAuthMigrationUserFks();
+
+            if (! $this->runProcess('php artisan migrate')) {
+                return false;
+            }
         }
+
+        // Remember what to restore if the import comes up empty — the
+        // in-memory config still holds the value this run STARTED with.
+        $original = $this->prereqs->usersRepository();
 
         // Flip the repository BEFORE importing: eloquent:import-users refuses to
         // run until config/statamic/users.php names the eloquent repository.
@@ -164,7 +182,107 @@ class Setup extends Command
             fn () => $editor->snippet(),
         );
 
-        return $this->runProcess('php please eloquent:import-users');
+        if (! $this->runProcess('php please eloquent:import-users')) {
+            $this->revertRepositoryFlip($original);
+
+            return false;
+        }
+
+        // The importer exits 0 even when it refused to import (it prints the
+        // error and returns success anyway) — trust rows, not exit codes.
+        // Leaving 'eloquent' live over an empty table locks everyone out of
+        // the control panel.
+        if (! $this->prereqs->eloquentUsersExist()) {
+            $this->components->error('eloquent:import-users reported success but no users landed in the database — scroll up for the importer output naming the reason.');
+
+            $this->revertRepositoryFlip($original);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Statamic file users are keyed by UUID and eloquent:import-users
+     * preserves those ids — so the import needs the HasUuids trait on the
+     * user model and a UUID-capable users.id column. Laravel's stock users
+     * table (bigint auto-increment id) can never take it, and Statamic ships
+     * no converting migration. Detect that up front and print the exact
+     * remedy instead of half-migrating: the fix is the operator's (or their
+     * agent's) call, because it rewrites the auth schema.
+     */
+    protected function schemaCanTakeUuidImport(): bool
+    {
+        $problems = [];
+        $model = $this->prereqs->importUserModel() ?? 'App\Models\User';
+        $table = config('statamic.users.tables.users', 'users');
+
+        if (! $this->prereqs->importModelHasUuids()) {
+            $problems[] = $model.' is missing the Illuminate\Database\Eloquent\Concerns\HasUuids trait.';
+        }
+
+        if (! $this->prereqs->usersIdColumnAcceptsUuids()) {
+            $type = $this->prereqs->usersIdColumnType() ?? 'missing';
+            $problems[] = "The '{$table}' table id column is '{$type}' — a UUID needs a uuid/string column.";
+        }
+
+        if ($problems === []) {
+            return true;
+        }
+
+        $this->components->error('Statamic file users are keyed by UUID, and eloquent:import-users preserves those ids — this site cannot take them yet:');
+
+        foreach ($problems as $problem) {
+            $this->line('  • '.$problem);
+        }
+
+        $this->printManual(
+            "1. Add the HasUuids trait to {$model}:\n"
+            ."   use Illuminate\\Database\\Eloquent\\Concerns\\HasUuids;\n"
+            ."2. Write a migration converting the '{$table}' primary key to a UUID —\n"
+            ."   \$table->uuid('id')->primary() — and every column referencing it\n"
+            ."   (sessions.user_id; role_user.user_id and group_user.user_id if those tables exist).\n"
+            ."3. Run: php artisan migrate\n"
+            .'4. Re-run this wizard.'
+        );
+
+        return false;
+    }
+
+    /**
+     * Statamic's generated auth migration builds role_user/group_user with
+     * bigint foreignId('user_id') columns — but this branch only ever runs
+     * against a UUID users.id (schemaCanTakeUuidImport guarantees it), where
+     * those foreign keys can never attach. Patch the file this wizard itself
+     * just generated before running it.
+     */
+    protected function patchAuthMigrationUserFks(): void
+    {
+        $files = glob(database_path('migrations/*_statamic_auth_tables.php')) ?: [];
+
+        if ($files === []) {
+            return;
+        }
+
+        sort($files);
+        $file = end($files);
+        $contents = file_get_contents($file);
+        $patched = str_replace("foreignId('user_id')", "foreignUuid('user_id')", $contents);
+
+        if ($patched !== $contents) {
+            file_put_contents($file, $patched);
+            $this->components->twoColumnDetail("user_id foreign keys → foreignUuid in {$file}", 'patched');
+        }
+    }
+
+    protected function revertRepositoryFlip(string $repository): void
+    {
+        $editor = app(UsersRepositoryEditor::class);
+
+        if ($editor->apply(config_path('statamic/users.php'), $repository) === EditResult::Applied) {
+            $this->components->warn("Reverted 'repository' => '{$repository}' in config/statamic/users.php — control panel login keeps working on your existing users while you fix the problem above.");
+        }
     }
 
     protected function ensurePassportInstalled(): bool
