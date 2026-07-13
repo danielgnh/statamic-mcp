@@ -4,9 +4,8 @@
 [![Tests](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-A remote (streamable-HTTP) **MCP server for Statamic v6**. Connect Claude Code, Cursor,
-claude.ai, Claude Desktop, or ChatGPT to a live Statamic site and manage entries,
-taxonomy terms, globals, and assets — with Statamic's own permission system deciding
+This package presents a remote  **MCP server for Statamic v6**, which makes it possible to manage your content (entries,
+taxonomy terms, globals, and assets) via any AI provider. Statamic's permission system is deciding
 who may do what. Built on the first-party [`laravel/mcp`](https://laravel.com/docs/mcp) package.
 
 ## Requirements
@@ -19,11 +18,9 @@ who may do what. Built on the first-party [`laravel/mcp`](https://laravel.com/do
 
 ```bash
 composer require danielgnh/statamic-mcp
-php please mcp:token you@site.com
 ```
 
-That's it — no config publishing required. The token is printed **once**, along with
-ready-to-paste client snippets.
+That's it — no config publishing required.
 
 The connected user needs the **Access MCP** permission (or super). Grant it in the
 Control Panel under the role's permissions — `mcp:token` warns you at issuance if
@@ -41,41 +38,18 @@ unattended, which is what the bundled [Laravel Boost](https://laravel.com/docs/b
 guidelines teach AI coding agents to use. Boost users get them automatically on
 `boost:install`.
 
-## Connecting a client
+## Token vs. OAuth mode
 
-```bash
-# Claude Code
-claude mcp add --transport http statamic https://your-site.com/mcp/statamic --header "Authorization: Bearer <token>"
-```
+| Client                                                  | Token mode                           | OAuth mode |
+|---------------------------------------------------------|--------------------------------------|------------|
+| Claude Code / Cursor                                    | ✅                                    | ✅          |
+| claude.ai / Claude Desktop connectors (individual plan) | ❌ no static headers                  | ✅          |
+| Claude Team/Enterprise connectors                       | ⚠️ org-admin-configured headers only | ✅          |
+| ChatGPT connectors                                      | ❌ OAuth or no-auth only              | ✅          |
 
-```json
-// Cursor — .cursor/mcp.json
-{
-    "mcpServers": {
-        "statamic": {
-            "url": "https://your-site.com/mcp/statamic",
-            "headers": {
-                "Authorization": "Bearer mcp_xxxxxxxxxxxx_yyyyyyyy"
-            }
-        }
-    }
-}
-```
+## What Statamic MCP can do?
 
-**Rule of thumb:** developer tools (Claude Code, Cursor, any header-capable client)
-work with token mode today; individual-plan claude.ai / Claude Desktop connectors
-and ChatGPT require [OAuth mode](#oauth-mode).
-
-| Client | Token mode | OAuth mode |
-|---|---|---|
-| Claude Code / Cursor | ✅ | ✅ |
-| claude.ai / Claude Desktop connectors (individual plan) | ❌ no static headers | ✅ |
-| Claude Team/Enterprise connectors | ⚠️ org-admin-configured headers only | ✅ |
-| ChatGPT connectors | ❌ OAuth or no-auth only | ✅ |
-
-## What it can do
-
-19 tools across five areas — every agent session should start with `statamic_overview`,
+19 tools across five areas — every agent session is starting with `statamic_overview`,
 which reports the sites, resources, and capabilities visible to the acting user:
 
 - **Discovery** — `statamic_overview`, `blueprints_get` (fields + a valid example payload for writes)
@@ -142,18 +116,18 @@ remedy** — the rest of your site is untouched.
 php artisan vendor:publish --tag=statamic-mcp-config   # → config/statamic/mcp.php
 ```
 
-| Key | Default | What it does |
-|---|---|---|
-| `enabled` | `true` (`STATAMIC_MCP_ENABLED`) | Kill switch. When `false` the MCP route is never registered. |
-| `route` | `mcp/statamic` | Where the streamable-HTTP endpoint mounts. |
-| `auth` | `token` (`STATAMIC_MCP_AUTH`) | `token` or `oauth`. |
-| `middleware` | `['throttle:60,1']` | Prepended to the auth middleware on the MCP route. Plain Laravel. |
-| `read_only` | `false` (`STATAMIC_MCP_READ_ONLY`) | Hides every write/delete tool from the server entirely. |
-| `deletes` | `false` (`STATAMIC_MCP_DELETES`) | Delete tools are not even registered unless `true`. |
-| `resources` | all `true` | Exposure allowlist per type: `true` = all handles, or an array like `'collections' => ['blog', 'pages']`. |
-| `per_page` | `25` | Default page size for list tools (hard-capped at 100). |
-| `uploads.max_size` | `10240` | Per-upload cap in **kilobytes** for `assets_upload`. |
-| `uploads.source_allowlist` | `null` | Exact-host allowlist for `assets_upload` URLs. `null` = any public host; private/reserved addresses are always blocked. |
+| Key                        | Default                            | What it does                                                                                                            |
+|----------------------------|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `enabled`                  | `true` (`STATAMIC_MCP_ENABLED`)    | Kill switch. When `false` the MCP route is never registered.                                                            |
+| `route`                    | `mcp/statamic`                     | Where the streamable-HTTP endpoint mounts.                                                                              |
+| `auth`                     | `token` (`STATAMIC_MCP_AUTH`)      | `token` or `oauth`.                                                                                                     |
+| `middleware`               | `['throttle:60,1']`                | Prepended to the auth middleware on the MCP route. Plain Laravel.                                                       |
+| `read_only`                | `false` (`STATAMIC_MCP_READ_ONLY`) | Hides every write/delete tool from the server entirely.                                                                 |
+| `deletes`                  | `false` (`STATAMIC_MCP_DELETES`)   | Delete tools are not even registered unless `true`.                                                                     |
+| `resources`                | all `true`                         | Exposure allowlist per type: `true` = all handles, or an array like `'collections' => ['blog', 'pages']`.               |
+| `per_page`                 | `25`                               | Default page size for list tools (hard-capped at 100).                                                                  |
+| `uploads.max_size`         | `10240`                            | Per-upload cap in **kilobytes** for `assets_upload`.                                                                    |
+| `uploads.source_allowlist` | `null`                             | Exact-host allowlist for `assets_upload` URLs. `null` = any public host; private/reserved addresses are always blocked. |
 
 > Upgrading from v1.0? Re-publish the config or add `'asset_containers' => true`
 > to `resources` — a published config **without** the key exposes no containers
@@ -185,12 +159,12 @@ php please mcp:doctor
 One command answers "why doesn't my MCP endpoint work?" — it runs every check
 without short-circuiting and names each problem with the exact remedy.
 
-| Response | Meaning |
-|---|---|
-| `401` | Missing, malformed, expired, or revoked token — deliberately identical in every case. |
-| `403` "requires 'access mcp'…" | Authenticated fine, but the user lacks the `Access MCP` permission. |
-| `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. |
-| `404` on the endpoint | MCP is disabled, or failed to mount — run `mcp:doctor`. |
+| Response                       | Meaning                                                                               |
+|--------------------------------|---------------------------------------------------------------------------------------|
+| `401`                          | Missing, malformed, expired, or revoked token — deliberately identical in every case. |
+| `403` "requires 'access mcp'…" | Authenticated fine, but the user lacks the `Access MCP` permission.                   |
+| `503` + `remedy` (OAuth mode)  | An OAuth prerequisite is missing; the body names the exact fix.                       |
+| `404` on the endpoint          | MCP is disabled, or failed to mount — run `mcp:doctor`.                               |
 
 Details on every doctor check, and the MCP Inspector, are in
 **[docs/troubleshooting.md](docs/troubleshooting.md)**.
