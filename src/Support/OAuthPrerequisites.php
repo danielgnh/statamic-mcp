@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Support;
 
+use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Passport;
 
 /**
@@ -28,6 +29,26 @@ class OAuthPrerequisites
     public function usersAreEloquent(): bool
     {
         return $this->usersDriver() === 'eloquent';
+    }
+
+    /**
+     * Whether the Statamic auth columns are already on the users table.
+     * statamic:auth:migration is not idempotent — it ADDs `super` with no
+     * guard — so a second run dies with "Duplicate column 'super'". The
+     * installer checks this to skip re-generating a migration that already
+     * ran (a half-finished earlier run, or a hand-rolled Statamic setup).
+     * DB unreachable? Report "not migrated" and let `migrate` surface the
+     * real connection error itself.
+     */
+    public function usersTableMigrated(): bool
+    {
+        $table = config('statamic.users.tables.users', 'users');
+
+        return rescue(
+            fn () => Schema::hasTable($table) && Schema::hasColumn($table, 'super'),
+            false,
+            report: false,
+        );
     }
 
     public function passportInstalled(): bool

@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Laravel\Passport\Passport;
 
@@ -212,6 +213,48 @@ it('passes the users and guard checks independently of Passport', function () {
         ->doesntExpectOutputToContain('HasApiTokens')
         ->assertExitCode(1);
 })->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
+
+it('warns about a leftover duplicate auth-tables migration', function () {
+    $dir = database_path('migrations');
+    File::ensureDirectoryExists($dir);
+
+    $kept = $dir.'/2026_07_13_100000_statamic_auth_tables.php';
+    $orphan = $dir.'/2026_07_13_155644_statamic_auth_tables.php';
+    File::put($kept, '<?php // first');
+    File::put($orphan, '<?php // orphan');
+
+    // The whole warning is one line, so assert against the captured output
+    // directly — expectsOutputToContain consumes a line once matched and can't
+    // match several substrings on the same line.
+    try {
+        $exit = Artisan::call('statamic:mcp:doctor');
+        $output = Artisan::output();
+    } finally {
+        File::delete([$kept, $orphan]);
+    }
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('2026_07_13_155644_statamic_auth_tables.php')
+        ->and($output)->toContain('looks like a leftover from an interrupted OAuth setup')
+        // The oldest file is the one that actually ran — keep it, drop the rest.
+        ->and($output)->toContain('keeping 2026_07_13_100000_statamic_auth_tables.php');
+});
+
+it('stays silent when only one auth-tables migration exists', function () {
+    $dir = database_path('migrations');
+    File::ensureDirectoryExists($dir);
+
+    $only = $dir.'/2026_07_13_100000_statamic_auth_tables.php';
+    File::put($only, '<?php // healthy single migration');
+
+    try {
+        $this->artisan('statamic:mcp:doctor')
+            ->doesntExpectOutputToContain('leftover from an interrupted OAuth setup')
+            ->assertExitCode(0);
+    } finally {
+        File::delete($only);
+    }
+});
 
 it('warns when APP_URL is the Laravel default', function () {
     $this->artisan('statamic:mcp:doctor')

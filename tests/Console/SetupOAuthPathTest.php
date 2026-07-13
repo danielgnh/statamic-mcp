@@ -302,6 +302,63 @@ it('needs no --migrate-users under --yes when users are already eloquent', funct
         ->and($fakes[EnvWriter::class]->writes)->toBe([['STATAMIC_MCP_AUTH', 'oauth']]);
 });
 
+it('skips the auth migration when the users table is already migrated', function () {
+    Process::fake();
+    $fakes = fakeEditors();
+
+    // Columns already present (a half-finished earlier run or a manual setup),
+    // but config still names the file repository.
+    app()->instance(OAuthPrerequisites::class, new class extends OAuthPrerequisites
+    {
+        public function usersAreEloquent(): bool
+        {
+            return false;
+        }
+
+        public function usersTableMigrated(): bool
+        {
+            return true;
+        }
+
+        public function passportInstalled(): bool
+        {
+            return true;
+        }
+
+        public function apiGuardIsPassport(): bool
+        {
+            return true;
+        }
+
+        public function passportKeysExist(): bool
+        {
+            return true;
+        }
+
+        public function userModel(): ?string
+        {
+            return SetupWizardTestUser::class;
+        }
+
+        public function userModelHasTrait(): bool
+        {
+            return true;
+        }
+    });
+
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--yes' => true, '--migrate-users' => true])
+        ->expectsOutputToContain('already migrated')
+        ->assertExitCode(0);
+
+    // The crash-causing pair never runs a second time...
+    Process::assertDidntRun('php please auth:migration');
+    Process::assertDidntRun('php artisan migrate');
+    // ...but the repo flip and import still complete the switch to database users.
+    Process::assertRan('php please eloquent:import-users');
+
+    expect($fakes[UsersRepositoryEditor::class]->applied)->toBe([config_path('statamic/users.php')]);
+});
+
 it('rejects --oauth combined with --token', function () {
     $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--token' => true])
         ->expectsOutputToContain('not both')

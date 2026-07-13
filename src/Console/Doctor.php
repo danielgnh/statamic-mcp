@@ -46,6 +46,7 @@ class Doctor extends Command
         $this->checkEnabled();
         $this->checkMiddleware();
         $this->checkAppUrl();
+        $this->checkAuthMigrations();
 
         if ($mode === 'oauth') {
             $this->checkOAuth();
@@ -149,6 +150,27 @@ class Doctor extends Command
             // Bearer over plaintext http: every token on the wire is readable.
             $this->warn('[WARN] APP_URL is plain http — Bearer tokens over http travel unencrypted. Serve the MCP endpoint over https.');
         }
+    }
+
+    /**
+     * Statamic's auth:migration is not idempotent — a second file re-adds the
+     * `super` column and crashes `php artisan migrate`. An interrupted OAuth
+     * setup leaves exactly that: a duplicate *_statamic_auth_tables.php the
+     * installer never ran. A healthy site has exactly one, so 2+ is the tell.
+     */
+    protected function checkAuthMigrations(): void
+    {
+        $files = glob(database_path('migrations/*_statamic_auth_tables.php')) ?: [];
+
+        if (count($files) < 2) {
+            return;
+        }
+
+        sort($files);
+        $keep = basename(array_shift($files));
+        $orphans = implode(', ', array_map('basename', $files));
+
+        $this->warn("[WARN] {$orphans} looks like a leftover from an interrupted OAuth setup — a second Statamic auth migration re-adds the 'super' column and would crash 'php artisan migrate'. Delete it, keeping {$keep}.");
     }
 
     protected function checkTokens(TokenRepository $tokens): void
