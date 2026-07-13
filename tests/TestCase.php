@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tests;
 
 use Danielgnh\StatamicMcp\ServiceProvider;
+use Illuminate\Encryption\Encrypter;
 use Laravel\Mcp\Server\McpServiceProvider;
 use Statamic\Testing\AddonTestCase;
 use Statamic\Testing\Concerns\PreventsSavingStacheItemsToDisk;
@@ -14,6 +15,7 @@ abstract class TestCase extends AddonTestCase
 
     protected string $addonServiceProvider = ServiceProvider::class;
 
+    #[\Override]
     protected function getPackageProviders($app)
     {
         // AddonTestCase skips composer package discovery, so laravel/mcp's own
@@ -25,9 +27,15 @@ abstract class TestCase extends AddonTestCase
         ]);
     }
 
+    #[\Override]
     protected function getEnvironmentSetUp($app)
     {
         parent::getEnvironmentSetUp($app);
+
+        // Generate a throwaway APP_KEY per run instead of committing one to phpunit.xml,
+        // so secret scanners don't flag a key-shaped literal in the public repo.
+        $cipher = $app['config']->get('app.cipher', 'AES-256-CBC');
+        $app['config']->set('app.key', 'base64:'.base64_encode(Encrypter::generateKey($cipher)));
 
         // Blueprints and roles/groups are not Stache stores, so PreventsSavingStacheItemsToDisk
         // does not redirect them. Point them into the per-test dev-null sandbox too, otherwise
