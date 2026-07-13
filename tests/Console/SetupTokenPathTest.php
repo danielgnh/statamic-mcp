@@ -26,6 +26,23 @@ it('issues a first token via the token path', function () {
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
 });
 
+it('issues a token unattended with --token --user --yes', function () {
+    $user = Fixtures::makeUser();
+
+    $this->artisan('statamic:mcp:setup', ['--token' => true, '--user' => $user->email(), '--yes' => true])
+        ->assertExitCode(0);
+
+    expect(app(TokenRepository::class)->all())->toHaveCount(1);
+});
+
+it('fails under --yes when token mode has no --user', function () {
+    $this->artisan('statamic:mcp:setup', ['--token' => true, '--yes' => true])
+        ->expectsOutputToContain('--user=you@site.com')
+        ->assertExitCode(1);
+
+    expect(app(TokenRepository::class)->all())->toHaveCount(0);
+});
+
 it('fails cleanly when the email matches no user', function () {
     $this->artisan('statamic:mcp:setup')
         ->expectsChoice(

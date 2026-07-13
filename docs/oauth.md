@@ -28,6 +28,23 @@ running `mcp:doctor` as proof.
 The manual steps below are exactly what the wizard does (and what it prints when
 it bails on a non-standard file).
 
+### Unattended (for scripts and AI agents)
+
+```bash
+php please mcp:setup --oauth --yes
+```
+
+`--yes` applies every change without confirming — each edit is still printed. The one
+thing `--yes` refuses to do on its own is migrate file users to the database: that is
+a data migration, so it only runs when you also pass `--migrate-users` (back up
+first). Token mode is scriptable too: `php please mcp:setup --token --user=you@site.com --yes`.
+
+If the project uses [Laravel Boost](https://laravel.com/docs/boost), this addon ships
+AI guidelines and a `statamic-mcp-setup` skill that teach coding agents exactly this
+flow — `boost:install` / `boost:update` picks them up automatically, so "set up OAuth
+for the MCP server" becomes a one-sentence request with the user migration as the
+only human decision.
+
 ## Manual setup
 
 **Step 1 — Migrate users to the database** (skip if already on Eloquent users):

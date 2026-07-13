@@ -22,9 +22,14 @@ class Setup extends Command
 {
     use RunsInPlease;
 
-    protected $signature = 'statamic:mcp:setup';
+    protected $signature = 'statamic:mcp:setup
+        {--oauth : Set up OAuth mode without asking which mode}
+        {--token : Set up token mode without asking which mode}
+        {--user= : Email for the first token (token mode)}
+        {--yes : Run unattended — apply every change without confirming}
+        {--migrate-users : Allow --yes to migrate file users to the database}';
 
-    protected $description = 'Interactive setup wizard for the MCP server — token or OAuth mode.';
+    protected $description = 'Setup wizard for the MCP server — token or OAuth mode. Interactive by default, unattended with --yes.';
 
     protected OAuthPrerequisites $prereqs;
 
@@ -32,17 +37,27 @@ class Setup extends Command
     {
         $this->prereqs = $prereqs;
 
+        if ($this->option('oauth') && $this->option('token')) {
+            $this->components->error('Pass either --oauth or --token, not both.');
+
+            return self::FAILURE;
+        }
+
         $this->components->info('Statamic MCP setup');
 
-        $mode = select(
-            label: 'How will AI clients connect to this site?',
-            options: [
-                'token' => 'Token — Claude Code, Cursor, MCP Inspector',
-                'oauth' => 'OAuth — claude.ai, Claude Desktop, ChatGPT connectors',
-            ],
-            default: config('statamic.mcp.auth', 'token'),
-            hint: 'OAuth requires database (Eloquent) users — a Passport constraint.',
-        );
+        $mode = match (true) {
+            (bool) $this->option('oauth') => 'oauth',
+            (bool) $this->option('token') => 'token',
+            default => select(
+                label: 'How will AI clients connect to this site?',
+                options: [
+                    'token' => 'Token — Claude Code, Cursor, MCP Inspector',
+                    'oauth' => 'OAuth — claude.ai, Claude Desktop, ChatGPT connectors',
+                ],
+                default: config('statamic.mcp.auth', 'token'),
+                hint: 'OAuth requires database (Eloquent) users — a Passport constraint.',
+            ),
+        };
 
         return $mode === 'oauth'
             ? $this->setupOAuth($env)
@@ -60,11 +75,19 @@ class Setup extends Command
             );
         }
 
-        $email = text(
-            label: 'Which Statamic user should the first token act as?',
-            placeholder: 'you@site.com',
-            required: true,
-        );
+        if (! $email = $this->option('user')) {
+            if ($this->option('yes')) {
+                $this->components->error('Token mode with --yes needs --user=you@site.com.');
+
+                return self::FAILURE;
+            }
+
+            $email = text(
+                label: 'Which Statamic user should the first token act as?',
+                placeholder: 'you@site.com',
+                required: true,
+            );
+        }
 
         // mcp:token owns issuance, output, and the permission/APP_URL warnings.
         return $this->call('statamic:mcp:token', ['email' => $email]);
@@ -109,8 +132,12 @@ class Setup extends Command
 
         $this->components->warn('OAuth mode requires database users (a Passport constraint). This migrates your user data — back up first if in doubt.');
 
-        if (! confirm('Migrate users to the database now?')) {
-            $this->printManual('Migrate users per https://statamic.dev/tips/storing-users-in-a-database, then re-run this wizard.');
+        // A data migration never rides along silently: --yes alone won't run
+        // it — the caller must say --migrate-users too.
+        if (! $this->confirmStep('Migrate users to the database now?', whenYes: (bool) $this->option('migrate-users'))) {
+            $this->printManual($this->option('yes')
+                ? 'Re-run with --migrate-users to allow the migration, or migrate manually per https://statamic.dev/tips/storing-users-in-a-database.'
+                : 'Migrate users per https://statamic.dev/tips/storing-users-in-a-database, then re-run this wizard.');
 
             return false; // everything after this depends on Eloquent users
         }
@@ -141,7 +168,7 @@ class Setup extends Command
             return true;
         }
 
-        if (! confirm('Install laravel/passport via composer now?')) {
+        if (! $this->confirmStep('Install laravel/passport via composer now?')) {
             $this->printManual('composer require laravel/passport');
 
             return false; // every remaining step needs the package
@@ -158,7 +185,7 @@ class Setup extends Command
             return true;
         }
 
-        if (! confirm('Publish Passport migrations, run them, and generate encryption keys?')) {
+        if (! $this->confirmStep('Publish Passport migrations, run them, and generate encryption keys?')) {
             $this->printManual("php artisan vendor:publish --tag=passport-migrations\nphp artisan migrate\nphp artisan passport:keys");
 
             return false;
@@ -241,7 +268,7 @@ class Setup extends Command
 
     protected function offerConsentViews(): bool
     {
-        if (! confirm('Publish the OAuth consent screen views (customizable Blade)?', default: false)) {
+        if (! $this->confirmStep('Publish the OAuth consent screen views (customizable Blade)?', whenYes: false, default: false)) {
             return true;
         }
 
@@ -307,10 +334,24 @@ class Setup extends Command
     }
 
     /**
+     * Every confirmation goes through here so --yes means one thing
+     * everywhere: answer with $whenYes instead of prompting. Steps that are
+     * optional (or dangerous) say so by passing whenYes: false.
+     */
+    protected function confirmStep(string $label, bool $whenYes = true, bool $default = true): bool
+    {
+        if ($this->option('yes')) {
+            return $whenYes;
+        }
+
+        return confirm($label, default: $default);
+    }
+
+    /**
      * The one rhythm every file edit follows: announce the change and the
      * file, confirm, apply — and on decline or bail, print the manual snippet
-     * and carry on. The wizard never edits silently and never mangles a file
-     * it doesn't recognize.
+     * and carry on. The wizard never edits silently (--yes still shows every
+     * change) and never mangles a file it doesn't recognize.
      *
      * @param  Closure(): EditResult  $apply
      * @param  Closure(): string  $snippet
@@ -324,7 +365,7 @@ class Setup extends Command
         $this->line('  '.str_replace("\n", "\n  ", $snippet()));
         $this->line('');
 
-        if (! confirm('Apply this change to '.$path.'?')) {
+        if (! $this->confirmStep('Apply this change to '.$path.'?')) {
             $this->components->warn('Skipped — apply the snippet above manually before connecting a client.');
 
             return;
