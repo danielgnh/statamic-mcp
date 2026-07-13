@@ -142,12 +142,19 @@ class Setup extends Command
             return false; // everything after this depends on Eloquent users
         }
 
-        if (! $this->runProcess('php please auth:migration')
-            || ! $this->runProcess('php artisan migrate')
-            || ! $this->runProcess('php please eloquent:import-users')) {
+        // Only generate + run the auth migration when the columns aren't there
+        // already. Statamic's migration re-adds `super` unguarded, so re-running
+        // it (a half-finished earlier run, a manual setup) crashes on the
+        // duplicate column instead of moving on.
+        if ($this->prereqs->usersTableMigrated()) {
+            $this->components->twoColumnDetail('Statamic auth tables', 'skipped — already migrated');
+        } elseif (! $this->runProcess('php please auth:migration')
+            || ! $this->runProcess('php artisan migrate')) {
             return false;
         }
 
+        // Flip the repository BEFORE importing: eloquent:import-users refuses to
+        // run until config/statamic/users.php names the eloquent repository.
         $editor = app(UsersRepositoryEditor::class);
 
         $this->applyEdit(
@@ -157,7 +164,7 @@ class Setup extends Command
             fn () => $editor->snippet(),
         );
 
-        return true;
+        return $this->runProcess('php please eloquent:import-users');
     }
 
     protected function ensurePassportInstalled(): bool
