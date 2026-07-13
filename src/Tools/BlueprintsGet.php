@@ -56,6 +56,11 @@ class BlueprintsGet extends Tool
 
         $this->ensureExposed($this->configKey($type), $handle);
 
+        // A blueprint is the field schema for a resource — gate reading it on the
+        // same native permission the content read tools require, so an exposed
+        // handle the user can't view doesn't leak its shape through this tool.
+        $this->ensurePermission($this->user($request), $this->viewPermission($type, $handle));
+
         $blueprints = $this->blueprintsFor($type, $handle);
 
         if ($blueprints->isEmpty()) {
@@ -112,6 +117,21 @@ class BlueprintsGet extends Tool
         }
 
         return $this->json($payload);
+    }
+
+    /**
+     * The native permission that gates viewing this resource's content — and
+     * therefore its schema. Mirrors statamic_overview / globals_get: v6 has no
+     * 'view {handle} globals', so edit is the only per-set gate for globals.
+     */
+    private function viewPermission(string $type, string $handle): string
+    {
+        return match ($type) {
+            'collection' => "view {$handle} entries",
+            'taxonomy' => "view {$handle} terms",
+            'global' => "edit {$handle} globals",
+            default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
+        };
     }
 
     /**

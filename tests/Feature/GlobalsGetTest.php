@@ -159,6 +159,38 @@ it('denies reading a set without the edit permission, naming it', function () {
         ->assertHasErrors(["requires 'edit settings globals' — grant it to a role of {$user->email()} in the Control Panel"]);
 });
 
+it('returns an empty-but-valid payload for a configured site with no saved localization', function () {
+    Fixtures::multisite();
+    Fixtures::settings(); // saves only the 'en' localization
+
+    // Configure the set for 'de' without ever saving a 'de' localization:
+    // GlobalSet::in('de') is null here, which TypeError'd before the
+    // makeLocalization() stand-in was mirrored from globals_update.
+    GlobalSet::findByHandle('settings')->sites(['en', 'de'])->save();
+
+    $user = Fixtures::makeUser('edit settings globals', 'access de site');
+
+    Server::actingAs($user)
+        ->tool(GlobalsGet::class, ['handle' => 'settings', 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"site":"de"')
+        ->assertSee('"data":[]');
+});
+
+it('lists a configured-but-unsaved site localization without erroring', function () {
+    Fixtures::multisite();
+    Fixtures::settings();
+
+    // settings passes the 'de' site filter (configured for it) but has no
+    // saved 'de' localization — the listing path must not TypeError on null.
+    GlobalSet::findByHandle('settings')->sites(['en', 'de'])->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(GlobalsGet::class, ['site' => 'de'])
+        ->assertOk()
+        ->assertSee('"handle":"settings"');
+});
+
 it('omits sets not configured for the requested site from the listing', function () {
     Fixtures::multisite();
     Fixtures::settings();

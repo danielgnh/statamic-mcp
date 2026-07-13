@@ -11,7 +11,7 @@ it('returns fields and a bounded example payload for a collection blueprint', fu
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view blog entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
@@ -28,7 +28,7 @@ it('falls back to null plus a type note for a bard field', function () {
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view blog entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
@@ -41,7 +41,7 @@ it('returns the blueprint of a taxonomy', function () {
     Fixtures::site();
     Fixtures::tags();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view tags terms');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'taxonomy', 'handle' => 'tags'])
@@ -55,7 +55,7 @@ it('returns the blueprint of a global set', function () {
     Fixtures::site();
     Fixtures::settings();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('edit settings globals');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'global', 'handle' => 'settings'])
@@ -78,7 +78,7 @@ it('generates real examples for select, toggle, integer, and date fields', funct
         'launch_date' => ['type' => 'date'],
     ])->setHandle('page')->setNamespace('collections.pages')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view pages entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
@@ -103,7 +103,7 @@ it('shapes date examples by save format and mode, matching the DateFieldtype rul
         'stay' => ['type' => 'date', 'mode' => 'range', 'format' => 'Y-m-d'],
     ])->setHandle('event')->setNamespace('collections.events')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view events entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'events'])
@@ -126,7 +126,7 @@ it('wraps the first option in an array for a multi-select', function () {
         'material' => ['type' => 'select', 'options' => ['wool' => 'Wool', 'cotton' => 'Cotton']],
     ])->setHandle('product')->setNamespace('collections.shop')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view shop entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'shop'])
@@ -145,7 +145,7 @@ it('returns the requested blueprint when a collection has several', function () 
         'video_url' => ['type' => 'text'],
     ])->setHandle('video')->setNamespace('collections.blog')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view blog entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog', 'blueprint' => 'video'])
@@ -165,7 +165,7 @@ it('emits obviously fake placeholders for entries and users relation fields', fu
         'authors' => ['type' => 'users'],
     ])->setHandle('release')->setNamespace('collections.press')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view press entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'press'])
@@ -184,7 +184,7 @@ it('excludes computed fields from the example and marks them not writable', func
         'word_count' => ['type' => 'integer', 'visibility' => 'computed'],
     ])->setHandle('report')->setNamespace('collections.reports')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view reports entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'reports'])
@@ -222,7 +222,7 @@ it('rejects an unknown blueprint handle, listing available blueprints', function
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view blog entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog', 'blueprint' => 'story'])
@@ -240,7 +240,7 @@ it('gives assets fields an actionable example pointing at the assets tools', fun
         'gallery' => ['type' => 'assets', 'container' => 'images'],
     ])->setHandle('post')->setNamespace('collections.posts')->save();
 
-    $user = Fixtures::makeUser();
+    $user = Fixtures::makeUser('view posts entries');
 
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
@@ -251,6 +251,20 @@ it('gives assets fields an actionable example pointing at the assets tools', fun
         ->assertSee("container 'images'")
         ->assertSee('assets_list')
         ->assertSee('assets_upload');
+});
+
+it('denies reading a blueprint the user has no permission to view', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    // 'access mcp' only — exposed, but no 'view blog entries'. The schema must
+    // not leak through blueprints_get to a user who can't view the content.
+    $user = Fixtures::makeUser();
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertHasErrors(["requires 'view blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
 });
 
 it('rejects an unknown type via validation', function () {

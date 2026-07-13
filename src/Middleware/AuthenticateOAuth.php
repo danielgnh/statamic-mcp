@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Middleware;
 
 use Closure;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
@@ -27,6 +28,16 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class AuthenticateOAuth
 {
+    /**
+     * The scope laravel/mcp advertises in its OAuth discovery metadata
+     * (scopes_supported) and requests during the connector flow — see
+     * Laravel\Mcp\Server\Registrar::ensureMcpScope(). Passport authenticates any
+     * valid token; gating on this scope keeps a token minted for the host app's
+     * own SPA/mobile API — which never carries it — from doubling as an MCP
+     * entry point. Kept in sync with the vendor string (no public constant).
+     */
+    protected const MCP_SCOPE = 'mcp:use';
+
     public function handle(Request $request, Closure $next): Response
     {
         if ($failure = $this->preflightFailure()) {
@@ -74,11 +85,34 @@ class AuthenticateOAuth
         // User::current()) must resolve from the guard Passport authenticated.
         Auth::shouldUse('api');
 
-        if (! Auth::guard('api')->check()) {
+        $guard = Auth::guard('api');
+
+        if (! $guard->check()) {
             return response()->json(['error' => 'Unauthenticated.'], 401, ['WWW-Authenticate' => 'Bearer']);
         }
 
+        if (! $this->tokenGrantsMcpScope($guard->user())) {
+            return response()->json(
+                ['error' => sprintf('The access token is missing the required "%s" scope.', self::MCP_SCOPE)],
+                403,
+                ['WWW-Authenticate' => sprintf('Bearer error="insufficient_scope", scope="%s"', self::MCP_SCOPE)],
+            );
+        }
+
         return $next($request);
+    }
+
+    /**
+     * Passport's '*' superscope satisfies tokenCan by design (a deliberate
+     * full-access grant), so this rejects only tokens issued for other purposes.
+     * A user without HasApiTokens can't prove scope — fail closed; OAuth mode
+     * requires Passport users, so this branch only fires on a misconfigured guard.
+     */
+    protected function tokenGrantsMcpScope(?Authenticatable $user): bool
+    {
+        return $user instanceof Authenticatable
+            && method_exists($user, 'tokenCan')
+            && $user->tokenCan(self::MCP_SCOPE);
     }
 
     protected function unavailable(string $remedy): Response

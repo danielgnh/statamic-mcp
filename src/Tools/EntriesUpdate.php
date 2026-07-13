@@ -2,13 +2,13 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Carbon\Exceptions\InvalidFormatException;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -273,7 +273,10 @@ class EntriesUpdate extends Tool
 
         try {
             return Carbon::parse($date);
-        } catch (InvalidFormatException) {
+            // Carbon throws InvalidFormatException for malformed input and other
+            // \InvalidArgumentException subclasses for out-of-range values —
+            // catch the shared root so both surface as a clean tool error.
+        } catch (InvalidArgumentException) {
             throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09 15:30", $date));
         }
     }

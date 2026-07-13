@@ -74,7 +74,10 @@ class GlobalsGet extends Tool
             'handle' => $handle,
             'title' => $set->title(),
             'site' => $site,
-            ...$this->variablesPayload($set->in($site)),
+            // in() is null when the set is configured for this site but has no
+            // saved localization yet; makeLocalization() is the empty-but-valid
+            // stand-in (never saved on this read path). Mirrors globals_update.
+            ...$this->variablesPayload($set->in($site) ?? $set->makeLocalization($site)),
         ]);
     }
 
@@ -102,7 +105,9 @@ class GlobalsGet extends Tool
             ->map(fn ($set) => [
                 'handle' => $set->handle(),
                 'title' => $set->title(),
-                ...$this->variablesPayload($set->in($site)),
+                // in() is null for a site the set is configured for but never
+                // saved into — same empty-but-valid stand-in as the single path.
+                ...$this->variablesPayload($set->in($site) ?? $set->makeLocalization($site)),
             ])
             ->values()
             ->all();
