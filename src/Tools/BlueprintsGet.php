@@ -22,6 +22,7 @@ use Statamic\Fieldtypes\Date;
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -150,7 +151,7 @@ class BlueprintsGet extends Tool
             'required' => $field->isRequired(),
             // closure/Rule-object rules are not JSON-serializable; writes still enforce them.
             // v6's injected title field carries 'required' twice (config flag + validate rule) — dedupe.
-            'rules' => array_values(array_unique(array_filter($field->rules()[$field->handle()] ?? [], 'is_string'))),
+            'rules' => array_values(array_unique(array_filter($field->rules()[$field->handle()] ?? [], is_string(...)))),
         ];
 
         if (($visibility = $field->visibility()) !== 'visible') {

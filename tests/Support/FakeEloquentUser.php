@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Danielgnh\StatamicMcp\Tests\Support;
 
 use Illuminate\Foundation\Auth\User as AuthUser;

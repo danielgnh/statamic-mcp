@@ -17,6 +17,7 @@ class AssetsDelete extends Tool
 {
     use ResolvesAssets;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -32,12 +33,8 @@ class AssetsDelete extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureDeletesEnabled();
 
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'container' => 'required|string',

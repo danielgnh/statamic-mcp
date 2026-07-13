@@ -23,6 +23,7 @@ class TermsUpdate extends Tool
     use ResolvesSites;
     use ValidatesBlueprintData;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -40,14 +41,10 @@ class TermsUpdate extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureWritesEnabled();
 
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them. 'present' (not 'required')
-        // because a slug-only update sends an empty data object, and
-        // Laravel's 'required' fails on [].
+        // 'present' not 'required': a slug-only update sends an empty data
+        // object, and Laravel's 'required' fails on [].
         $validated = $request->validate(
             [
                 'id' => 'required|string',
@@ -63,11 +60,11 @@ class TermsUpdate extends Tool
 
         $id = $validated['id'];
 
-        if (! str_contains($id, '::')) {
+        if (! str_contains((string) $id, '::')) {
             throw new ToolException("term ids look like '{taxonomy}::{slug}', e.g. 'tags::php' — got '{$id}'");
         }
 
-        [$taxonomyHandle] = explode('::', $id, 2);
+        [$taxonomyHandle] = explode('::', (string) $id, 2);
 
         $this->ensureExposed('taxonomies', $taxonomyHandle);
 

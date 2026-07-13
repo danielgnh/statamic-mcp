@@ -46,7 +46,6 @@ class Doctor extends Command
         $this->checkEnabled();
         $this->checkMiddleware();
         $this->checkAppUrl();
-        $this->checkAuthMigrations();
 
         if ($mode === 'oauth') {
             $this->checkOAuth();
@@ -88,7 +87,7 @@ class Doctor extends Command
 
     protected function routeIsMounted(): bool
     {
-        $uri = trim(config('statamic.mcp.route', 'mcp/statamic'), '/');
+        $uri = trim((string) config('statamic.mcp.route', 'mcp/statamic'), '/');
 
         foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
@@ -106,10 +105,12 @@ class Doctor extends Command
         $broken = false;
 
         foreach ($entries as $entry) {
-            if (! is_string($entry) || $this->middlewareResolves($entry)) {
+            if (! is_string($entry)) {
                 continue;
             }
-
+            if ($this->middlewareResolves($entry)) {
+                continue;
+            }
             $broken = true;
 
             // A typo'd class mounts fine and 500s every request — the one
@@ -168,7 +169,7 @@ class Doctor extends Command
 
         sort($files);
         $keep = basename(array_shift($files));
-        $orphans = implode(', ', array_map('basename', $files));
+        $orphans = implode(', ', array_map(basename(...), $files));
 
         $this->warn("[WARN] {$orphans} looks like a leftover from an interrupted OAuth setup — a second Statamic auth migration re-adds the 'super' column and would crash 'php artisan migrate'. Delete it, keeping {$keep}.");
     }
@@ -302,7 +303,7 @@ class Doctor extends Command
         if ($this->prereqs->userModelHasTrait()) {
             $this->info('[ OK ] User model '.$model.' uses the HasApiTokens trait.');
         } else {
-            $provider = config('auth.guards.api.provider') ?? 'users';
+            $provider = config('auth.guards.api.provider', 'users');
 
             $this->problem('User model '.($model ?: "(none configured in auth.providers.{$provider}.model)").' is missing the Laravel\\Passport\\HasApiTokens trait — add it per the README OAuth guide.');
         }

@@ -20,6 +20,7 @@ class TermsList extends Tool
 {
     use ResolvesSites;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [

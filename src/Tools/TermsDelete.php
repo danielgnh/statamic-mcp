@@ -15,6 +15,7 @@ use Statamic\Facades\Term;
 #[IsDestructive]
 class TermsDelete extends Tool
 {
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -29,8 +30,6 @@ class TermsDelete extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureDeletesEnabled();
 
         $validated = $request->validate(
@@ -40,11 +39,11 @@ class TermsDelete extends Tool
 
         $id = $validated['id'];
 
-        if (! str_contains($id, '::')) {
+        if (! str_contains((string) $id, '::')) {
             throw new ToolException("term ids look like '{taxonomy}::{slug}', e.g. 'tags::php' — got '{$id}'");
         }
 
-        [$taxonomyHandle] = explode('::', $id, 2);
+        [$taxonomyHandle] = explode('::', (string) $id, 2);
 
         $this->ensureExposed('taxonomies', $taxonomyHandle);
 

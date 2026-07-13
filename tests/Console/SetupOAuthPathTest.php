@@ -91,7 +91,7 @@ function freshInstallPrereqs(): void
             return false;
         }
 
-        public function userModel(): ?string
+        public function userModel(): string
         {
             return SetupWizardTestUser::class;
         }
@@ -181,7 +181,7 @@ it('skips every oauth step on an already-configured install', function () {
             return true;
         }
 
-        public function userModel(): ?string
+        public function userModel(): string
         {
             return SetupWizardTestUser::class;
         }
@@ -281,7 +281,7 @@ it('needs no --migrate-users under --yes when users are already eloquent', funct
             return false;
         }
 
-        public function userModel(): ?string
+        public function userModel(): string
         {
             return SetupWizardTestUser::class;
         }
@@ -335,7 +335,7 @@ it('skips the auth migration when the users table is already migrated', function
             return true;
         }
 
-        public function userModel(): ?string
+        public function userModel(): string
         {
             return SetupWizardTestUser::class;
         }
@@ -382,7 +382,7 @@ it('stops before composer when the user declines the users migration', function 
 
 it('stops when an external command fails, before any later step runs', function () {
     Process::fake([
-        'php please auth:migration' => Process::result(exitCode: 1, errorOutput: 'boom'),
+        'php please auth:migration' => Process::result(errorOutput: 'boom', exitCode: 1),
         '*' => Process::result(),
     ]);
     fakeEditors();

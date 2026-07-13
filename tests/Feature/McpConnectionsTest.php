@@ -199,7 +199,7 @@ it('renders DCR-supplied client names inertly for the vue runtime compiler', fun
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('utilities/Show')
-            ->where('html', fn ($html) => str_contains($html, '<span v-pre>{{ 7*7 }}</span>')));
+            ->where('html', fn ($html) => str_contains((string) $html, '<span v-pre>{{ 7*7 }}</span>')));
 })->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
 
 it('shows an empty state when oauth is ready but nothing has connected', function () {

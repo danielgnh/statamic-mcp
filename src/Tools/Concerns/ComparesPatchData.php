@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Danielgnh\StatamicMcp\Tools\ToolException;

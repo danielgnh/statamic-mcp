@@ -20,8 +20,6 @@ trait RegistersMcpAuthProbeRoute
         // Same middleware stack the ServiceProvider mounts on the MCP route in
         // token mode. The body returns what Statamic thinks the current user
         // is — the visibility revision authorship and event listeners depend on.
-        $app['router']->post('/mcp-auth-probe', function () {
-            return response()->json(['email' => User::current()->email()]);
-        })->middleware([AuthenticateMcpToken::class, EnsureMcpPermission::class]);
+        $app['router']->post('/mcp-auth-probe', fn () => response()->json(['email' => User::current()->email()]))->middleware([AuthenticateMcpToken::class, EnsureMcpPermission::class]);
     }
 }

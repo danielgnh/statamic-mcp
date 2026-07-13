@@ -20,6 +20,7 @@ class EntriesDelete extends Tool
     use ResolvesEntries;
     use ResolvesSites;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -34,8 +35,6 @@ class EntriesDelete extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureDeletesEnabled();
 
         $validated = $request->validate(['id' => 'required|string']);

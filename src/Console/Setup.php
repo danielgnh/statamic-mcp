@@ -102,12 +102,12 @@ class Setup extends Command
     protected function setupOAuth(EnvWriter $env): int
     {
         $steps = [
-            fn (): bool => $this->ensureEloquentUsers(),
-            fn (): bool => $this->ensurePassportInstalled(),
-            fn (): bool => $this->ensurePassportPlumbing(),
-            fn (): bool => $this->ensureUserModelPrepared(),
-            fn (): bool => $this->ensureApiGuard(),
-            fn (): bool => $this->offerConsentViews(),
+            $this->ensureEloquentUsers(...),
+            $this->ensurePassportInstalled(...),
+            $this->ensurePassportPlumbing(...),
+            $this->ensureUserModelPrepared(...),
+            $this->ensureApiGuard(...),
+            $this->offerConsentViews(...),
             fn (): bool => $this->flipAuthMode($env),
         ];
 

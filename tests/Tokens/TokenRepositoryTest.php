@@ -2,7 +2,7 @@
 
 use Danielgnh\StatamicMcp\Tokens\PlainToken;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\User;
 use Statamic\Facades\YAML;
@@ -26,7 +26,7 @@ it('issues a token in the mcp_{tokenId}_{secret} format', function () {
 
     expect($plain)->toBeInstanceOf(PlainToken::class);
 
-    $parts = explode('_', $plain->token, 3);
+    $parts = explode('_', (string) $plain->token, 3);
 
     expect($parts)->toHaveCount(3)
         ->and($parts[0])->toBe('mcp')
@@ -39,12 +39,12 @@ it('issues a token in the mcp_{tokenId}_{secret} format', function () {
 it('stores only the sha-256 hash in tokens.yaml — never the plaintext secret', function () {
     $plain = $this->repo->issue($this->user, 'laptop');
 
-    $secret = explode('_', $plain->token, 3)[2];
+    $secret = explode('_', (string) $plain->token, 3)[2];
 
     $raw = File::get(storage_path('statamic/mcp/tokens.yaml'));
 
     expect(str_contains($raw, $secret))->toBeFalse()
-        ->and(str_contains($raw, $plain->token))->toBeFalse();
+        ->and(str_contains($raw, (string) $plain->token))->toBeFalse();
 
     $parsed = YAML::parse($raw);
 
@@ -57,7 +57,7 @@ it('stores only the sha-256 hash in tokens.yaml — never the plaintext secret',
 });
 
 it('records an iso-8601 expiry when issued with expires days', function () {
-    $this->travelTo(Carbon::parse('2026-07-09T12:00:00Z'));
+    $this->travelTo(Date::parse('2026-07-09T12:00:00Z'));
 
     $plain = $this->repo->issue($this->user, null, 30);
 
@@ -92,8 +92,8 @@ it('revokes a token and rewrites the file without it, leaving others intact', fu
 
     $raw = File::get(storage_path('statamic/mcp/tokens.yaml'));
 
-    expect(str_contains($raw, $kill->tokenId))->toBeFalse()
-        ->and(str_contains($raw, $keep->tokenId))->toBeTrue();
+    expect(str_contains($raw, (string) $kill->tokenId))->toBeFalse()
+        ->and(str_contains($raw, (string) $keep->tokenId))->toBeTrue();
 });
 
 it('returns false when revoking an unknown token id', function () {

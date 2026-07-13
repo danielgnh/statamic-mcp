@@ -70,7 +70,7 @@ it('renders user-controlled token names inertly for the vue runtime compiler', f
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('utilities/Show')
-            ->where('html', fn ($html) => str_contains($html, '<span v-pre>{{ 7*7 }}</span>')));
+            ->where('html', fn ($html) => str_contains((string) $html, '<span v-pre>{{ 7*7 }}</span>')));
 });
 
 it('marks expired tokens as expired', function () {

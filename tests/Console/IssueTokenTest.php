@@ -2,8 +2,8 @@
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\User;
 
@@ -46,7 +46,7 @@ it('issues a token, prints it once, and prints ready-to-paste client snippets', 
 });
 
 it('records an expiry when --expires-days is given', function () {
-    $this->travelTo(Carbon::parse('2026-07-09T12:00:00Z'));
+    $this->travelTo(Date::parse('2026-07-09T12:00:00Z'));
 
     $user = Fixtures::makeUser();
 

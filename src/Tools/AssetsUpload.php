@@ -23,6 +23,7 @@ class AssetsUpload extends Tool
 {
     use ResolvesAssets;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -41,12 +42,8 @@ class AssetsUpload extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureWritesEnabled();
 
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'container' => 'required|string',
@@ -198,7 +195,7 @@ class AssetsUpload extends Tool
             throw new ToolException('upload validation failed: '.json_encode(
                 $e->errors(),
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
-            ));
+            ), $e->getCode(), $e);
         }
     }
 }

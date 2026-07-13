@@ -73,7 +73,7 @@ class OAuthPrerequisites
 
     public function userModel(): ?string
     {
-        $provider = config('auth.guards.api.provider') ?? 'users';
+        $provider = config('auth.guards.api.provider', 'users');
 
         return config('auth.providers.'.$provider.'.model');
     }

@@ -20,9 +20,9 @@ use Throwable;
  */
 class SourceDownloader
 {
-    private const MAX_REDIRECTS = 3;
+    private const int MAX_REDIRECTS = 3;
 
-    private const TIMEOUT_SECONDS = 15;
+    private const int TIMEOUT_SECONDS = 15;
 
     /**
      * @param  null|Closure(string): list<string>  $resolver  host => IPs; injectable so tests never hit real DNS
@@ -135,7 +135,7 @@ class SourceDownloader
             return [$literal];
         }
 
-        if ($this->resolver !== null) {
+        if ($this->resolver instanceof Closure) {
             return ($this->resolver)($host);
         }
 
@@ -203,13 +203,13 @@ class SourceDownloader
             ])->timeout(self::TIMEOUT_SECONDS)->get($url);
         } catch (Throwable $e) {
             // Surface our own cap/guard exceptions from inside Guzzle wrappers.
-            for ($previous = $e; $previous !== null; $previous = $previous->getPrevious()) {
+            for ($previous = $e; $previous instanceof Throwable; $previous = $previous->getPrevious()) {
                 if ($previous instanceof ToolException) {
                     throw $previous;
                 }
             }
 
-            throw new ToolException(sprintf('could not download source_url: %s', $e->getMessage()));
+            throw new ToolException(sprintf('could not download source_url: %s', $e->getMessage()), $e->getCode(), $e);
         }
     }
 

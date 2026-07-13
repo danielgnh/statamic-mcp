@@ -29,6 +29,7 @@ class EntriesUpdate extends Tool
     use ResolvesSites;
     use ValidatesBlueprintData;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -48,12 +49,8 @@ class EntriesUpdate extends Tool
 
     protected function execute(Request $request): Response
     {
-        // Re-check the registration gate: stale client tool caches are a
-        // documented UX wart, not a security hole (spec §6 layer 1).
         $this->ensureWritesEnabled();
 
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'id' => 'required|string',
@@ -149,7 +146,7 @@ class EntriesUpdate extends Tool
         // silently dropped. The basis is the staged copy when one exists.
         $dirty = $this->normalize($merged) !== $this->normalize($current)
             || ($slug !== null && $slug !== $basis->slug())
-            || ($date !== null && ! $date->equalTo($basis->date()))
+            || ($date instanceof Carbon && ! $date->equalTo($basis->date()))
             || ($published !== null && $published !== $entry->published());
 
         if (! $dirty) {
@@ -196,7 +193,7 @@ class EntriesUpdate extends Tool
             $target->slug($slug);
         }
 
-        if ($date !== null) {
+        if ($date instanceof Carbon) {
             $target->date($date);
         }
 

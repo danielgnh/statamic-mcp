@@ -28,11 +28,12 @@ class EntriesGet extends Tool
 
     // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:
     // it approximates token cost; multibyte characters count per-byte.
-    private const PREVIEW_THRESHOLD = 500;
+    private const int PREVIEW_THRESHOLD = 500;
 
     // Characters of plain-text preview kept (Str::limit is mb-safe — never cuts mid-character).
-    private const PREVIEW_LENGTH = 300;
+    private const int PREVIEW_LENGTH = 300;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -47,8 +48,6 @@ class EntriesGet extends Tool
 
     protected function execute(Request $request): Response
     {
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'id' => 'nullable|string',
@@ -226,8 +225,10 @@ class EntriesGet extends Tool
             }
 
             $field = $blueprint->fields()->all()->get($handle);
-
-            if (! $field || ! in_array($field->type(), ['bard', 'markdown'], true)) {
+            if (! $field) {
+                continue;
+            }
+            if (! in_array($field->type(), ['bard', 'markdown'], true)) {
                 continue;
             }
 
@@ -235,8 +236,10 @@ class EntriesGet extends Tool
             $raw = $value instanceof JsonSerializable ? $value->jsonSerialize() : $value;
 
             $encoded = json_encode($raw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-            if ($encoded === false || strlen($encoded) <= self::PREVIEW_THRESHOLD) {
+            if ($encoded === false) {
+                continue;
+            }
+            if (strlen($encoded) <= self::PREVIEW_THRESHOLD) {
                 continue;
             }
 

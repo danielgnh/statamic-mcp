@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Danielgnh\StatamicMcp\Tokens;
 
 use Illuminate\Support\Carbon;

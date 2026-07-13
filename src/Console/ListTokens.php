@@ -27,15 +27,13 @@ class ListTokens extends Command
 
         $this->table(
             ['Id', 'User', 'Name', 'Created', 'Expires'],
-            collect($all)->map(function (array $record, string $tokenId) {
-                return [
-                    $tokenId,
-                    User::find($record['user'])?->email() ?? "{$record['user']} (user deleted — token dead)",
-                    $record['name'] ?? '—',
-                    $record['created_at'],
-                    $record['expires_at'] ?? 'never',
-                ];
-            })->values()->all(),
+            collect($all)->map(fn (array $record, string $tokenId) => [
+                $tokenId,
+                User::find($record['user'])?->email() ?? "{$record['user']} (user deleted — token dead)",
+                $record['name'] ?? '—',
+                $record['created_at'],
+                $record['expires_at'] ?? 'never',
+            ])->values()->all(),
         );
 
         return self::SUCCESS;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 return [
     // Kill switch. When false the MCP route is never registered.
     'enabled' => env('STATAMIC_MCP_ENABLED', true),

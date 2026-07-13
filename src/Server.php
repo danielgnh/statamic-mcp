@@ -1,7 +1,28 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Danielgnh\StatamicMcp;
 
+use Danielgnh\StatamicMcp\Tools\AssetsDelete;
+use Danielgnh\StatamicMcp\Tools\AssetsGet;
+use Danielgnh\StatamicMcp\Tools\AssetsList;
+use Danielgnh\StatamicMcp\Tools\AssetsUpdate;
+use Danielgnh\StatamicMcp\Tools\AssetsUpload;
+use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
+use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Danielgnh\StatamicMcp\Tools\EntriesDelete;
+use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Danielgnh\StatamicMcp\Tools\EntriesList;
+use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
+use Danielgnh\StatamicMcp\Tools\GlobalsGet;
+use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
+use Danielgnh\StatamicMcp\Tools\StatamicOverview;
+use Danielgnh\StatamicMcp\Tools\TermsCreate;
+use Danielgnh\StatamicMcp\Tools\TermsDelete;
+use Danielgnh\StatamicMcp\Tools\TermsGet;
+use Danielgnh\StatamicMcp\Tools\TermsList;
+use Danielgnh\StatamicMcp\Tools\TermsUpdate;
 use Laravel\Mcp\Server as McpServer;
 use Laravel\Mcp\Server\Attributes\Instructions;
 use Laravel\Mcp\Server\Attributes\Name;
@@ -18,24 +39,24 @@ class Server extends McpServer
 
     /** @var array<int, class-string<Tool>> */
     protected array $tools = [
-        Tools\StatamicOverview::class,
-        Tools\BlueprintsGet::class,
-        Tools\EntriesList::class,
-        Tools\EntriesGet::class,
-        Tools\EntriesCreate::class,
-        Tools\EntriesUpdate::class,
-        Tools\EntriesDelete::class,
-        Tools\TermsList::class,
-        Tools\TermsGet::class,
-        Tools\TermsCreate::class,
-        Tools\TermsUpdate::class,
-        Tools\TermsDelete::class,
-        Tools\GlobalsGet::class,
-        Tools\GlobalsUpdate::class,
-        Tools\AssetsList::class,
-        Tools\AssetsGet::class,
-        Tools\AssetsUpload::class,
-        Tools\AssetsUpdate::class,
-        Tools\AssetsDelete::class,
+        StatamicOverview::class,
+        BlueprintsGet::class,
+        EntriesList::class,
+        EntriesGet::class,
+        EntriesCreate::class,
+        EntriesUpdate::class,
+        EntriesDelete::class,
+        TermsList::class,
+        TermsGet::class,
+        TermsCreate::class,
+        TermsUpdate::class,
+        TermsDelete::class,
+        GlobalsGet::class,
+        GlobalsUpdate::class,
+        AssetsList::class,
+        AssetsGet::class,
+        AssetsUpload::class,
+        AssetsUpdate::class,
+        AssetsDelete::class,
     ];
 }

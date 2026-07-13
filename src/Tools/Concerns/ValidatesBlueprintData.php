@@ -98,7 +98,7 @@ trait ValidatesBlueprintData
             throw new ToolException('validation failed: '.json_encode(
                 $e->errors(),
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
-            ));
+            ), $e->getCode(), $e);
         }
     }
 }

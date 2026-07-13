@@ -17,6 +17,14 @@ use Statamic\Facades\User;
 use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
 
+/**
+ * Base class for every MCP tool.
+ *
+ * Each tool's execute() re-validates the request and re-checks the write/delete
+ * gates itself: laravel/mcp enforces neither the declared JSON schema nor
+ * shouldRegister() server-side (T10), and a stale client tool cache can still
+ * invoke a tool that is no longer registered (spec §6 layer 1).
+ */
 abstract class Tool extends BaseTool
 {
     public const LIVENESS_DRAFT = 'saved as draft — not live';
@@ -111,7 +119,11 @@ abstract class Tool extends BaseTool
      */
     protected function can(UserContract $user, string $permission): bool
     {
-        return $user->isSuper() || $user->hasPermission($permission);
+        if ($user->isSuper()) {
+            return true;
+        }
+
+        return (bool) $user->hasPermission($permission);
     }
 
     /**

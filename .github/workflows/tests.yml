@@ -79,6 +79,26 @@ jobs:
       - name: Run static analysis
         run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
+  rector:
+    runs-on: ubuntu-latest
+    name: Rector (automated refactoring)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Check for pending refactorings
+        run: vendor/bin/rector --dry-run --no-progress-bar
+
   # Runs the whole suite with laravel/passport installed: the Passport-skipped
   # tests (ConnectionRepository, connections panel/controller) go live, and the
   # one passport-absence test skips instead. composer.json is modified only

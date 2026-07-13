@@ -25,11 +25,12 @@ class TermsGet extends Tool
 
     // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:
     // it approximates token cost; multibyte characters count per-byte (T11).
-    private const PREVIEW_THRESHOLD = 500;
+    private const int PREVIEW_THRESHOLD = 500;
 
     // Characters of plain-text preview kept (Str::limit is mb-safe — never cuts mid-character).
-    private const PREVIEW_LENGTH = 300;
+    private const int PREVIEW_LENGTH = 300;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -44,8 +45,6 @@ class TermsGet extends Tool
 
     protected function execute(Request $request): Response
     {
-        // laravel/mcp doesn't enforce the JSON schema server-side (T10) —
-        // validate shapes before touching them.
         $validated = $request->validate(
             [
                 'id' => 'required_without_all:taxonomy,slug|string',
@@ -64,11 +63,11 @@ class TermsGet extends Tool
 
         $id = $validated['id'] ?? $validated['taxonomy'].'::'.$validated['slug'];
 
-        if (! str_contains($id, '::')) {
+        if (! str_contains((string) $id, '::')) {
             throw new ToolException("term ids look like '{taxonomy}::{slug}', e.g. 'tags::php' — got '{$id}'");
         }
 
-        [$taxonomyHandle] = explode('::', $id, 2);
+        [$taxonomyHandle] = explode('::', (string) $id, 2);
 
         $this->ensureExposed('taxonomies', $taxonomyHandle);
 
@@ -199,8 +198,10 @@ class TermsGet extends Tool
             }
 
             $field = $blueprint->fields()->all()->get($handle);
-
-            if (! $field || ! in_array($field->type(), ['bard', 'markdown'], true)) {
+            if (! $field) {
+                continue;
+            }
+            if (! in_array($field->type(), ['bard', 'markdown'], true)) {
                 continue;
             }
 
@@ -208,8 +209,10 @@ class TermsGet extends Tool
             $raw = $value instanceof JsonSerializable ? $value->jsonSerialize() : $value;
 
             $encoded = json_encode($raw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-            if ($encoded === false || strlen($encoded) <= self::PREVIEW_THRESHOLD) {
+            if ($encoded === false) {
+                continue;
+            }
+            if (strlen($encoded) <= self::PREVIEW_THRESHOLD) {
                 continue;
             }
 

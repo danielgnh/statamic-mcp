@@ -26,6 +26,7 @@ class StatamicOverview extends Tool
 {
     use ResolvesSites;
 
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return []; // zero parameters (spec §4 row 1)
