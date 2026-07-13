@@ -268,6 +268,11 @@ class Setup extends Command
         sort($files);
         $file = end($files);
         $contents = file_get_contents($file);
+
+        if ($contents === false) {
+            return;
+        }
+
         $patched = str_replace("foreignId('user_id')", "foreignUuid('user_id')", $contents);
 
         if ($patched !== $contents) {
@@ -341,6 +346,13 @@ class Setup extends Command
 
         $interface = $this->oauthenticatableInterface();
         $path = (new ReflectionClass($model))->getFileName();
+
+        if ($path === false) {
+            $this->printManual('Could not locate the source file for '.$model.' — add the Laravel\Passport\HasApiTokens trait to your user model manually (see the README OAuth guide).');
+
+            return true; // not fatal for the remaining steps
+        }
+
         $editor = app(UserModelEditor::class);
 
         $this->applyEdit(
@@ -393,11 +405,16 @@ class Setup extends Command
 
     protected function offerConsentViews(): bool
     {
-        if (! $this->confirmStep('Publish the OAuth consent screen views (customizable Blade)?', whenYes: false, default: false)) {
+        // OAuth mode auto-binds a working, self-contained consent screen (see
+        // the addon service provider), so this step is optional — publish only
+        // to customize the Blade. It publishes the ADDON's view, not
+        // laravel/mcp's: that one depends on a compiled Vite/Tailwind bundle and
+        // 500s on any site without one, which is why the addon ships its own.
+        if (! $this->confirmStep('Publish the OAuth consent screen to customize it? (a working default is already bound)', whenYes: false, default: false)) {
             return true;
         }
 
-        return $this->runProcess('php artisan vendor:publish --tag=mcp-views');
+        return $this->runProcess('php artisan vendor:publish --tag=statamic-mcp-views');
     }
 
     protected function flipAuthMode(EnvWriter $env): bool
@@ -429,7 +446,7 @@ class Setup extends Command
         // just edited, not this process's stale in-memory config.
         $healthy = $this->runProcess('php please mcp:doctor');
 
-        $url = url(config('statamic.mcp.route', 'mcp/statamic'));
+        $url = url(config()->string('statamic.mcp.route', 'mcp/statamic'));
 
         if (! $healthy) {
             $this->components->error('The doctor found problems — fix the [FAIL] items above and re-run `php please mcp:setup`.');

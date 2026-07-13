@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Support;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 
 /**
@@ -165,5 +166,19 @@ class OAuthPrerequisites
     {
         return $this->passportInstalled()
             && file_exists(Passport::keyPath('oauth-private.key'));
+    }
+
+    /**
+     * Whether an authorization (consent) view is bound. Passport 12+ ships no
+     * default and never binds this contract, so /oauth/authorize 500s with
+     * "Target [...AuthorizationViewResponse] is not instantiable" unless
+     * someone calls Passport::authorizationView(). This addon binds a default
+     * in OAuth mode, so the only way this is false is Passport-absent or the
+     * addon's boot never ran — both of which the other checks already name.
+     */
+    public function authorizationViewBound(): bool
+    {
+        return $this->passportInstalled()
+            && app()->bound(AuthorizationViewResponse::class);
     }
 }

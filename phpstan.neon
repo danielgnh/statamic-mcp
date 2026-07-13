@@ -4,7 +4,7 @@ includes:
 parameters:
     paths:
         - src
-    level: 5
+    level: 8
     ignoreErrors:
         # Statamic v6 contracts (Statamic\Contracts\Entries\Entry, ...\Taxonomies\Term,
         # ...\Globals\GlobalSet, ...\Auth\User, etc.) are EMPTY marker interfaces —
@@ -20,13 +20,22 @@ parameters:
 
         # laravel/passport is a SUGGESTED dependency (required only for OAuth
         # mode on the host site), so its classes are absent from this package's
-        # vendor/. The single static call lives behind a class_exists() guard
-        # in passportKeysExist(); scoped to that one file so any other unknown
-        # class anywhere in src/ still fails the build.
+        # vendor/. The Passport uses live behind class_exists()/passportInstalled()
+        # guards (passportKeysExist, authorizationViewBound); scoped to this one
+        # file so any other unknown class anywhere in src/ still fails the build.
         -
             identifier: class.notFound
-            message: '#unknown class Laravel\\Passport\\Passport#'
+            message: '#Laravel\\Passport#'
             path: src/Support/OAuthPrerequisites.php
+
+        # ServiceProvider binds the default consent view behind class_exists(
+        # Passport::class); that narrowing vouches for Passport itself, but the
+        # separate Contracts\AuthorizationViewResponse symbol (same absent
+        # package) still needs a scoped exception.
+        -
+            identifier: class.notFound
+            message: '#Laravel\\Passport\\Contracts\\AuthorizationViewResponse#'
+            path: src/ServiceProvider.php
 
         # Same suggested-dependency story for the connections repository: every
         # Passport symbol use sits behind ready()'s class_exists guard, and the

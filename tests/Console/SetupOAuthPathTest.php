@@ -147,7 +147,7 @@ it('walks a fresh install through every oauth step', function () {
         // Step 5: api guard
         ->expectsConfirmation('Apply this change to '.config_path('auth.php').'?', 'yes')
         // Step 6: consent views (optional — decline)
-        ->expectsConfirmation('Publish the OAuth consent screen views (customizable Blade)?', 'no')
+        ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
         // Step 7: env flip
         ->expectsConfirmation('Apply this change to '.base_path('.env').'?', 'yes')
         ->assertExitCode(0);
@@ -215,7 +215,7 @@ it('skips every oauth step on an already-configured install', function () {
     $this->artisan('statamic:mcp:setup')
         ->expectsChoice('How will AI clients connect to this site?', 'oauth', MODE_OPTIONS)
         // The ONLY prompt left on a satisfied install is the optional views publish:
-        ->expectsConfirmation('Publish the OAuth consent screen views (customizable Blade)?', 'no')
+        ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
         ->expectsOutputToContain('skipped')
         ->assertExitCode(0);
 
@@ -247,7 +247,7 @@ it('runs every oauth step unattended with --oauth --yes --migrate-users', functi
     Process::assertRan('php artisan passport:keys');
     Process::assertRan('php please mcp:doctor');
     // The optional consent views publish defaults to "no" — --yes keeps that.
-    Process::assertDidntRun('php artisan vendor:publish --tag=mcp-views');
+    Process::assertDidntRun('php artisan vendor:publish --tag=statamic-mcp-views');
 
     $oauthenticatable = interface_exists('Laravel\Passport\Contracts\OAuthenticatable')
         ? 'Laravel\Passport\Contracts\OAuthenticatable'
@@ -418,7 +418,7 @@ it('refuses the user migration when the schema cannot take uuid ids, naming the 
             return false;
         }
 
-        public function usersIdColumnType(): ?string
+        public function usersIdColumnType(): string
         {
             return 'bigint';
         }
@@ -550,7 +550,7 @@ it('exits non-zero when the final doctor run finds problems', function () {
         ->expectsConfirmation('Publish Passport migrations, run them, and generate encryption keys?', 'yes')
         ->expectsConfirmation('Apply this change to '.$modelPath.'?', 'yes')
         ->expectsConfirmation('Apply this change to '.config_path('auth.php').'?', 'yes')
-        ->expectsConfirmation('Publish the OAuth consent screen views (customizable Blade)?', 'no')
+        ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
         ->expectsConfirmation('Apply this change to '.base_path('.env').'?', 'yes')
         ->expectsOutputToContain('The doctor found problems')
         ->assertExitCode(1);

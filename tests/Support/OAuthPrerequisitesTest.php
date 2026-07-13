@@ -161,5 +161,22 @@ it('reports passport as absent in a suite without passport', function () {
 
     expect($prereqs->passportInstalled())->toBeFalse()
         ->and($prereqs->passportKeysExist())->toBeFalse()
-        ->and($prereqs->userModelHasTrait())->toBeFalse();
+        ->and($prereqs->userModelHasTrait())->toBeFalse()
+        // No Passport means no view binding can exist — and the predicate must
+        // short-circuit on passportInstalled() rather than touch the absent
+        // contract class.
+        ->and($prereqs->authorizationViewBound())->toBeFalse();
 })->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
+
+// The inverse, in the Passport CI leg: the predicate tracks whether a consent
+// view is actually bound (the addon binds one in oauth mode; here we bind it
+// explicitly since this suite boots in token mode).
+it('reports the authorization view as bound once a view is registered', function () {
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->authorizationViewBound())->toBeFalse();
+
+    Passport::authorizationView('statamic-mcp::oauth.authorize');
+
+    expect($prereqs->authorizationViewBound())->toBeTrue();
+})->skip(fn () => ! class_exists(Passport::class), 'requires laravel/passport — Passport CI leg only');

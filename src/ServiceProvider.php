@@ -14,6 +14,7 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
 use Laravel\Mcp\Facades\Mcp;
+use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
@@ -32,13 +33,17 @@ class ServiceProvider extends AddonServiceProvider
     ];
 
     #[\Override]
-    public function bootAddon()
+    public function bootAddon(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/mcp.php', 'statamic.mcp');
 
         $this->publishes([
             __DIR__.'/../config/mcp.php' => config_path('statamic/mcp.php'),
         ], 'statamic-mcp-config');
+
+        $this->publishes([
+            __DIR__.'/../resources/views/oauth/authorize.blade.php' => resource_path('views/vendor/statamic-mcp/oauth/authorize.blade.php'),
+        ], 'statamic-mcp-views');
 
         $this->registerPermission();
 
@@ -91,6 +96,16 @@ class ServiceProvider extends AddonServiceProvider
 
         if ($oauth && class_exists(Passport::class)) {
             Mcp::oauthRoutes(); // hard-requires Passport — guarded so bootAddon never throws
+
+            // Passport 12+ ships no default consent view and never binds
+            // AuthorizationViewResponse — /oauth/authorize 500s with
+            // "Target [...AuthorizationViewResponse] is not instantiable"
+            // unless someone calls authorizationView(). Since this addon owns
+            // the OAuth setup, it owns this too. Guarded on `! bound` so a host
+            // app's own Passport::authorizationView() wins whichever boots first.
+            if (! app()->bound(AuthorizationViewResponse::class)) {
+                Passport::authorizationView('statamic-mcp::oauth.authorize');
+            }
         }
     }
 }

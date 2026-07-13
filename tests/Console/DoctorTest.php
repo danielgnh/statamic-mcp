@@ -208,11 +208,45 @@ it('passes the users and guard checks independently of Passport', function () {
         ->expectsOutputToContain('[ OK ] Users are database-backed (repository: eloquent, driver: eloquent).')
         ->expectsOutputToContain("[ OK ] The 'api' guard uses the passport driver.")
         ->expectsOutputToContain('Laravel Passport is not installed')
-        // The HasApiTokens check only runs once Passport is present — without
-        // it the Passport [FAIL] already owns that remedy (T27 CI leg pins it).
+        // The HasApiTokens and consent-view checks only run once Passport is
+        // present — without it the Passport [FAIL] already owns that remedy
+        // (T27 CI leg pins it).
         ->doesntExpectOutputToContain('HasApiTokens')
+        ->doesntExpectOutputToContain('OAuth consent view')
         ->assertExitCode(1);
 })->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
+
+// Passport CI leg: with Passport present, doctor must catch the consent-view
+// gap that every other check is blind to — Passport binds no default, so an
+// unbound view means /oauth/authorize 500s while the rest reports green.
+it('fails when Passport is present but no consent view is bound', function () {
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'statamic.users.repository' => 'eloquent',
+        'statamic.users.repositories.eloquent.driver' => 'eloquent',
+        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
+    ]);
+
+    // This suite boots in token mode, so the addon never bound its default —
+    // the exact false-green scenario Passport 13 introduces.
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] No OAuth consent view is bound')
+        ->assertExitCode(1);
+})->skip(fn () => ! class_exists(Passport::class), 'requires laravel/passport — Passport CI leg only');
+
+it('reports the consent view as OK once one is bound', function () {
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'statamic.users.repository' => 'eloquent',
+        'statamic.users.repositories.eloquent.driver' => 'eloquent',
+        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
+    ]);
+
+    Passport::authorizationView('statamic-mcp::oauth.authorize');
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[ OK ] OAuth consent view is bound.');
+})->skip(fn () => ! class_exists(Passport::class), 'requires laravel/passport — Passport CI leg only');
 
 it('warns about a leftover duplicate auth-tables migration', function () {
     $dir = database_path('migrations');

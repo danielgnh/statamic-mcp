@@ -105,16 +105,29 @@ request 401-loops on tokens the guard ignores. In `config/auth.php`:
 ],
 ```
 
-**Step 4 — Switch the mode** and publish the consent view:
+**Step 4 — Switch the mode:**
 
 ```bash
 # .env
 STATAMIC_MCP_AUTH=oauth
 ```
 
+That's it for the consent screen — in OAuth mode the addon binds a working,
+self-contained one automatically. (Passport 12+ ships no default consent view
+and never binds `AuthorizationViewResponse`, so without this `/oauth/authorize`
+would 500 with *"Target [Laravel\Passport\Contracts\AuthorizationViewResponse]
+is not instantiable"*. The addon closes that gap; `mcp:doctor` verifies it.)
+
+To restyle it, publish the Blade and edit the copy — no need to publish
+laravel/mcp's own view, which depends on a compiled Vite/Tailwind bundle and
+500s on sites without one:
+
 ```bash
-php artisan vendor:publish --tag=mcp-views   # laravel/mcp's OAuth consent screen
+php artisan vendor:publish --tag=statamic-mcp-views   # → resources/views/vendor/statamic-mcp/oauth/authorize.blade.php
 ```
+
+Or supply your own view entirely by calling `Passport::authorizationView(...)`
+in your `AppServiceProvider::boot()` — the addon steps aside if you do.
 
 Now `php please mcp:doctor` should be all green, and connector clients can add
 `https://your-site.com/mcp/statamic` with no manual credentials — they discover the

@@ -39,7 +39,7 @@ class Doctor extends Command
 
         $this->line('Statamic MCP doctor');
         $this->line('');
-        $this->line('  Endpoint:  '.url(config('statamic.mcp.route', 'mcp/statamic')));
+        $this->line('  Endpoint:  '.url(config()->string('statamic.mcp.route', 'mcp/statamic')));
         $this->line('  Auth mode: '.$mode);
         $this->line('');
 
@@ -234,6 +234,7 @@ class Doctor extends Command
      * Active means the authentication middleware would accept it: unexpired
      * AND its user still exists.
      *
+     * @param  array<string, array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}>  $records
      * @return array{0: int, 1: int, 2: int} [active, expired, orphaned]
      */
     protected function classifyTokens(array $records): array
@@ -243,7 +244,7 @@ class Doctor extends Command
         foreach ($records as $record) {
             if (($record['expires_at'] ?? null) && Carbon::parse($record['expires_at'])->isPast()) {
                 $expired++;
-            } elseif (! User::find($record['user'] ?? '')) {
+            } elseif (! User::find($record['user'])) {
                 $orphaned++;
             } else {
                 $active++;
@@ -269,6 +270,28 @@ class Doctor extends Command
 
         $this->checkOAuthUsers($passportInstalled);
         $this->checkApiGuard();
+
+        // Without Passport the binding cannot exist and the [FAIL] above owns
+        // the remedy — a second [FAIL] here would just be noise.
+        if ($passportInstalled) {
+            $this->checkAuthorizationView();
+        }
+    }
+
+    /**
+     * Passport 12+ ships no default consent view and never binds
+     * AuthorizationViewResponse, so /oauth/authorize 500s ("Target [...] is not
+     * instantiable") the moment a connector reaches consent — while every other
+     * check stays green. The addon binds a default in OAuth mode, so a [FAIL]
+     * here means its boot never ran (see 'MCP route is mounted' above).
+     */
+    protected function checkAuthorizationView(): void
+    {
+        if ($this->prereqs->authorizationViewBound()) {
+            $this->info('[ OK ] OAuth consent view is bound.');
+        } else {
+            $this->problem("No OAuth consent view is bound — /oauth/authorize would 500 with \"Target [Laravel\\Passport\\Contracts\\AuthorizationViewResponse] is not instantiable\". The addon binds one automatically in OAuth mode; if this fails, its boot did not run — check the log for 'Statamic MCP failed to mount'. To supply your own, call Passport::authorizationView() in your AppServiceProvider.");
+        }
     }
 
     protected function checkOAuthUsers(bool $passportInstalled): void
