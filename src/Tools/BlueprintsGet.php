@@ -178,7 +178,7 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Bounded example generation (spec §4 row 2): real examples for a fixed
+     * Bounded example generation: real examples for a fixed
      * set of fieldtypes, obviously-fake placeholders for relation fields, and
      * a null + note fallback for everything else (bard, replicator, grid, …).
      *

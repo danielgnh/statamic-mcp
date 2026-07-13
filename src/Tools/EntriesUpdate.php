@@ -104,7 +104,7 @@ class EntriesUpdate extends Tool
 
         // On revision collections publish state is CP-owned: ANY explicit
         // published value — true or false, even same-state — is rejected;
-        // publishing goes through the CP's revision flow (spec §6). Sits
+        // publishing goes through the CP's revision flow. Sits
         // above the publish gate so the rejection wins over a denial.
         if ($published !== null && $entry->revisionsEnabled()) {
             throw new ToolException(sprintf(
@@ -115,8 +115,8 @@ class EntriesUpdate extends Tool
 
         if ($published !== null && $published !== $entry->published()) {
             // Any publish-state transition is gated on 'publish' — the CP's
-            // unpublish route authorizes the same ability (spec §6 layer 3;
-            // v6 has no separate unpublish permission).
+            // unpublish route authorizes the same ability
+            // (v6 has no separate unpublish permission).
             $this->ensurePermission($user, "publish {$collectionHandle} entries");
         }
 
@@ -135,7 +135,7 @@ class EntriesUpdate extends Tool
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
         $current = $basis->data()->all();
-        $merged = array_merge($current, $data); // shallow top-level merge by design (spec §4/§8)
+        $merged = array_merge($current, $data); // shallow top-level merge by design
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
 

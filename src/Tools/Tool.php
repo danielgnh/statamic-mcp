@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\ActingUser;
 use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -13,7 +14,6 @@ use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Taxonomy;
-use Statamic\Facades\User;
 use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
 
@@ -22,8 +22,8 @@ use Statamic\Taxonomies\LocalizedTerm;
  *
  * Each tool's execute() re-validates the request and re-checks the write/delete
  * gates itself: laravel/mcp enforces neither the declared JSON schema nor
- * shouldRegister() server-side (T10), and a stale client tool cache can still
- * invoke a tool that is no longer registered (spec §6 layer 1).
+ * shouldRegister() server-side, and a stale client tool cache can still
+ * invoke a tool that is no longer registered.
  */
 abstract class Tool extends BaseTool
 {
@@ -53,17 +53,15 @@ abstract class Tool extends BaseTool
     abstract protected function execute(Request $request): Response;
 
     /**
-     * The acting Statamic user, mode-agnostic: under Passport $request->user()
-     * is the Eloquent model; fromUser() normalizes both (spec §5). Behind the
-     * fail-closed HTTP middleware a user always exists, but stdio/inspector
+     * The acting Statamic user, mode-agnostic (ActingUser::resolve normalizes
+     * Passport's Eloquent model and token auth's Statamic user alike). Behind
+     * the fail-closed HTTP middleware a user always exists, but stdio/inspector
      * contexts reach tools unauthenticated — guard so they get a clear tool
      * error instead of a TypeError-turned-opaque-500.
      */
     protected function user(Request $request): UserContract
     {
-        $authenticated = $request->user();
-
-        $user = $authenticated ? User::fromUser($authenticated) : null;
+        $user = ActingUser::resolve($request->user());
 
         if (! $user) {
             throw new ToolException(
@@ -78,7 +76,7 @@ abstract class Tool extends BaseTool
      * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
      *
      * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
-     * by design (spec §4); the error lists only exposed handles.
+     * by design; the error lists only exposed handles.
      */
     protected function ensureExposed(string $type, string $handle): void
     {
@@ -127,7 +125,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Uniform denial message for every native-permission check (spec §6).
+     * Uniform denial message for every native-permission check.
      * Supers auto-pass. Publish/site checks pass their own permission strings.
      */
     protected function ensurePermission(UserContract $user, string $permission): void
@@ -183,7 +181,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Compact JSON in a text block (spec §8). Response::json() encodes with
+     * Compact JSON in a text block. Response::json() encodes with
      * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE (verified v0.8.2).
      *
      * @param  array<array-key, mixed>  $data
@@ -202,7 +200,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Liveness block appended to every write response (spec §4): pass a
+     * Liveness block appended to every write response: pass a
      * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm,
      * Variables, and Asset in 6.x source.
      *

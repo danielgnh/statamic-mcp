@@ -87,7 +87,7 @@ class AssetsUpload extends Tool
         $path = ltrim(($folder === null ? '' : $folder.'/').$basename, '/');
 
         // No silent overwrite: the CP 409s here and asks a human; we refuse
-        // and tell the agent its options (spec §3). Also keeps Statamic's
+        // and tell the agent its options. Also keeps Statamic's
         // exists-therefore-timestamp rename fallback from ever firing.
         if ($existing = $this->findAsset($container, $path)) {
             throw new ToolException(sprintf(

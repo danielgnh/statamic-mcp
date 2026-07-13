@@ -10,8 +10,8 @@ trait ValidatesBlueprintData
 {
     /**
      * Statamic silently stores unknown keys (typos become content) — reject
-     * them instead, naming valid handles plus a Levenshtein "did you mean"
-     * (spec §8). 'slug' is v6's auto-injected blueprint field; it is a
+     * them instead, naming valid handles plus a Levenshtein "did you mean".
+     * 'slug' is v6's auto-injected blueprint field; it is a
      * dedicated tool parameter, never a data key, so it's excluded here.
      *
      * @param  array<string, mixed>  $data
@@ -88,7 +88,7 @@ trait ValidatesBlueprintData
     }
 
     /**
-     * The CP's own validation path (spec §8). Callers pass MERGED values
+     * The CP's own validation path. Callers pass MERGED values
      * (existing + patch) so partial updates never false-fail required fields,
      * plus the CP's rule placeholder replacements (collection/site, and id on
      * updates) so rules like unique_entry_value scope correctly.

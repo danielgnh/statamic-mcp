@@ -61,7 +61,7 @@ class GlobalsUpdate extends Tool
         $user = $this->user($request);
 
         // v6 has no 'view {handle} globals' permission — edit is the only
-        // per-set permission (spec §4 row 14).
+        // per-set permission.
         $this->ensurePermission($user, "edit {$handle} globals");
 
         $set = GlobalSet::findByHandle($handle);
@@ -80,7 +80,7 @@ class GlobalsUpdate extends Tool
 
         // v6: in() returns the existing localization, or a fresh unsaved one
         // via makeLocalization(); saving below persists it — the transparent-
-        // creation rule (spec §4 row 14). The ?? branch is belt-and-braces:
+        // creation rule. The ?? branch is belt-and-braces:
         // in() only returns null for sites outside $set->sites(), which
         // resolveSite() already rejected.
         $variables = $set->in($site) ?? $set->makeLocalization($site);
@@ -108,7 +108,7 @@ class GlobalsUpdate extends Tool
         $existing = $variables->data()->all();
         $merged = array_merge($existing, $patch);
 
-        // Strict compare over normalized values (T14 pattern): assoc key
+        // Strict compare over normalized values: assoc key
         // order is irrelevant, but types matter — loose == would turn an
         // explicit null-clear of a falsy variable into a false no-op.
         if ($this->normalize($merged) === $this->normalize($existing)) {
@@ -139,7 +139,7 @@ class GlobalsUpdate extends Tool
             throw new ToolException('the save was cancelled by a listener — the global variables were not updated');
         }
 
-        // Globals have no draft state (spec §4 rows 13-14) — updates are live
+        // Globals have no draft state — updates are live
         // immediately.
         return $this->json([
             'handle' => $handle,

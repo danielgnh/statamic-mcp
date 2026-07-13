@@ -80,7 +80,7 @@ class EntriesCreate extends Tool
 
         // On revision collections publish state is CP-owned: ANY explicit
         // published value — true or false — is rejected outright, and the
-        // rejection must win over a publish-permission denial (spec §6), so
+        // rejection must win over a publish-permission denial, so
         // this check sits above the publish gate.
         if ($revisions && ($validated['published'] ?? null) !== null) {
             throw new ToolException(sprintf(
@@ -92,7 +92,7 @@ class EntriesCreate extends Tool
         $published = ! $revisions && (bool) ($validated['published'] ?? false);
 
         if ($published) {
-            // Publish is distinct — matches the CP's own gate (spec §6 layer 3).
+            // Publish is distinct — matches the CP's own gate.
             $this->ensurePermission($user, "publish {$collectionHandle} entries");
         }
 

@@ -24,7 +24,7 @@ class TermsGet extends Tool
     use ResolvesSites;
 
     // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:
-    // it approximates token cost; multibyte characters count per-byte (T11).
+    // it approximates token cost; multibyte characters count per-byte.
     private const int PREVIEW_THRESHOLD = 500;
 
     // Characters of plain-text preview kept (Str::limit is mb-safe — never cuts mid-character).
@@ -106,7 +106,7 @@ class TermsGet extends Tool
         if ($format === 'augmented') {
             // Value::jsonSerialize runs a FULL augment — a relation field would
             // inline whole augmented items including their reverse entries.
-            // shallow() reduces relations to id/title/api_url-style stubs (T11).
+            // shallow() reduces relations to id/title/api_url-style stubs.
             $data = collect((array) $localized->toAugmentedArray())
                 ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
                 ->all();
@@ -145,8 +145,8 @@ class TermsGet extends Tool
         }
 
         // value('updated_at') so the fallback chain matches title() — a
-        // localized view inherits the origin's timestamp (T17 decision;
-        // terms_list uses the same chain). Never fileLastModified().
+        // localized view inherits the origin's timestamp
+        // (terms_list uses the same chain). Never fileLastModified().
         $response['updated_at'] = ($timestamp = $localized->value('updated_at'))
             ? Carbon::createFromTimestamp($timestamp, config('app.timezone'))->toIso8601String()
             : null;
@@ -191,7 +191,7 @@ class TermsGet extends Tool
 
     /**
      * Long Bard/markdown values become {__preview, truncated, note} objects
-     * unless explicitly requested via fields (spec §4 row 4 — T11 pattern).
+     * unless explicitly requested via fields.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $requestedFields

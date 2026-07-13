@@ -62,7 +62,7 @@ class TermsDelete extends Tool
 
         $sites = $term->taxonomy()->sites()->all();
 
-        // Reference-cleanup integrity (same fact as T20's rename path):
+        // Reference-cleanup integrity (same fact as the rename path):
         // vendor's UpdateTermReferences listener keys its TermDeleted cleanup
         // off getOriginal('slug'), and a file-hydrated term has no synced
         // original — without this, references in entries would dangle

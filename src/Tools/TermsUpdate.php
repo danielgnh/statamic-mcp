@@ -125,7 +125,7 @@ class TermsUpdate extends Tool
             throw new ToolException("term '{$newSlug}' already exists in taxonomy '{$taxonomyHandle}' — pick another slug");
         }
 
-        // Strict compare over normalized values (T14 pattern): assoc key
+        // Strict compare over normalized values: assoc key
         // order is irrelevant, but types matter — loose == would turn an
         // explicit null-clear of a falsy field into a false no-op.
         if (! $slugChanged && $this->normalize($newLocal) === $this->normalize($existingLocal)) {
@@ -199,7 +199,7 @@ class TermsUpdate extends Tool
             $payload['note'] = "slug renamed: the term id changed and its file moved — the old id no longer resolves; term references in entries are rewritten by Statamic's reference updater (runs on the queue; skipped when statamic.system.update_references is false), possibly with a delay when a queue worker is used — an immediate re-read may still show the old slug in entry fields; do not rewrite references manually";
         }
 
-        // Terms have no draft state (spec §4 rows 8-12) — updates are live
+        // Terms have no draft state — updates are live
         // immediately.
         return $this->json([...$payload, ...$this->liveness($localized, self::LIVENESS_LIVE)]);
     }

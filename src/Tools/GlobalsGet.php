@@ -49,7 +49,7 @@ class GlobalsGet extends Tool
     private function one(Request $request, UserContract $user, string $handle): Response
     {
         // Missing and exists-but-unexposed are indistinguishable by design;
-        // the error lists only exposed handles (spec §4 row 13).
+        // the error lists only exposed handles.
         $this->ensureExposed('globals', $handle);
 
         // v6 has no 'view {handle} globals' permission — edit is the only
@@ -87,7 +87,7 @@ class GlobalsGet extends Tool
         $globals = collect($this->exposedHandles('globals'))
             ->sort()
             // Exposed but not editable by this user → silently omitted,
-            // exactly like statamic_overview (spec §4 row 13).
+            // exactly like statamic_overview.
             ->filter(fn (string $handle) => $this->can($user, "edit {$handle} globals"))
             ->map(fn (string $handle) => GlobalSet::findByHandle($handle))
             // A handle exposed in config but deleted on disk resolves to

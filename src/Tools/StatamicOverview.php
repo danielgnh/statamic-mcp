@@ -29,7 +29,7 @@ class StatamicOverview extends Tool
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
-        return []; // zero parameters (spec §4 row 1)
+        return []; // zero parameters
     }
 
     protected function execute(Request $request): Response
@@ -176,7 +176,7 @@ class StatamicOverview extends Tool
                     'handle' => $handle,
                     'title' => $containers->get($handle)->title(),
                     // no allow_uploads flag: v6 has no per-container upload
-                    // toggle — the upload permission is the whole gate (spec §2)
+                    // toggle — the upload permission is the whole gate
                     'can_upload' => $this->can($user, "upload {$handle} assets"),
                     'can_edit' => $this->can($user, "edit {$handle} assets"),
                 ];

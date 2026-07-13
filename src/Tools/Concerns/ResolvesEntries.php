@@ -14,8 +14,8 @@ trait ResolvesEntries
      * id-based entry lookup must go through here so none of them can become
      * a site-permission bypass. Requires ResolvesSites (ensureSiteAccess()).
      *
-     * Missing and exists-but-unexposed are indistinguishable by design
-     * (spec §4 / §6 layer 2). A supplied $site must match the entry's own
+     * Missing and exists-but-unexposed are indistinguishable by design.
+     * A supplied $site must match the entry's own
      * site — selecting a localization by site is the collection + slug
      * lookup's job. The mismatch check runs before the site-access check on
      * purpose: the access denial names the site anyway, so erroring earlier
