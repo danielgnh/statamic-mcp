@@ -92,7 +92,7 @@ class EntriesUpdate extends Tool
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
 
-        $published = isset($validated['published']) ? (bool) $validated['published'] : null;
+        $published = $this->resolvePublished($validated['published'] ?? null);
 
         // On revision collections publish state is CP-owned: ANY explicit
         // published value — true or false, even same-state — is rejected;
@@ -255,6 +255,17 @@ class EntriesUpdate extends Tool
         }
 
         return $this->json($payload);
+    }
+
+    /**
+     * Tri-state publish flag: true/false sets the state; null leaves it
+     * untouched — and an omitted param and an explicit published: null both
+     * arrive here as null, so both mean "untouched". The cast narrows the
+     * validated-but-untyped value to the ?bool the save paths expect.
+     */
+    private function resolvePublished(mixed $published): ?bool
+    {
+        return $published === null ? null : (bool) $published;
     }
 
     private function resolveDate(?string $date, EntryContract $entry): ?Carbon
