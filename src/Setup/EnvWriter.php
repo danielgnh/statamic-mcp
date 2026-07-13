@@ -15,6 +15,11 @@ class EnvWriter
         }
 
         $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            return EditResult::Bailed;
+        }
+
         $pattern = '/^'.preg_quote($key, '/').'=(.*)$/m';
 
         if (preg_match($pattern, $contents, $matches)) {

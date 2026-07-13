@@ -54,6 +54,9 @@ class StatamicOverview extends Tool
         ]);
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
     private function sites(UserContract $user): array
     {
         $multisite = Site::multiEnabled();
@@ -76,6 +79,9 @@ class StatamicOverview extends Tool
         })->values()->all();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function collections(UserContract $user): array
     {
         $collections = Collection::all()->keyBy->handle();
@@ -106,6 +112,9 @@ class StatamicOverview extends Tool
             ->all();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function taxonomies(UserContract $user): array
     {
         $taxonomies = Taxonomy::all()->keyBy->handle();
@@ -134,6 +143,9 @@ class StatamicOverview extends Tool
             ->all();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function globals(UserContract $user): array
     {
         $sets = GlobalSet::all()->keyBy->handle();
@@ -150,6 +162,9 @@ class StatamicOverview extends Tool
             ->all();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     private function assetContainers(UserContract $user): array
     {
         $containers = AssetContainer::all()->keyBy->handle();
@@ -177,6 +192,7 @@ class StatamicOverview extends Tool
     }
 
     /**
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
      * @return SupportCollection<int, string> exposed handles, sorted for deterministic output
      */
     private function sortedExposed(string $type): SupportCollection

@@ -5,12 +5,14 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Collection;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Entries\Entry;
 
 #[Name('entries_delete')]
 #[Description('Permanently delete an entry by id. Deleting an origin also deletes all of its localizations (this requires site access to every localization\'s site); the response lists everything that was removed. On revision-enabled collections the entry\'s revision and working-copy files stay on disk as orphans (the Control Panel behaves the same way). This cannot be undone.')]
@@ -54,6 +56,7 @@ class EntriesDelete extends Tool
         // asking, and only offers its cascading "Delete" choice to users with
         // access to every descendant's site. Mirror that: gate every
         // localization site BEFORE deleting anything, then cascade explicitly.
+        /** @var Collection<int, Entry> $descendants */
         $descendants = $entry->descendants();
 
         $descendants->map->locale()->unique()->each(
@@ -61,7 +64,7 @@ class EntriesDelete extends Tool
         );
 
         $deleted = $descendants
-            ->map(fn (EntryContract $localization) => [
+            ->map(fn (Entry $localization) => [
                 'id' => $localization->id(),
                 'site' => $localization->locale(),
                 'slug' => $localization->slug(),

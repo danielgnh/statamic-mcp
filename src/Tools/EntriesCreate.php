@@ -69,6 +69,11 @@ class EntriesCreate extends Tool
         $site = $this->resolveSite($request, $user);
 
         $collection = Collection::findByHandle($collectionHandle);
+
+        if (! $collection) {
+            throw new ToolException($this->notFoundMessage('collection', $collectionHandle, $this->exposedHandles('collections')));
+        }
+
         $blueprint = $collection->entryBlueprint(); // the collection's default blueprint
 
         $revisions = $collection->revisionsEnabled();
@@ -209,6 +214,9 @@ class EntriesCreate extends Tool
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function resolveSlug(?string $slug, array $data, string $collection, string $site): string
     {
         if (! $slug) {

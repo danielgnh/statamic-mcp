@@ -9,6 +9,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use Statamic\Contracts\Entries\QueryBuilder;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 
@@ -61,8 +62,9 @@ class EntriesList extends Tool
         $perPage = max($perPage, 1);
         $page = max((int) ($validated['page'] ?? 1), 1);
 
-        $dated = Collection::findByHandle($collection)->dated();
+        $dated = Collection::findByHandle($collection)?->dated() ?? false;
 
+        /** @var QueryBuilder $query */
         $query = Entry::query()
             ->where('collection', $collection)
             ->where('site', $site);

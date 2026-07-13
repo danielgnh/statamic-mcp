@@ -19,6 +19,10 @@ class UsersRepositoryEditor
 
         $contents = file_get_contents($path);
 
+        if ($contents === false) {
+            return EditResult::Bailed;
+        }
+
         if (! preg_match("/^\s*'repository'\s*=>\s*'([^']+)'/m", $contents, $matches)) {
             return EditResult::Bailed;
         }

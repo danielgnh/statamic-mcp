@@ -78,7 +78,7 @@ class EntriesUpdate extends Tool
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
         // context) — silently ignored, never merged or treated as a change.
-        $data = collect($validated['data'])->except(['updated_at', 'updated_by'])->all();
+        $data = collect((array) $validated['data'])->except(['updated_at', 'updated_by'])->all();
 
         $this->rejectPreviewObjects($data, 'entries_get');
 

@@ -25,15 +25,19 @@ class McpTokensController extends CpController
 
         $days = $validated['expiry'] === 'never' ? null : (int) $validated['expiry'];
 
+        $user = User::current();
+
+        abort_if($user === null, 401);
+
         try {
-            $plain = $tokens->issue(User::current(), $validated['name'] ?? null, $days);
+            $plain = $tokens->issue($user, $validated['name'] ?? null, $days);
         } catch (LockTimeoutException) {
-            return redirect(cp_route('utilities.mcp-tokens'))
+            return redirect()->to(cp_route('utilities.mcp-tokens'))
                 ->with('error', __('The token store is busy — please try again.'))
                 ->withInput();
         }
 
-        return redirect(cp_route('utilities.mcp-tokens'))->with('statamic-mcp.plain_token', [
+        return redirect()->to(cp_route('utilities.mcp-tokens'))->with('statamic-mcp.plain_token', [
             'token' => $plain->token,
             'tokenId' => $plain->tokenId,
             'name' => $plain->name,
@@ -49,6 +53,8 @@ class McpTokensController extends CpController
 
         $user = User::current();
 
+        abort_if($user === null, 401);
+
         // Owner-or-super, enforced server-side — the view hiding other users'
         // rows is cosmetic, this is the actual gate. 'user' is coalesced
         // because tokens.yaml is hand-editable and a pruned key must fail
@@ -61,10 +67,10 @@ class McpTokensController extends CpController
         try {
             $tokens->revoke($tokenId);
         } catch (LockTimeoutException) {
-            return redirect(cp_route('utilities.mcp-tokens'))
+            return redirect()->to(cp_route('utilities.mcp-tokens'))
                 ->with('error', __('The token store is busy — please try again.'));
         }
 
-        return redirect(cp_route('utilities.mcp-tokens'))->with('success', __('Token revoked.'));
+        return redirect()->to(cp_route('utilities.mcp-tokens'))->with('success', __('Token revoked.'));
     }
 }

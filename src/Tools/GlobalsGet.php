@@ -120,6 +120,8 @@ class GlobalsGet extends Tool
      * honestly as inherited, mirroring terms_get. Variables carry no
      * Statamic-managed metadata (no TracksLastModified), so data is returned
      * verbatim.
+     *
+     * @return array<string, mixed>
      */
     private function variablesPayload(Variables $variables): array
     {

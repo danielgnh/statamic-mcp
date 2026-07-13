@@ -13,6 +13,8 @@ trait ValidatesBlueprintData
      * them instead, naming valid handles plus a Levenshtein "did you mean"
      * (spec §8). 'slug' is v6's auto-injected blueprint field; it is a
      * dedicated tool parameter, never a data key, so it's excluded here.
+     *
+     * @param  array<string, mixed>  $data
      */
     protected function rejectUnknownKeys(Blueprint $blueprint, array $data): void
     {
@@ -68,6 +70,8 @@ trait ValidatesBlueprintData
      * (and the global-variables store silently strips 'origin' on
      * rehydration). Hard-rejected regardless of blueprint contents — called
      * directly by blueprint-less write paths (globals).
+     *
+     * @param  array<string, mixed>  $data
      */
     protected function rejectReservedKeys(array $data): void
     {
@@ -89,6 +93,9 @@ trait ValidatesBlueprintData
      * plus the CP's rule placeholder replacements (collection/site, and id on
      * updates) so rules like unique_entry_value scope correctly.
      * Field-level messages reach the model for one-round-trip self-correction.
+     *
+     * @param  array<string, mixed>  $merged
+     * @param  array<string, string>  $replacements
      */
     protected function validateAgainstBlueprint(Blueprint $blueprint, array $merged, array $replacements = []): void
     {

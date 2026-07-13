@@ -36,11 +36,17 @@ class McpTokensUtility
         });
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public static function viewData(Request $request): array
     {
         $user = User::current();
+
+        abort_if($user === null, 401);
+
         $isSuper = $user->isSuper();
-        $endpoint = url(config('statamic.mcp.route'));
+        $endpoint = url(config()->string('statamic.mcp.route'));
         $oauthMode = config('statamic.mcp.auth') === 'oauth';
         $connections = app(ConnectionRepository::class);
 
@@ -67,10 +73,14 @@ class McpTokensUtility
      * coalesced so a pruned key can't 500 the page. The plain array type is
      * deliberate, mirroring Doctor::classifyTokens (repository return types
      * say complete records; widening them is a v1.1 candidate).
+     *
+     * @param  array<string, array<string, mixed>>  $records
+     * @return Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}>
      */
     protected static function presentTokens(array $records, ?string $onlyUserId): Collection
     {
-        return collect($records)
+        /** @var Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}> $presented */
+        $presented = collect($records)
             ->filter(fn ($record) => $onlyUserId === null || ($record['user'] ?? null) === $onlyUserId)
             ->map(function ($record, $tokenId) {
                 $userId = $record['user'] ?? '';
@@ -87,20 +97,28 @@ class McpTokensUtility
             })
             ->sortByDesc('created_at')
             ->values();
+
+        return $presented;
     }
 
     /**
      * Rows arrive shaped and sorted from the repository — this only filters
      * visibility (own-only unless super) and attaches the display email,
      * mirroring presentTokens.
+     *
+     * @param  Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool}>  $connections
+     * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}>
      */
     protected static function presentConnections(Collection $connections, ?string $onlyUserId): Collection
     {
-        return $connections
+        /** @var Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}> $presented */
+        $presented = $connections
             ->filter(fn ($connection) => $onlyUserId === null || $connection['user_id'] === $onlyUserId)
             ->map(fn ($connection) => array_merge($connection, [
                 'email' => User::find($connection['user_id'])?->email() ?? $connection['user_id'],
             ]))
             ->values();
+
+        return $presented;
     }
 }

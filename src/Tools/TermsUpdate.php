@@ -89,7 +89,7 @@ class TermsUpdate extends Tool
         // updated_at/updated_by are Statamic-managed metadata (terms_get
         // strips them from raw output, but stale copies may live in agent
         // context) — silently ignored, never merged or treated as a change.
-        $patch = collect($validated['data'])->except(['updated_at', 'updated_by'])->all();
+        $patch = collect((array) $validated['data'])->except(['updated_at', 'updated_by'])->all();
 
         $this->rejectPreviewObjects($patch, 'terms_get');
 

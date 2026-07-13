@@ -9,6 +9,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use Statamic\Contracts\Assets\QueryBuilder;
 use Statamic\Facades\Asset;
 
 #[Name('assets_list')]
@@ -53,6 +54,7 @@ class AssetsList extends Tool
         $perPage = max($perPage, 1);
         $page = max((int) ($validated['page'] ?? 1), 1);
 
+        /** @var QueryBuilder $query */
         $query = Asset::query()->where('container', $handle);
 
         if ($folder !== null) {

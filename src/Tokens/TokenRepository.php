@@ -113,6 +113,9 @@ class TokenRepository
         return storage_path('statamic/mcp/tokens.yaml');
     }
 
+    /**
+     * @return array<string, array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}>
+     */
     protected function read(): array
     {
         return File::exists($this->path())
@@ -120,6 +123,9 @@ class TokenRepository
             : [];
     }
 
+    /**
+     * @param  array<string, array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}>  $tokens
+     */
     protected function write(array $tokens): void
     {
         $directory = dirname($this->path());

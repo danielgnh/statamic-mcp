@@ -6,6 +6,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Passport;
+use Laravel\Passport\Token;
 
 /**
  * Derives connector "connections" — (user, client) pairs — live from
@@ -118,6 +119,10 @@ class ConnectionRepository
         return true;
     }
 
+    /**
+     * @param  Token  $token
+     * @param  Collection<array-key, int>  $refreshable
+     */
     protected function usable(object $token, Collection $refreshable): bool
     {
         if ($token->revoked) {

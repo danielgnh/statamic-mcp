@@ -21,6 +21,10 @@ class UserModelEditor
 
         $contents = file_get_contents($path);
 
+        if ($contents === false) {
+            return EditResult::Bailed;
+        }
+
         if (str_contains($contents, self::TRAIT)) {
             return EditResult::Skipped;
         }

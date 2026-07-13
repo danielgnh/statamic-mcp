@@ -20,6 +20,7 @@ class IssueToken extends Command
 
     public function handle(TokenRepository $tokens): int
     {
+        /** @var string $email */
         $email = $this->argument('email');
 
         $user = User::findByEmail($email);
@@ -30,17 +31,21 @@ class IssueToken extends Command
             return self::FAILURE;
         }
 
+        /** @var string|null $days */
         $days = $this->option('expires-days');
 
-        if ($days !== null && (! ctype_digit((string) $days) || (int) $days < 1)) {
+        if ($days !== null && (! ctype_digit($days) || (int) $days < 1)) {
             $this->error('--expires-days must be a positive whole number.');
 
             return self::FAILURE;
         }
 
-        $plain = $tokens->issue($user, $this->option('name'), $days === null ? null : (int) $days);
+        /** @var string|null $name */
+        $name = $this->option('name');
 
-        $url = url(config('statamic.mcp.route'));
+        $plain = $tokens->issue($user, $name, $days === null ? null : (int) $days);
+
+        $url = url(config()->string('statamic.mcp.route'));
 
         $this->line('');
         $this->info('Token created. This is the ONLY time it will be displayed — copy it now:');
@@ -65,7 +70,7 @@ class IssueToken extends Command
         $this->line('');
         $this->info('Cursor (.cursor/mcp.json):');
         $this->line('');
-        $this->line(json_encode([
+        $this->line((string) json_encode([
             'mcpServers' => [
                 'statamic' => [
                     'url' => $url,

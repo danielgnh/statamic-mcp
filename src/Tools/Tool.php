@@ -185,12 +185,17 @@ abstract class Tool extends BaseTool
     /**
      * Compact JSON in a text block (spec §8). Response::json() encodes with
      * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE (verified v0.8.2).
+     *
+     * @param  array<array-key, mixed>  $data
      */
     protected function json(array $data): Response
     {
         return Response::json($data);
     }
 
+    /**
+     * @param  string[]  $available
+     */
     protected function notFound(string $what, string $given, array $available): Response
     {
         return Response::error($this->notFoundMessage($what, $given, $available));
@@ -200,6 +205,8 @@ abstract class Tool extends BaseTool
      * Liveness block appended to every write response (spec §4): pass a
      * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm,
      * Variables, and Asset in 6.x source.
+     *
+     * @return array{result: string, cp_edit_url: mixed}
      */
     protected function liveness(EntryContract|LocalizedTerm|Variables|AssetContract $saved, string $state): array
     {
@@ -209,6 +216,9 @@ abstract class Tool extends BaseTool
         ];
     }
 
+    /**
+     * @param  string[]  $available
+     */
     protected function notFoundMessage(string $what, string $given, array $available): string
     {
         sort($available);

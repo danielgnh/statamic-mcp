@@ -37,6 +37,7 @@ trait ComparesPatchData
      * truncated {__preview, truncated, note} shape the get tools substitute
      * for long Bard/markdown values (T11 quality review).
      *
+     * @param  array<string, mixed>  $data
      * @param  string  $getTool  the tool to point the agent back to, e.g. 'entries_get'
      * @param  bool  $supportsFields  whether $getTool has a fields parameter — globals_get
      *                                does not, and the remedy must never fabricate one

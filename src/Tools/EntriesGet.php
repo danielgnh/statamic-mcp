@@ -81,7 +81,7 @@ class EntriesGet extends Tool
             // Value::jsonSerialize runs a FULL augment — a terms relation would
             // inline whole augmented terms including their reverse entries.
             // shallow() reduces relations to id/title/api_url-style stubs.
-            $data = collect($entry->toAugmentedArray())
+            $data = collect((array) $entry->toAugmentedArray())
                 ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
                 ->all();
         } else {
@@ -187,6 +187,9 @@ class EntriesGet extends Tool
         return $entry;
     }
 
+    /**
+     * @param  list<string>  $requestedFields
+     */
     private function assertKnownFields(array $requestedFields, Blueprint $blueprint): void
     {
         if ($requestedFields === []) {
@@ -216,6 +219,10 @@ class EntriesGet extends Tool
     /**
      * Long Bard/markdown values become {__preview, truncated, note} objects
      * unless explicitly requested via fields (spec §4 row 4).
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $requestedFields
+     * @return array<string, mixed>
      */
     private function withRichTextPreviews(array $data, Blueprint $blueprint, array $requestedFields): array
     {

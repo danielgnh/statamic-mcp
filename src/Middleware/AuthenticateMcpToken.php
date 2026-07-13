@@ -66,7 +66,7 @@ class AuthenticateMcpToken
         }
 
         // 5. Tokens die with their user — no orphan bookkeeping.
-        if (! $user = User::find($record['user'])) {
+        if (! $user = User::find($record['user'] ?? null)) {
             return $this->unauthenticated();
         }
 

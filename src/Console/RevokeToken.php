@@ -17,6 +17,7 @@ class RevokeToken extends Command
 
     public function handle(TokenRepository $tokens): int
     {
+        /** @var string $id */
         $id = $this->argument('id');
 
         if (! $tokens->revoke($id)) {

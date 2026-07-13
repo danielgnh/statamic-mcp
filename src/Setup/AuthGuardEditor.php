@@ -18,6 +18,10 @@ class AuthGuardEditor
 
         $contents = file_get_contents($path);
 
+        if ($contents === false) {
+            return EditResult::Bailed;
+        }
+
         // The api guard holds only scalar entries, so the block reliably ends
         // at the first ']' — no balancing needed.
         if (preg_match("/'api'\s*=>\s*\[[^\]]*\]/s", $contents, $matches)) {
@@ -38,6 +42,10 @@ class AuthGuardEditor
         }
 
         $rewritten = preg_replace("/'driver'\s*=>\s*'[^']*'/", "'driver' => 'passport'", $block, 1);
+
+        if ($rewritten === null) {
+            return EditResult::Bailed;
+        }
 
         file_put_contents($path, str_replace($block, $rewritten, $contents));
 

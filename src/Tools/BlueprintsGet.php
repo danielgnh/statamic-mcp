@@ -70,6 +70,10 @@ class BlueprintsGet extends Tool
 
         $blueprint = $requested === null ? $blueprints->first() : $blueprints->get($requested);
 
+        if ($blueprint === null) {
+            return $this->notFound('blueprint', (string) $requested, $blueprints->keys()->all());
+        }
+
         $fields = [];
         $example = [];
         $notes = [];
@@ -131,16 +135,20 @@ class BlueprintsGet extends Tool
      */
     private function blueprintsFor(string $type, string $handle): SupportCollection
     {
+        /** @var iterable<Blueprint> $blueprints */
         $blueprints = match ($type) {
-            'collection' => Collection::findByHandle($handle)->entryBlueprints(),
-            'taxonomy' => Taxonomy::findByHandle($handle)->termBlueprints(),
-            'global' => collect([GlobalSet::findByHandle($handle)->blueprint()])->filter(),
+            'collection' => Collection::findByHandle($handle)?->entryBlueprints() ?? [],
+            'taxonomy' => Taxonomy::findByHandle($handle)?->termBlueprints() ?? [],
+            'global' => array_filter([GlobalSet::findByHandle($handle)?->blueprint()]),
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
 
-        return collect($blueprints)->keyBy(fn ($blueprint) => $blueprint->handle());
+        return collect($blueprints)->keyBy(fn (Blueprint $blueprint) => (string) $blueprint->handle());
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function describe(Field $field): array
     {
         $config = $field->config();

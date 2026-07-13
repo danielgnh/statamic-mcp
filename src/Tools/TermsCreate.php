@@ -63,6 +63,10 @@ class TermsCreate extends Tool
 
         $taxonomy = Taxonomy::findByHandle($taxonomyHandle);
 
+        if (! $taxonomy) {
+            throw new ToolException($this->notFoundMessage('taxonomy', $taxonomyHandle, $this->exposedHandles('taxonomies')));
+        }
+
         // A term's origin locale is the taxonomy's FIRST configured site
         // (Term::defaultLocale()), not necessarily the global default site.
         $defaultSite = $taxonomy->sites()->first();
@@ -129,6 +133,9 @@ class TermsCreate extends Tool
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     */
     private function resolveSlug(?string $slug, array $data): string
     {
         if (! $slug) {

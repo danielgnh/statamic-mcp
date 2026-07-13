@@ -21,6 +21,8 @@ trait ResolvesSites
      * globally — a site statamic_overview advertises but $validSites rejects
      * is "not available for this resource", and when the DEFAULT site was
      * filled in and rejected, the error says so and asks for an explicit site.
+     *
+     * @param  Collection<int, string>|null  $validSites
      */
     protected function resolveSite(Request $request, UserContract $user, ?Collection $validSites = null): string
     {

@@ -51,8 +51,14 @@ class TermsList extends Tool
         $user = $this->user($request);
         $this->ensurePermission($user, "view {$taxonomy} terms");
 
+        $taxonomyResource = Taxonomy::findByHandle($taxonomy);
+
+        if (! $taxonomyResource) {
+            throw new ToolException($this->notFoundMessage('taxonomy', $taxonomy, $this->exposedHandles('taxonomies')));
+        }
+
         // Terms only exist in the taxonomy's own configured sites.
-        $site = $this->resolveSite($request, $user, Taxonomy::findByHandle($taxonomy)->sites());
+        $site = $this->resolveSite($request, $user, $taxonomyResource->sites());
 
         $query = Term::query()
             ->where('taxonomy', $taxonomy)
@@ -79,7 +85,7 @@ class TermsList extends Tool
             'page' => $paginated->currentPage(),
             'per_page' => $paginated->perPage(),
             'next_page' => $paginated->hasMorePages() ? $paginated->currentPage() + 1 : null,
-            'terms' => collect($paginated->items())->map(fn ($term) => [
+            'terms' => collect((array) $paginated->items())->map(fn ($term) => [
                 'id' => $term->id(),
                 'title' => $term->title(), // value('title') under the hood — recurses to the default locale
                 'slug' => $term->slug(),
