@@ -3,17 +3,19 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
+use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
+use Statamic\Contracts\Auth\User as UserContract;
+use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
@@ -25,6 +27,7 @@ use Statamic\Support\Str;
 class EntriesUpdate extends Tool
 {
     use ComparesPatchData;
+    use NormalizesEntryInput;
     use ResolvesEntries;
     use ResolvesSites;
     use ValidatesBlueprintData;
@@ -82,25 +85,14 @@ class EntriesUpdate extends Tool
 
         $this->rejectPreviewObjects($data, 'entries_get');
 
-        // Dated collections inject a 'date' blueprint field — the tool models
-        // it as a top-level param, so reject the ambiguous data-key spelling.
-        if ($collection->dated() && array_key_exists('date', $data)) {
-            throw new ToolException('pass date as a top-level parameter, not inside data');
-        }
-
-        // Same for slug (v6's auto-injected blueprint field): entries never
-        // store it in data, and the generic unknown-field error gives no
-        // usable hint — targeted rejection instead.
-        if (array_key_exists('slug', $data)) {
-            throw new ToolException('pass slug as a top-level parameter, not inside data');
-        }
+        $this->rejectAmbiguousDataKeys($data, $collection->dated());
 
         $blueprint = $entry->blueprint();
         $this->rejectUnknownKeys($blueprint, $data);
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
 
-        $published = $validated['published'] ?? null;
+        $published = isset($validated['published']) ? (bool) $validated['published'] : null;
 
         // On revision collections publish state is CP-owned: ANY explicit
         // published value — true or false, even same-state — is rejected;
@@ -128,14 +120,12 @@ class EntriesUpdate extends Tool
 
         // CP parity (EntriesController@update, 6.x: $entry = $entry->
         // fromWorkingCopy() before touching data): when a working copy is
-        // already staged, edits rebase onto it — merging over live data would
-        // silently revert every previously staged field. fromWorkingCopy()
-        // hydrates a clone (makeFromRevision), so the live Stache instance
-        // stays pristine either way.
+        // already staged, edits rebase onto it. fromWorkingCopy() hydrates a
+        // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
         $current = $basis->data()->all();
-        $merged = array_merge($current, $data); // shallow top-level merge by design
+        $merged = array_merge($current, $data);
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
 
@@ -143,7 +133,7 @@ class EntriesUpdate extends Tool
         // irrelevant (sorted recursively), but types matter — loose == would
         // juggle null == '' and '1' == 1 into false no-ops, so an explicit
         // null could never clear a falsy field and the write would be
-        // silently dropped. The basis is the staged copy when one exists.
+        // silently dropped.
         $dirty = $this->normalize($merged) !== $this->normalize($current)
             || ($slug !== null && $slug !== $basis->slug())
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()))
@@ -197,35 +187,50 @@ class EntriesUpdate extends Tool
             $target->date($date);
         }
 
-        if ($workingCopy) {
-            // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
-            // snapshots the in-memory attributes set above — the live entry
-            // is NEVER saved. Revision::save() returns false when a
-            // RevisionSaving listener cancels; nothing was persisted then.
-            $saved = $target->makeWorkingCopy()
-                ->user($user)
-                ->message('via MCP entries_update')
-                ->save();
+        return $workingCopy
+            ? $this->persistWorkingCopy($target, $user, $amending, $collection)
+            : $this->persistLive($entry, $published, $user, $collection);
+    }
 
-            if (! $saved) {
-                throw new ToolException('the working copy save was cancelled by a listener on this site — nothing was saved');
-            }
+    /**
+     * Revision-enabled published entry: stage the edit as a working copy, the
+     * live entry is never saved.
+     */
+    private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection): Response
+    {
+        // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
+        // snapshots the in-memory attributes set above — the live entry is
+        // NEVER saved. Revision::save() returns false when a RevisionSaving
+        // listener cancels; nothing was persisted then.
+        $saved = $target->makeWorkingCopy()
+            ->user($user)
+            ->message('via MCP entries_update')
+            ->save();
 
-            $payload = [
-                'id' => $target->id(),
-                'slug' => $target->slug(),
-                'status' => $target->status(),
-                'url' => $target->url(),
-                ...$this->liveness($target, $amending ? self::LIVENESS_WORKING_COPY_AMENDED : self::LIVENESS_WORKING_COPY),
-            ];
-
-            if ($collection->dated()) {
-                $payload['date'] = $target->date()?->toIso8601String();
-            }
-
-            return $this->json($payload);
+        if (! $saved) {
+            throw new ToolException('the working copy save was cancelled by a listener on this site — nothing was saved');
         }
 
+        $payload = [
+            'id' => $target->id(),
+            'slug' => $target->slug(),
+            'status' => $target->status(),
+            'url' => $target->url(),
+            ...$this->liveness($target, $amending ? self::LIVENESS_WORKING_COPY_AMENDED : self::LIVENESS_WORKING_COPY),
+        ];
+
+        if ($collection->dated()) {
+            $payload['date'] = $target->date()?->toIso8601String();
+        }
+
+        return $this->json($payload);
+    }
+
+    /**
+     * Draft or non-revision collection: write straight to the live entry.
+     */
+    private function persistLive(EntryContract $entry, ?bool $published, UserContract $user, CollectionContract $collection): Response
+    {
         if ($published !== null) {
             $entry->published($published);
         }
@@ -271,14 +276,7 @@ class EntriesUpdate extends Tool
             ));
         }
 
-        try {
-            return Carbon::parse($date);
-            // Carbon throws InvalidFormatException for malformed input and other
-            // \InvalidArgumentException subclasses for out-of-range values —
-            // catch the shared root so both surface as a clean tool error.
-        } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09 15:30", $date));
-        }
+        return $this->parseEntryDate($date);
     }
 
     /**

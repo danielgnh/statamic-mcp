@@ -2,11 +2,11 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -21,6 +21,7 @@ use Statamic\Support\Str;
 #[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Saves an unpublished draft by default; published: true requires the publish permission for the collection. On revision-enabled collections entries are always created as unpublished drafts with an initial revision attributed to you, and any explicit published value is rejected — publish from the Control Panel. slug is generated from data.title when omitted. Dated collections require date.')]
 class EntriesCreate extends Tool
 {
+    use NormalizesEntryInput;
     use ResolvesSites;
     use ValidatesBlueprintData;
 
@@ -74,7 +75,7 @@ class EntriesCreate extends Tool
             throw new ToolException($this->notFoundMessage('collection', $collectionHandle, $this->exposedHandles('collections')));
         }
 
-        $blueprint = $collection->entryBlueprint(); // the collection's default blueprint
+        $blueprint = $collection->entryBlueprint();
 
         $revisions = $collection->revisionsEnabled();
 
@@ -92,7 +93,6 @@ class EntriesCreate extends Tool
         $published = ! $revisions && (bool) ($validated['published'] ?? false);
 
         if ($published) {
-            // Publish is distinct — matches the CP's own gate.
             $this->ensurePermission($user, "publish {$collectionHandle} entries");
         }
 
@@ -107,21 +107,10 @@ class EntriesCreate extends Tool
             ));
         }
 
-        // Dated collections inject a required 'date' blueprint field — the
-        // tool models it as a top-level param (entries_get returns it
-        // top-level too), so reject the ambiguous data-key spelling and
-        // resolve the param BEFORE blueprint validation: our targeted error
-        // beats the validator's raw "The Date field is required."
-        if ($collection->dated() && array_key_exists('date', $data)) {
-            throw new ToolException('pass date as a top-level parameter, not inside data');
-        }
-
-        // Same for slug (v6's auto-injected blueprint field): entries never
-        // store it in data, and the generic unknown-field error gives no
-        // usable hint — targeted rejection instead.
-        if (array_key_exists('slug', $data)) {
-            throw new ToolException('pass slug as a top-level parameter, not inside data');
-        }
+        // Reject the ambiguous slug/date-in-data spelling BEFORE blueprint
+        // validation so our targeted error beats the validator's raw
+        // "The Date field is required."
+        $this->rejectAmbiguousDataKeys($data, $collection->dated());
 
         $date = $this->resolveDate($validated['date'] ?? null, $collection);
 
@@ -207,14 +196,7 @@ class EntriesCreate extends Tool
             return null;
         }
 
-        try {
-            return Carbon::parse($date);
-            // Carbon throws InvalidFormatException for malformed input and other
-            // \InvalidArgumentException subclasses for out-of-range values —
-            // catch the shared root so both surface as a clean tool error.
-        } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09 15:30", $date));
-        }
+        return $this->parseEntryDate($date);
     }
 
     /**
