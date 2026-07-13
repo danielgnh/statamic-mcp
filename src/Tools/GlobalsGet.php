@@ -100,7 +100,6 @@ class GlobalsGet extends Tool
             // implementation; acceptable, the core repository is the
             // supported surface.
             ->filter(fn ($set) => $set instanceof GlobalSetInstance)
-            // Sets not configured for the requested site are silently omitted too.
             ->filter(fn ($set) => $set->sites()->contains($site))
             ->map(fn ($set) => [
                 'handle' => $set->handle(),

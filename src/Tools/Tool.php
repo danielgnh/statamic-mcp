@@ -37,7 +37,7 @@ abstract class Tool extends BaseTool
 
     public const LIVENESS_LIVE = 'updated — live'; // terms/globals have no draft state
 
-    public const LIVENESS_CREATED = 'created — live'; // used later by terms_create
+    public const LIVENESS_CREATED = 'created — live';
 
     public const LIVENESS_UPLOADED = 'uploaded — live'; // assets have no draft state
 
@@ -111,10 +111,6 @@ abstract class Tool extends BaseTool
             : array_values(array_intersect($all, $configured));
     }
 
-    /**
-     * The one permission predicate: supers auto-pass. Used directly for
-     * capability flags; ensurePermission() turns it into a throwing guard.
-     */
     protected function can(UserContract $user, string $permission): bool
     {
         if ($user->isSuper()) {
@@ -124,10 +120,6 @@ abstract class Tool extends BaseTool
         return (bool) $user->hasPermission($permission);
     }
 
-    /**
-     * Uniform denial message for every native-permission check.
-     * Supers auto-pass. Publish/site checks pass their own permission strings.
-     */
     protected function ensurePermission(UserContract $user, string $permission): void
     {
         if ($this->can($user, $permission)) {
@@ -151,11 +143,6 @@ abstract class Tool extends BaseTool
         return $this->writesEnabled() && config('statamic.mcp.deletes');
     }
 
-    /**
-     * Throwing guard for every write tool — one canonical message naming the
-     * operative config switch. The boolean getters above stay for flag
-     * reporting and shouldRegister().
-     */
     protected function ensureWritesEnabled(): void
     {
         if (! $this->writesEnabled()) {

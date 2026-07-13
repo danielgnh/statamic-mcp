@@ -7,12 +7,6 @@ use Illuminate\Support\Str;
 use JsonSerializable;
 use Statamic\Fields\Blueprint;
 
-/**
- * Shared by the read tools (entries_get, terms_get): validates a caller's
- * `fields` selection against the blueprint, and collapses long Bard/markdown
- * values into preview objects so a single field can't blow the token budget.
- * The remediation note names the calling tool via name() (the #[Name] attribute).
- */
 trait PreviewsRichText
 {
     // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:

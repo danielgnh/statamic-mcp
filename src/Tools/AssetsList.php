@@ -58,7 +58,6 @@ class AssetsList extends Tool
         $query = Asset::query()->where('container', $handle);
 
         if ($folder !== null) {
-            // Subtree filter: the folder and everything nested below it.
             // LIKE treats % and _ as wildcards — escape them so the filter
             // is exact (backslashes are already rejected by normalizeFolder).
             $query->where('path', 'like', str_replace(['%', '_'], ['\%', '\_'], $folder).'/%');

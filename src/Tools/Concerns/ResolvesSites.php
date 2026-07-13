@@ -68,7 +68,7 @@ trait ResolvesSites
     /**
      * The single source of truth for site access — statamic_overview's
      * advertised can_access flag and the enforcement above must never drift
-     * apart. Single-site installs and the default site are never gated.
+     * apart.
      */
     protected function canAccessSite(UserContract $user, string $site): bool
     {

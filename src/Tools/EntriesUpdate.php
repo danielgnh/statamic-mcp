@@ -192,10 +192,6 @@ class EntriesUpdate extends Tool
             : $this->persistLive($entry, $published, $user, $collection);
     }
 
-    /**
-     * Revision-enabled published entry: stage the edit as a working copy, the
-     * live entry is never saved.
-     */
     private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection): Response
     {
         // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
@@ -226,9 +222,6 @@ class EntriesUpdate extends Tool
         return $this->json($payload);
     }
 
-    /**
-     * Draft or non-revision collection: write straight to the live entry.
-     */
     private function persistLive(EntryContract $entry, ?bool $published, UserContract $user, CollectionContract $collection): Response
     {
         if ($published !== null) {
@@ -258,10 +251,8 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * Tri-state publish flag: true/false sets the state; null leaves it
-     * untouched — and an omitted param and an explicit published: null both
-     * arrive here as null, so both mean "untouched". The cast narrows the
-     * validated-but-untyped value to the ?bool the save paths expect.
+     * An omitted param and an explicit published: null both arrive here as
+     * null — both mean "leave publish state untouched".
      */
     private function resolvePublished(mixed $published): ?bool
     {

@@ -53,9 +53,6 @@ class ConnectionRepository
 
         $tokenModel = Passport::tokenModel();
 
-        // One row per (user, client) pair, aggregated in the database — the
-        // full historical token table never lands in memory, only the
-        // connections it collapses to.
         $pairs = $tokenModel::query()
             ->select('user_id', 'client_id')
             ->selectRaw('MIN(created_at) as connected_at')

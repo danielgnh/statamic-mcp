@@ -100,8 +100,7 @@ class ServiceProvider extends AddonServiceProvider
             // Passport 12+ ships no default consent view and never binds
             // AuthorizationViewResponse — /oauth/authorize 500s with
             // "Target [...AuthorizationViewResponse] is not instantiable"
-            // unless someone calls authorizationView(). Since this addon owns
-            // the OAuth setup, it owns this too. Guarded on `! bound` so a host
+            // unless someone calls authorizationView(). Guarded on `! bound` so a host
             // app's own Passport::authorizationView() wins whichever boots first.
             if (! app()->bound(AuthorizationViewResponse::class)) {
                 Passport::authorizationView('statamic-mcp::oauth.authorize');

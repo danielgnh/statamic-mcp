@@ -8,11 +8,6 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
-/**
- * Shared input hygiene for the entries write tools (create + update). Each tool
- * owns its own dated/required policy; only the raw date parse and the
- * top-level-param rejection are common to both.
- */
 trait NormalizesEntryInput
 {
     /**

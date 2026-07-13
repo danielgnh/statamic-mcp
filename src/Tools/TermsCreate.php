@@ -81,8 +81,7 @@ class TermsCreate extends Tool
 
         // CP parity (TermPolicy::store gates the target site): the created
         // term lives in the origin site, so the user must be able to access
-        // it. The trait exempts single-site installs and the global default
-        // site, keeping common-case behavior identical.
+        // it.
         $this->ensureSiteAccess($user, $defaultSite);
 
         $blueprint = $taxonomy->termBlueprint();
@@ -92,8 +91,7 @@ class TermsCreate extends Tool
         // Resolve the slug BEFORE blueprint validation: v6 injects a required
         // 'slug' field into term blueprints, and the CP satisfies it by
         // validating the request's slug value alongside the data — feed the
-        // resolved slug in the same way. Our targeted empty-slug error beats
-        // the validator's raw "The Slug field is required."
+        // resolved slug in the same way.
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data);
 
         // The CP's term store path (TermsController@store, 6.x) passes no rule

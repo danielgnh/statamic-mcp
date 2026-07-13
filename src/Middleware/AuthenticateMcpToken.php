@@ -29,7 +29,6 @@ class AuthenticateMcpToken
             return $this->unauthenticated();
         }
 
-        // 2. Positional parse: mcp_{tokenId}_{secret}.
         $parts = explode('_', (string) $request->bearerToken(), 3);
 
         if (count($parts) !== 3 || $parts[0] !== 'mcp' || $parts[1] === '' || $parts[2] === '') {

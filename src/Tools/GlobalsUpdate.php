@@ -80,9 +80,7 @@ class GlobalsUpdate extends Tool
 
         // v6: in() returns the existing localization, or a fresh unsaved one
         // via makeLocalization(); saving below persists it — the transparent-
-        // creation rule. The ?? branch is belt-and-braces:
-        // in() only returns null for sites outside $set->sites(), which
-        // resolveSite() already rejected.
+        // creation rule.
         $variables = $set->in($site) ?? $set->makeLocalization($site);
 
         // supportsFields: false — globals_get has no fields parameter, the
@@ -139,8 +137,6 @@ class GlobalsUpdate extends Tool
             throw new ToolException('the save was cancelled by a listener — the global variables were not updated');
         }
 
-        // Globals have no draft state — updates are live
-        // immediately.
         return $this->json([
             'handle' => $handle,
             'site' => $site,

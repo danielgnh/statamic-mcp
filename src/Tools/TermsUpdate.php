@@ -97,8 +97,7 @@ class TermsUpdate extends Tool
         // data['slug'] override (vendor LocalizedTerm::slug()), so terms_get's
         // round-trippable bucket can legitimately contain it: an UNCHANGED
         // value is harmless and stripped like updated_at. A differing value
-        // is ambiguous with the top-level rename parameter — targeted
-        // rejection, because the generic unknown-field error gives no hint.
+        // is ambiguous with the top-level rename parameter.
         if (array_key_exists('slug', $patch)) {
             if ($patch['slug'] !== $localized->slug()) {
                 throw new ToolException('pass slug as a top-level parameter, not inside data');

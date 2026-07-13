@@ -6,10 +6,6 @@ namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Danielgnh\StatamicMcp\Tools\ToolException;
 
-/**
- * Shared patch hygiene for the update tools (entries, terms, globals):
- * the strict no-op comparison and the preview-object round-trip guard.
- */
 trait ComparesPatchData
 {
     /**

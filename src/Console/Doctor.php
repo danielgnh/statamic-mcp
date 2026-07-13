@@ -149,7 +149,6 @@ class Doctor extends Command
         if ($appUrl === 'http://localhost') {
             $this->warn("[WARN] APP_URL is Laravel's default (http://localhost) — the endpoint above is only reachable if that is really the site's address. Set APP_URL to the site's public URL.");
         } elseif (str_starts_with($appUrl, 'http://')) {
-            // Bearer over plaintext http: every token on the wire is readable.
             $this->warn('[WARN] APP_URL is plain http — Bearer tokens over http travel unencrypted. Serve the MCP endpoint over https.');
         }
     }
@@ -282,8 +281,7 @@ class Doctor extends Command
      * Passport 12+ ships no default consent view and never binds
      * AuthorizationViewResponse, so /oauth/authorize 500s ("Target [...] is not
      * instantiable") the moment a connector reaches consent — while every other
-     * check stays green. The addon binds a default in OAuth mode, so a [FAIL]
-     * here means its boot never ran (see 'MCP route is mounted' above).
+     * check stays green.
      */
     protected function checkAuthorizationView(): void
     {
@@ -324,9 +322,7 @@ class Doctor extends Command
      * The migration remedy above is only honest if the schema can actually
      * take it: Statamic file users are keyed by UUID, eloquent:import-users
      * preserves those ids, and Laravel's stock users table (bigint id) can
-     * never hold them — the conflict that strands an unattended setup. Name
-     * the conversion here so the operator (or their agent) knows the real
-     * first step.
+     * never hold them — the conflict that strands an unattended setup.
      */
     protected function uuidReadinessNote(): string
     {
@@ -373,9 +369,6 @@ class Doctor extends Command
         $driver = $this->prereqs->apiGuardDriver() ?? '(none)';
 
         if ($driver !== 'passport') {
-            // Wrong driver is worse than none: OAuth discovery and token
-            // issuance complete, then every request 401-loops on tokens the
-            // guard ignores — misconfiguration presenting as credential failure.
             $this->problem("The 'api' guard uses the '{$driver}' driver, not 'passport' — OAuth discovery and token issuance would complete, then every request 401-loops on tokens the guard ignores. In config/auth.php set 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'.");
 
             return;

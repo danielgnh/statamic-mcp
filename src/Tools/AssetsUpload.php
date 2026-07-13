@@ -86,9 +86,8 @@ class AssetsUpload extends Tool
 
         $path = ltrim(($folder === null ? '' : $folder.'/').$basename, '/');
 
-        // No silent overwrite: the CP 409s here and asks a human; we refuse
-        // and tell the agent its options. Also keeps Statamic's
-        // exists-therefore-timestamp rename fallback from ever firing.
+        // No silent overwrite: the CP 409s here and asks a human. Also keeps
+        // Statamic's exists-therefore-timestamp rename fallback from ever firing.
         if ($existing = $this->findAsset($container, $path)) {
             throw new ToolException(sprintf(
                 "asset '%s' already exists in container '%s' (id '%s') — pick another filename, or delete it first if it should be replaced",

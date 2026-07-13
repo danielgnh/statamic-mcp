@@ -59,7 +59,6 @@ class UserModelEditor
             $updated = str_replace($line, $newLine, $updated);
         }
 
-        // Insert "use HasApiTokens;" as the first statement in the class body.
         if (! preg_match('/^class\s+\w+[^{]*\{\n/m', $updated, $body)) {
             return EditResult::Bailed;
         }
