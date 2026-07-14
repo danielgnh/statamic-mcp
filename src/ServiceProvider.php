@@ -14,6 +14,7 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
@@ -44,8 +45,10 @@ class ServiceProvider extends AddonServiceProvider
         ], 'statamic-mcp-config');
 
         $this->publishes([
-            __DIR__.'/../resources/views/oauth/authorize.blade.php' => resource_path('views/vendor/statamic-mcp/oauth/authorize.blade.php'),
+            __DIR__.'/../resources/views' => resource_path('views/vendor/statamic-mcp'),
         ], 'statamic-mcp-views');
+
+        Blade::anonymousComponentPath(__DIR__.'/../resources/views/components', 'statamic-mcp');
 
         $this->registerPermission();
 
