@@ -11,7 +11,9 @@ use Danielgnh\StatamicMcp\CP\McpTokensUtility;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
+use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
@@ -77,6 +79,15 @@ class ServiceProvider extends AddonServiceProvider
     {
         $oauth = config('statamic.mcp.auth') === 'oauth';
 
+        if ($oauth) {
+            $this->registerOAuthGuard();
+
+            // Converts Passport's bigint user_id columns to string(36) so
+            // Statamic's UUID ids fit — loaded only in OAuth mode so the addon
+            // never touches Passport tables a host app uses for other things.
+            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        }
+
         // Build the full middleware stack BEFORE Mcp::web() registers anything,
         // so a config-shape error throws while zero routes exist — a throw after
         // registration would leave an unauthenticated route behind (fail closed).
@@ -106,5 +117,25 @@ class ServiceProvider extends AddonServiceProvider
                 Passport::authorizationView('statamic-mcp::oauth.authorize');
             }
         }
+    }
+
+    /**
+     * OAuth mode brings its own guard, defined here in config so the host app
+     * never edits config/auth.php: the driver validates the bearer via
+     * Passport's ResourceServer but resolves the user through the Statamic
+     * repository — file users and Eloquent users alike. The definition is
+     * addon-namespaced and only exists in OAuth mode, so a host app's own
+     * guards are untouched.
+     */
+    protected function registerOAuthGuard(): void
+    {
+        Auth::viaRequest(PassportBearerGuard::DRIVER, new PassportBearerGuard);
+
+        config([
+            'auth.guards.'.PassportBearerGuard::GUARD => [
+                'driver' => PassportBearerGuard::DRIVER,
+                'provider' => null,
+            ],
+        ]);
     }
 }

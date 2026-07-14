@@ -8,7 +8,7 @@ system to configure.
 ### Auth modes
 
 - `token` (default) — static Bearer tokens for header-capable clients: Claude Code, Cursor, MCP Inspector. Works on every install, including file-based users.
-- `oauth` — Passport-backed OAuth for claude.ai, Claude Desktop, and ChatGPT connectors. Requires database (Eloquent) users — a Passport constraint.
+- `oauth` — Passport-backed OAuth for claude.ai, Claude Desktop, and ChatGPT connectors. Works with file users AND database users — the addon's own guard resolves tokens through the Statamic repository. Passport just needs a database for its own tables (sqlite is fine).
 
 ### Commands
 
@@ -21,7 +21,7 @@ php please mcp:doctor
 php please mcp:setup --token --user=you@site.com --yes
 </code-snippet>
 
-<code-snippet name="Unattended OAuth setup (Passport, keys, user model, api guard, env flip)" lang="shell">
+<code-snippet name="Unattended OAuth setup (Passport, keys, env flip, migrations)" lang="shell">
 php please mcp:setup --oauth --yes
 </code-snippet>
 @endverbatim
@@ -31,8 +31,7 @@ idempotent — re-running skips satisfied steps.
 
 ### Rules
 
-- If the site stores users in files, OAuth setup must first migrate them to the database. `--yes` deliberately refuses to do this on its own: **ask the developer for explicit approval** (and a backup), then re-run with `--migrate-users`.
-- Statamic file users are keyed by **UUID** and `eloquent:import-users` preserves those ids — the user model needs the `HasUuids` trait and `users.id` must be a UUID column. On a stock Laravel schema (bigint `users.id`) the wizard stops and prints the exact conversion steps: add `HasUuids` to the model, migrate `users.id` (and every referencing foreign key) to UUID, `php artisan migrate`, re-run. This is expected and solvable — apply the steps rather than abandoning OAuth setup.
-- Never flip `config/statamic/users.php` to `'eloquent'` by hand while the users table is empty — control panel login reads that table and everyone gets locked out. The wizard flips it only after verifying imported users actually exist, and reverts if they don't.
-- Never hand-edit `config/auth.php`, `config/statamic/users.php`, or the User model for MCP setup — the wizard applies those edits deterministically and prints a manual snippet when a file is non-standard.
+- OAuth setup never migrates users, never edits `config/auth.php`, and never touches the User model — do not do any of that by hand for MCP either. The addon registers its own auth guard in memory.
+- The env flip runs BEFORE the migrate step on purpose: the addon's migration converting Passport's `user_id` columns to strings (Statamic ids are UUIDs) only loads when `STATAMIC_MCP_AUTH=oauth`. If migrations ran too early, set the env var and run `php artisan migrate` again.
+- For deploys, put the Passport keys in `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars instead of relying on `storage/oauth-*.key` files — per-release `passport:keys` runs silently invalidate every connected client.
 - The connected user needs the **Access MCP** permission (or super).

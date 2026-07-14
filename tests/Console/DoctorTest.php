@@ -1,6 +1,7 @@
 <?php
 
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -139,114 +140,83 @@ it('fails a middleware entry that is neither a class nor an alias', function () 
         ->assertExitCode(1);
 });
 
-it('fails oauth mode naming every missing prerequisite', function () {
+// No user-repository or api-guard checks in oauth mode anymore: the addon's
+// own guard authenticates file users and Eloquent users alike, so the doctor
+// checks what actually matters — Passport, its keys, and its tables.
+
+it('fails oauth mode naming every missing prerequisite at once', function () {
     config(['statamic.mcp.auth' => 'oauth']);
 
-    // No short-circuiting: all three prerequisites are reported at once.
+    // Passport is installed (require-dev), keys and tables are not — both are
+    // reported in the same run, no short-circuiting.
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('Auth mode: oauth')
-        ->expectsOutputToContain('Laravel Passport is not installed')
-        ->expectsOutputToContain('Users are file-based')
-        ->expectsOutputToContain("No 'api' guard is defined — Laravel 12 and 13 ship none")
+        ->expectsOutputToContain('[ OK ] Laravel Passport is installed.')
+        ->expectsOutputToContain("[FAIL] Passport's encryption keys are missing")
+        ->expectsOutputToContain("[FAIL] Passport's tables are missing")
         ->assertExitCode(1);
-})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
+});
 
-it('names the exact api guard config to add', function () {
+it('accepts keys provided via environment config instead of key files', function () {
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'passport.private_key' => '-----BEGIN RSA PRIVATE KEY-----fake',
+        'passport.public_key' => '-----BEGIN PUBLIC KEY-----fake',
+    ]);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[ OK ] Passport encryption keys are available.')
+        ->assertExitCode(1); // tables still missing
+});
+
+it('fails when Passport tables exist but user_id columns are integers', function () {
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'passport.private_key' => 'fake',
+        'passport.public_key' => 'fake',
+    ]);
+
+    OAuthFixtures::migratePassportWithBigintUserIds();
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain("[FAIL] Passport's user_id columns are integers, but Statamic ids are UUID strings")
+        ->assertExitCode(1);
+});
+
+it('passes the table check once user_id columns are string-typed', function () {
+    config([
+        'statamic.mcp.auth' => 'oauth',
+        'passport.private_key' => 'fake',
+        'passport.public_key' => 'fake',
+    ]);
+
+    OAuthFixtures::migratePassport();
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain("[ OK ] Passport tables exist and user_id columns fit Statamic's ids.");
+});
+
+// With Passport present, doctor must catch the consent-view gap that every
+// other check is blind to — Passport binds no default, so an unbound view
+// means /oauth/authorize 500s while the rest reports green.
+it('fails when no consent view is bound', function () {
     config(['statamic.mcp.auth' => 'oauth']);
-
-    $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain("'api' => ['driver' => 'passport', 'provider' => 'users']")
-        ->assertExitCode(1);
-});
-
-it('fails when the api guard exists but is not passport-driven', function () {
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'auth.guards.api' => ['driver' => 'session', 'provider' => 'users'],
-    ]);
-
-    $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain("[FAIL] The 'api' guard uses the 'session' driver, not 'passport'")
-        ->assertExitCode(1);
-});
-
-it('resolves the users repository driver, not the repository name', function () {
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'statamic.users.repository' => 'custom',
-        'statamic.users.repositories.custom.driver' => 'file',
-    ]);
-
-    $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain('Users are file-based')
-        ->assertExitCode(1);
-});
-
-it('fails the users check for any non-eloquent driver', function () {
-    // Mirror of AuthenticateOAuth's !== 'eloquent' predicate: not-file is
-    // not good enough.
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'statamic.users.repository' => 'custom',
-        'statamic.users.repositories.custom.driver' => 'mongodb',
-    ]);
-
-    $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain("[FAIL] Users use the 'mongodb' driver (repository: custom)")
-        ->assertExitCode(1);
-});
-
-it('passes the users and guard checks independently of Passport', function () {
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'statamic.users.repository' => 'eloquent',
-        'statamic.users.repositories.eloquent.driver' => 'eloquent',
-        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
-    ]);
-
-    $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain('[ OK ] Users are database-backed (repository: eloquent, driver: eloquent).')
-        ->expectsOutputToContain("[ OK ] The 'api' guard uses the passport driver.")
-        ->expectsOutputToContain('Laravel Passport is not installed')
-        // The HasApiTokens and consent-view checks only run once Passport is
-        // present — without it the Passport [FAIL] already owns that remedy
-        // (T27 CI leg pins it).
-        ->doesntExpectOutputToContain('HasApiTokens')
-        ->doesntExpectOutputToContain('OAuth consent view')
-        ->assertExitCode(1);
-})->skip(fn () => class_exists(Passport::class), 'asserts Passport absence — skipped in the Passport CI leg');
-
-// Passport CI leg: with Passport present, doctor must catch the consent-view
-// gap that every other check is blind to — Passport binds no default, so an
-// unbound view means /oauth/authorize 500s while the rest reports green.
-it('fails when Passport is present but no consent view is bound', function () {
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'statamic.users.repository' => 'eloquent',
-        'statamic.users.repositories.eloquent.driver' => 'eloquent',
-        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
-    ]);
 
     // This suite boots in token mode, so the addon never bound its default —
     // the exact false-green scenario Passport 13 introduces.
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('[FAIL] No OAuth consent view is bound')
         ->assertExitCode(1);
-})->skip(fn () => ! class_exists(Passport::class), 'requires laravel/passport — Passport CI leg only');
+});
 
 it('reports the consent view as OK once one is bound', function () {
-    config([
-        'statamic.mcp.auth' => 'oauth',
-        'statamic.users.repository' => 'eloquent',
-        'statamic.users.repositories.eloquent.driver' => 'eloquent',
-        'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
-    ]);
+    config(['statamic.mcp.auth' => 'oauth']);
 
     Passport::authorizationView('statamic-mcp::oauth.authorize');
 
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('[ OK ] OAuth consent view is bound.');
-})->skip(fn () => ! class_exists(Passport::class), 'requires laravel/passport — Passport CI leg only');
+});
 
 it('warns about a leftover duplicate auth-tables migration', function () {
     $dir = database_path('migrations');

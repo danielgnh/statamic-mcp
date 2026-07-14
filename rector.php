@@ -1,7 +1,6 @@
 <?php
 
 use Rector\CodeQuality\Rector\If_\ExplicitBoolCompareRector;
-use Rector\CodeQuality\Rector\If_\ObjectExplicitBoolCompareRector;
 use Rector\Config\RectorConfig;
 use RectorLaravel\Rector\FuncCall\AppToResolveRector;
 use RectorLaravel\Rector\StaticCall\CarbonToDateFacadeRector;
@@ -16,7 +15,6 @@ return RectorConfig::configure()
     ->withSkip([
         __DIR__.'/tests/__fixtures__',
         ExplicitBoolCompareRector::class,
-        ObjectExplicitBoolCompareRector::class,
         AppToResolveRector::class,
         CarbonToDateFacadeRector::class,
     ])

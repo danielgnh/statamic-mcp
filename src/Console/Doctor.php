@@ -256,6 +256,8 @@ class Doctor extends Command
     /**
      * Mirrors AuthenticateOAuth's preflight (same prerequisites, same remedy
      * texts) but never short-circuits — every missing piece is named at once.
+     * No user-repository check on purpose: OAuth mode works with file users
+     * and Eloquent users alike, via the addon's own guard.
      */
     protected function checkOAuth(): void
     {
@@ -267,14 +269,41 @@ class Doctor extends Command
             $this->problem("Laravel Passport is not installed. Run 'composer require laravel/passport' and follow the OAuth setup in the statamic-mcp README, or switch to token mode ('auth' => 'token').");
         }
 
-        $this->checkOAuthUsers($passportInstalled);
-        $this->checkApiGuard();
-
-        // Without Passport the binding cannot exist and the [FAIL] above owns
-        // the remedy — a second [FAIL] here would just be noise.
-        if ($passportInstalled) {
-            $this->checkAuthorizationView();
+        // The remaining checks presuppose Passport (keys, tables, view
+        // binding) — the [FAIL] above owns the remedy; more would be noise.
+        if (! $passportInstalled) {
+            return;
         }
+
+        $this->checkPassportKeys();
+        $this->checkOAuthTables();
+        $this->checkAuthorizationView();
+    }
+
+    protected function checkPassportKeys(): void
+    {
+        if ($this->prereqs->passportKeysExist()) {
+            $this->info('[ OK ] Passport encryption keys are available.');
+        } else {
+            $this->problem("Passport's encryption keys are missing. Run 'php artisan passport:keys', or provide them via the PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables (the deploy-friendly path — keys survive releases and are shared across servers).");
+        }
+    }
+
+    protected function checkOAuthTables(): void
+    {
+        if (! $this->prereqs->oauthTablesMigrated()) {
+            $this->problem("Passport's tables are missing — the first connector handshake would 500. Run 'php artisan vendor:publish --tag=passport-migrations' then 'php artisan migrate'. OAuth mode needs a database for Passport's OWN tables only; your users stay wherever they are (file users work).");
+
+            return;
+        }
+
+        if (! $this->prereqs->oauthUserIdColumnsFitStatamicIds()) {
+            $this->problem("Passport's user_id columns are integers, but Statamic ids are UUID strings — the first consent would crash on insert. Run 'php artisan migrate': the addon ships a migration converting the columns to string(36) (safe for integer ids too).");
+
+            return;
+        }
+
+        $this->info("[ OK ] Passport tables exist and user_id columns fit Statamic's ids.");
     }
 
     /**
@@ -290,91 +319,6 @@ class Doctor extends Command
         } else {
             $this->problem("No OAuth consent view is bound — /oauth/authorize would 500 with \"Target [Laravel\\Passport\\Contracts\\AuthorizationViewResponse] is not instantiable\". The addon binds one automatically in OAuth mode; if this fails, its boot did not run — check the log for 'Statamic MCP failed to mount'. To supply your own, call Passport::authorizationView() in your AppServiceProvider.");
         }
-    }
-
-    protected function checkOAuthUsers(bool $passportInstalled): void
-    {
-        $repository = $this->prereqs->usersRepository();
-        $driver = $this->prereqs->usersDriver() ?? '(none)';
-
-        if ($driver === 'file') {
-            $this->problem("Users are file-based (the '{$repository}' repository resolves to the file driver) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please mcp:setup --oauth' to migrate them (it checks every prerequisite first), or switch to token mode ('auth' => 'token').".$this->uuidReadinessNote());
-
-            return;
-        }
-
-        if ($driver !== 'eloquent') {
-            $this->problem("Users use the '{$driver}' driver (repository: {$repository}) — OAuth mode requires database (Eloquent) users, a Passport constraint, not ours. Run 'php please mcp:setup --oauth' to migrate them (it checks every prerequisite first), or switch to token mode ('auth' => 'token').".$this->uuidReadinessNote());
-
-            return;
-        }
-
-        $this->info("[ OK ] Users are database-backed (repository: {$repository}, driver: {$driver}).");
-
-        // Without Passport the trait cannot be in use anyway — its [FAIL]
-        // above already owns the remedy, so skip the noise.
-        if ($passportInstalled) {
-            $this->checkUserModelTrait();
-        }
-    }
-
-    /**
-     * The migration remedy above is only honest if the schema can actually
-     * take it: Statamic file users are keyed by UUID, eloquent:import-users
-     * preserves those ids, and Laravel's stock users table (bigint id) can
-     * never hold them — the conflict that strands an unattended setup.
-     */
-    protected function uuidReadinessNote(): string
-    {
-        $blockers = [];
-
-        if (! $this->prereqs->importModelHasUuids()) {
-            $blockers[] = 'the user model '.($this->prereqs->importUserModel() ?? 'App\Models\User').' is missing the HasUuids trait';
-        }
-
-        if (! $this->prereqs->usersIdColumnAcceptsUuids()) {
-            $table = config('statamic.users.tables.users', 'users');
-            $type = $this->prereqs->usersIdColumnType() ?? 'missing';
-            $blockers[] = "the '{$table}' table id column is '{$type}', not a UUID";
-        }
-
-        if ($blockers === []) {
-            return '';
-        }
-
-        return ' Note: the import preserves file-user UUID ids, but '.implode(' and ', $blockers).' — add the HasUuids trait and convert the id column (plus referencing foreign keys) to UUID first; the setup wizard prints the exact steps.';
-    }
-
-    protected function checkUserModelTrait(): void
-    {
-        $model = $this->prereqs->userModel();
-
-        if ($this->prereqs->userModelHasTrait()) {
-            $this->info('[ OK ] User model '.$model.' uses the HasApiTokens trait.');
-        } else {
-            $provider = config('auth.guards.api.provider', 'users');
-
-            $this->problem('User model '.($model ?: "(none configured in auth.providers.{$provider}.model)").' is missing the Laravel\\Passport\\HasApiTokens trait — add it per the README OAuth guide.');
-        }
-    }
-
-    protected function checkApiGuard(): void
-    {
-        if (! $this->prereqs->apiGuardDefined()) {
-            $this->problem("No 'api' guard is defined — Laravel 12 and 13 ship none. In config/auth.php add 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'.");
-
-            return;
-        }
-
-        $driver = $this->prereqs->apiGuardDriver() ?? '(none)';
-
-        if ($driver !== 'passport') {
-            $this->problem("The 'api' guard uses the '{$driver}' driver, not 'passport' — OAuth discovery and token issuance would complete, then every request 401-loops on tokens the guard ignores. In config/auth.php set 'api' => ['driver' => 'passport', 'provider' => 'users'] under 'guards'.");
-
-            return;
-        }
-
-        $this->info("[ OK ] The 'api' guard uses the passport driver.");
     }
 
     protected function problem(string $message): void

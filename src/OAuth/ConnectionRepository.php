@@ -27,11 +27,7 @@ class ConnectionRepository
      */
     public function ready(): bool
     {
-        $prereqs = app(OAuthPrerequisites::class);
-
-        return $prereqs->usersAreEloquent()
-            && $prereqs->apiGuardIsPassport()
-            && $prereqs->passportInstalled()
+        return app(OAuthPrerequisites::class)->passportInstalled()
             && Schema::hasTable('oauth_access_tokens');
     }
 
@@ -76,7 +72,7 @@ class ConnectionRepository
             ->map(fn ($pair) => [
                 'user_id' => (string) $pair->user_id,
                 'client_id' => (string) $pair->client_id,
-                'client_name' => $clients->get((string) $pair->client_id)->name ?? __('Unknown client'),
+                'client_name' => (string) ($clients->get((string) $pair->client_id)->name ?? __('Unknown client')),
                 'connected_at' => Carbon::parse($pair->connected_at),
                 'last_refreshed_at' => Carbon::parse($pair->last_refreshed_at),
                 'active' => $activePairs->has($pair->user_id.'|'.$pair->client_id),
@@ -93,7 +89,7 @@ class ConnectionRepository
      * predicate the old in-PHP usable() applied, one Passport row at a time.
      *
      * @param  class-string<Token>  $tokenModel
-     * @return Collection<string, int> flipped for O(1) has() lookups
+     * @return Collection<non-falsy-string, int> flipped for O(1) has() lookups
      */
     protected function activePairKeys(string $tokenModel): Collection
     {

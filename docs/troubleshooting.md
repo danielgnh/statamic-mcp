@@ -25,15 +25,17 @@ runtime.
   on it); token counts distinguish **active** from **expired** and **orphaned-user**
   tokens — "5 tokens issued but none are active" is a locked door that looks
   configured.
-- **OAuth mode** — Passport installed; users database-backed (checks the **resolved
-  driver** of your configured repository, not its name); `HasApiTokens` on the user
-  model; the `api` guard exists **and** uses the `passport` driver.
+- **OAuth mode** — Passport installed; encryption keys available (from `passport:keys`
+  files or the `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars); Passport's
+  tables migrated with string `user_id` columns (Statamic ids are UUIDs — the addon's
+  migration converts them); a consent view bound. No user-repository check: file
+  users work in OAuth mode.
 
 ## Common responses
 
 | Response | Meaning |
 |---|---|
-| `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: the Passport guard rejected the token. |
+| `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: Passport's ResourceServer rejected the bearer, or its user no longer resolves. |
 | `403` "requires 'access mcp'…" | The user authenticated fine but lacks the `Access MCP` permission — grant it to one of their roles in the CP. |
 | `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. Only the MCP route is affected. |
 | `404` on the endpoint | MCP is disabled, or enabled but failed to mount — check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. |

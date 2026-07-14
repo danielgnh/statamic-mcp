@@ -1,15 +1,27 @@
 # OAuth mode
 
 OAuth mode is for connector clients that can't send static headers — individual-plan
-claude.ai and Claude Desktop connectors, and ChatGPT. It delegates everything to
-`laravel/mcp` + Laravel Passport (dynamic client registration, PKCE, metadata
-discovery, consent screen). This addon ships **zero** OAuth code — just this setup path.
+claude.ai and Claude Desktop connectors, and ChatGPT. Dynamic client registration,
+PKCE, metadata discovery, and the consent screen are delegated to `laravel/mcp` +
+Laravel Passport.
 
-> **The trade-off, plainly:** OAuth mode requires database (Eloquent) users because
-> Passport requires an Eloquent model — a Passport constraint, not ours. File-based
-> user installs must migrate first (step 1). What matters is the **driver** your
-> configured user repository resolves to, not its name — `mcp:doctor` checks exactly
-> that.
+**Your users stay exactly where they are — file users work.** The addon brings its
+own auth guard: bearer tokens are validated by Passport's ResourceServer (signature,
+expiry, revocation — identical to Passport's stock guard), and the token's user is
+resolved through the *Statamic* repository instead of Eloquent. No user migration,
+no `HasApiTokens` trait, no `api` guard to configure — the addon defines its own
+guard (`statamic-mcp`) in memory, so `config/auth.php` is never touched.
+
+What OAuth mode does need:
+
+1. **`laravel/passport`** — for the OAuth endpoints and token machinery.
+2. **A database for Passport's own tables** (clients, tokens, auth codes) — sqlite
+   is fine. Only Passport's bookkeeping lives there; your users don't.
+3. **Passport's encryption keys** — from `passport:keys` files or (better for
+   deploys) the `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars.
+4. **String `user_id` columns on Passport's tables** — Statamic ids are UUID
+   strings, Passport's stock columns are bigint. The addon ships a migration that
+   converts them (loaded automatically in OAuth mode; safe for integer ids too).
 
 ## The wizard (recommended)
 
@@ -17,16 +29,11 @@ discovery, consent screen). This addon ships **zero** OAuth code — just this s
 php please mcp:setup
 ```
 
-One interactive command checks, confirms, and applies every prerequisite below —
-migrating users to the database, installing Passport, preparing the user model,
-adding the `api` guard, and flipping `STATAMIC_MCP_AUTH` (deliberately last, so an
-aborted run never leaves a broken mode live). It never edits a file without showing
-the change and asking first; a file it doesn't recognize gets the exact manual
-snippet instead. Re-running is safe — satisfied steps are skipped. It finishes by
-running `mcp:doctor` as proof.
-
-The manual steps below are exactly what the wizard does (and what it prints when
-it bails on a non-standard file).
+One command checks, confirms, and applies all four prerequisites — installing
+Passport, generating keys, flipping `STATAMIC_MCP_AUTH=oauth`, and running the
+migrations (deliberately after the flip, so the addon's user_id migration loads).
+Re-running is safe — satisfied steps are skipped. It finishes by running
+`mcp:doctor` as proof.
 
 ### Unattended (for scripts and AI agents)
 
@@ -34,89 +41,50 @@ it bails on a non-standard file).
 php please mcp:setup --oauth --yes
 ```
 
-`--yes` applies every change without confirming — each edit is still printed. The one
-thing `--yes` refuses to do on its own is migrate file users to the database: that is
-a data migration, so it only runs when you also pass `--migrate-users` (back up
-first). Token mode is scriptable too: `php please mcp:setup --token --user=you@site.com --yes`.
-
-If the project uses [Laravel Boost](https://laravel.com/docs/boost), this addon ships
-AI guidelines and a `statamic-mcp-setup` skill that teach coding agents exactly this
-flow — `boost:install` / `boost:update` picks them up automatically, so "set up OAuth
-for the MCP server" becomes a one-sentence request with the user migration as the
-only human decision.
+`--yes` applies every change without confirming — each edit is still printed.
+Token mode is scriptable too: `php please mcp:setup --token --user=you@site.com --yes`.
 
 ## Manual setup
 
-**Step 1 — Migrate users to the database** (skip if already on Eloquent users).
-
-> **The UUID prerequisite — read this first.** Statamic file users are keyed by UUID,
-> and `eloquent:import-users` preserves those ids: it requires the `HasUuids` trait on
-> your user model, and the ids can only land in a UUID `users.id` column. Laravel's
-> stock users table has a **bigint** auto-increment id — and Statamic ships no
-> migration converting it. Before anything else: add
-> `Illuminate\Database\Eloquent\Concerns\HasUuids` to `App\Models\User`, write a
-> migration converting `users.id` to `$table->uuid('id')->primary()` (plus every
-> column referencing it, e.g. `sessions.user_id`), and run `php artisan migrate`.
-> The wizard checks all of this and prints these exact steps when they're missing;
-> it also patches the generated Statamic auth migration's `user_id` foreign keys to
-> `foreignUuid` for you.
-
-```bash
-php please auth:migration        # generates the users migration
-php artisan migrate
-php please eloquent:import-users # imports your file users
-```
-
-Set `'repository' => 'eloquent'` in `config/statamic/users.php` per the
-[Statamic guide](https://statamic.dev/tips/storing-users-in-a-database) — but note
-the importer must run with the eloquent repository configured, and **it exits 0 even
-when it refuses to import**. Verify rows actually landed in the users table before
-walking away: an eloquent repository over an empty table locks everyone out of the
-control panel (the wizard verifies this and reverts the flip automatically).
-
-**Step 2 — Install Passport** and prepare the user model:
-
 ```bash
 composer require laravel/passport
-php artisan vendor:publish --tag=passport-migrations
-php artisan migrate
-php artisan passport:keys
-```
-
-Add the `Laravel\Passport\HasApiTokens` trait to your user model (`App\Models\User`),
-and the `OAuthenticatable` interface per the [laravel/mcp OAuth docs](https://laravel.com/docs/mcp#authentication).
-
-**Step 3 — Define the `api` guard.** This is the gotcha: **Laravel 12 and 13 ship no
-`api` guard**, and the guard's driver must be **`passport`** — with a leftover
-session/sanctum `api` guard, OAuth discovery and token issuance complete, then every
-request 401-loops on tokens the guard ignores. In `config/auth.php`:
-
-```php
-'guards' => [
-    'web' => [
-        'driver' => 'session',
-        'provider' => 'users',
-    ],
-
-    'api' => [
-        'driver' => 'passport',
-        'provider' => 'users',
-    ],
-],
-```
-
-**Step 4 — Switch the mode:**
-
-```bash
+php artisan passport:keys                                   # or set PASSPORT_* env vars
 # .env
 STATAMIC_MCP_AUTH=oauth
+php artisan vendor:publish --tag=passport-migrations
+php artisan migrate                                          # passport tables + the addon's user_id conversion
 ```
 
-That's it for the consent screen — in OAuth mode the addon binds a working,
-self-contained one automatically. (Passport 12+ ships no default consent view
-and never binds `AuthorizationViewResponse`, so without this `/oauth/authorize`
-would 500 with *"Target [Laravel\Passport\Contracts\AuthorizationViewResponse]
-is not instantiable"*. The addon closes that gap; `mcp:doctor` verifies it.)
+Order matters once: set `STATAMIC_MCP_AUTH=oauth` **before** the final
+`php artisan migrate`, because the addon's user_id migration only loads in OAuth
+mode. Running migrate again after the flip fixes an accidental early run.
+
+## Deploying
+
+Everything above is either committed (nothing — no app files change) or
+per-environment (env vars, migrations, keys). To ship an existing site:
+
+```bash
+# each environment's secret store
+STATAMIC_MCP_AUTH=oauth
+PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+```
+
+Generate the keys once (locally via `passport:keys`, then copy the file contents),
+and let the deploy pipeline run `php artisan migrate --force`. Keys in env survive
+releases, work on read-only filesystems (Vapor), and are shared across a
+horizontally-scaled fleet — re-running `passport:keys` per release would silently
+invalidate every connected client. `php please mcp:doctor` verifies each
+environment and exits non-zero, so it slots into a deploy step.
+
+## The consent screen
+
+In OAuth mode the addon binds a working, self-contained consent screen
+automatically. (Passport 12+ ships no default consent view and never binds
+`AuthorizationViewResponse`, so without this `/oauth/authorize` would 500 with
+*"Target [Laravel\Passport\Contracts\AuthorizationViewResponse] is not
+instantiable"*. The addon closes that gap; `mcp:doctor` verifies it.)
 
 To restyle it, publish the Blade and edit the copy — no need to publish
 laravel/mcp's own view, which depends on a compiled Vite/Tailwind bundle and
@@ -133,11 +101,22 @@ Now `php please mcp:doctor` should be all green, and connector clients can add
 `https://your-site.com/mcp/statamic` with no manual credentials — they discover the
 OAuth server, register themselves, and send your users through a normal Statamic
 login + consent screen. The resulting OAuth token maps to that real Statamic user,
-so permission enforcement is identical to token mode.
+so permission enforcement is identical to token mode: the `mcp:use` scope gates
+entry, then Statamic's native permissions decide everything else.
 
 If any prerequisite is missing, the MCP endpoint answers **503 with the exact remedy**
 (and a pointer to `mcp:doctor`) — the rest of your site is untouched, and token mode
 keeps working if you switch back.
+
+## Upgrading from the Eloquent-users setup
+
+Earlier versions required database (Eloquent) users, the Passport `api` guard, and
+`HasApiTokens` on the user model. All of that keeps working — existing tokens stay
+valid (same keys, same tables, same validation) — but none of it is required
+anymore. The leftover `api` guard and trait are harmless; remove them at leisure.
+Run `php artisan migrate` once after upgrading so the addon's user_id column
+conversion applies (it also fixes the latent bigint-column crash for imported
+UUID-keyed Eloquent users).
 
 ## Seeing and disconnecting connections
 

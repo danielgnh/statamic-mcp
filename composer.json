@@ -30,7 +30,7 @@
         "rector/rector": "^2.5"
     },
     "suggest": {
-        "laravel/passport": "Required for OAuth mode (claude.ai / ChatGPT connectors)."
+        "laravel/passport": "Required for OAuth mode (claude.ai / ChatGPT connectors) — works with file users, no user migration needed."
     },
     "autoload": {
         "psr-4": {

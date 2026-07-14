@@ -18,28 +18,11 @@ parameters:
             identifier: method.notFound
             message: '#^Call to an undefined method Statamic\\Contracts\\#'
 
-        # laravel/passport is a SUGGESTED dependency (required only for OAuth
-        # mode on the host site), so its classes are absent from this package's
-        # vendor/. The Passport uses live behind class_exists()/passportInstalled()
-        # guards (passportKeysExist, authorizationViewBound); scoped to this one
-        # file so any other unknown class anywhere in src/ still fails the build.
+        # Passport's Token model declares no @property docblocks for its table
+        # attributes (user_id, client_id, ...), and larastan can only infer
+        # model attributes from a live schema. Scoped to the one vendor model
+        # in the one file that queries it raw.
         -
-            identifier: class.notFound
-            message: '#Laravel\\Passport#'
-            path: src/Support/OAuthPrerequisites.php
-
-        # ServiceProvider binds the default consent view behind class_exists(
-        # Passport::class); that narrowing vouches for Passport itself, but the
-        # separate Contracts\AuthorizationViewResponse symbol (same absent
-        # package) still needs a scoped exception.
-        -
-            identifier: class.notFound
-            message: '#Laravel\\Passport\\Contracts\\AuthorizationViewResponse#'
-            path: src/ServiceProvider.php
-
-        # Same suggested-dependency story for the connections repository: every
-        # Passport symbol use sits behind ready()'s class_exists guard, and the
-        # Passport CI leg analyses and runs this file with the real package.
-        -
-            message: '#Laravel\\Passport#'
+            identifier: property.notFound
+            message: '#Laravel\\Passport\\Token#'
             path: src/OAuth/ConnectionRepository.php

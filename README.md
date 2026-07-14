@@ -12,7 +12,8 @@ who may do what. Built on the first-party [`laravel/mcp`](https://laravel.com/do
 
 - PHP ^8.3
 - Statamic ^6.0 (Laravel 12 or 13)
-- For OAuth mode only: `laravel/passport` + database (Eloquent) users
+- For OAuth mode only: `laravel/passport` + a database for Passport's own tables
+  (your users stay wherever they are — file users work)
 
 ## Installation
 
@@ -91,10 +92,13 @@ permission to enable it. Super admins see (and can revoke) everyone's tokens.
 
 ### OAuth mode
 
-For claude.ai, Claude Desktop, and ChatGPT connectors. Delegates everything to
-`laravel/mcp` + Laravel Passport (dynamic client registration, PKCE, consent
-screen) — this addon ships zero OAuth code. It requires database (Eloquent)
-users, because Passport does.
+For claude.ai, Claude Desktop, and ChatGPT connectors. Client registration, PKCE,
+discovery, and consent are delegated to `laravel/mcp` + Laravel Passport — and
+**your users stay exactly where they are, file users included**. The addon brings
+its own guard: bearers are validated by Passport's ResourceServer, and the token's
+user resolves through the Statamic repository. No user migration, no `HasApiTokens`
+trait, no `config/auth.php` edit. Passport just needs a database for its *own*
+tables (sqlite is fine) and its encryption keys.
 
 The easy path is the wizard:
 
@@ -102,10 +106,12 @@ The easy path is the wizard:
 php please mcp:setup
 ```
 
-It migrates users to the database, installs Passport, prepares the user model,
-adds the `api` guard, and flips `STATAMIC_MCP_AUTH=oauth` — never editing a file
-without showing the change first. The manual steps, plus the CP panel for viewing
-and disconnecting OAuth connections, are in **[docs/oauth.md](docs/oauth.md)**.
+It installs Passport, generates keys, flips `STATAMIC_MCP_AUTH=oauth`, and runs the
+migrations (including the addon's user_id conversion — Statamic ids are UUIDs,
+Passport's stock columns are bigint) — never editing a file without showing the
+change first. The manual steps, the deploy recipe (keys via `PASSPORT_PRIVATE_KEY` /
+`PASSPORT_PUBLIC_KEY` env vars), and the CP panel for viewing and disconnecting
+OAuth connections are in **[docs/oauth.md](docs/oauth.md)**.
 
 If any prerequisite is missing, the MCP endpoint answers **503 with the exact
 remedy** — the rest of your site is untouched.

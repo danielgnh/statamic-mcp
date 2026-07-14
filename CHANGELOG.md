@@ -8,12 +8,22 @@ adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- **OAuth mode now works with file users — no user migration, ever.** The addon
+  registers its own auth guard: bearers are validated by Passport's ResourceServer
+  (signature, expiry, revocation — identical checks to Passport's stock guard) and
+  the token's user resolves through the Statamic repository. No Eloquent users, no
+  `HasApiTokens` trait, no `api` guard in `config/auth.php`. Passport still needs a
+  database for its *own* tables; the addon ships a migration converting their
+  bigint `user_id` columns to string(36) so Statamic's UUID ids fit (loaded only in
+  OAuth mode; safe for integer ids — this also fixes the latent insert crash for
+  UUID-keyed Eloquent users on the old path). Keys can come from
+  `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars — the deploy-friendly
+  path `mcp:doctor` now recognizes.
 - `php please mcp:setup` — interactive onboarding wizard for both auth modes. The
-  OAuth path checks, confirms, and applies every Passport prerequisite (users →
-  database, Passport install, user model trait/contract, `api` guard, `.env` flip —
-  last, so aborted runs never leave a broken mode live) and verifies with
-  `mcp:doctor`. File edits are anchor-based with a printed manual fallback; the
-  wizard is idempotent.
+  OAuth path checks, confirms, and applies every prerequisite (Passport install,
+  encryption keys, `.env` flip, migrations — after the flip, so the addon's
+  user_id migration loads) and verifies with `mcp:doctor`. File edits are
+  anchor-based with a printed manual fallback; the wizard is idempotent.
 - Assets tools: `assets_list`, `assets_get`, `assets_upload`, `assets_update`,
   and `assets_delete` (delete gated behind `'deletes' => true` like the other
   delete tools). Uploads accept a `source_url` — downloaded server-side behind
