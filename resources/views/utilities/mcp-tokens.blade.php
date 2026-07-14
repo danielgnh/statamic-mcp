@@ -108,7 +108,12 @@
                 </ui-card>
             @elseif ($connections->isEmpty())
                 <ui-card>
-                    <ui-empty-state-item icon="link" heading="{{ __('No connections yet') }}" description="{{ __('Connections appear here when a connector (claude.ai, ChatGPT) adds this site and a user completes the consent flow.') }}"></ui-empty-state-item>
+                    {{-- ui-empty-state-item is a menu item (an <li> that renders a hoverable button) meant for ui-empty-state-menu, so a plain centered block is used instead. --}}
+                    <div class="flex flex-col items-center gap-2 py-10 text-center">
+                        <ui-icon name="link" class="size-6 text-gray-400"></ui-icon>
+                        <ui-heading size="lg" :level="3" text="{{ __('No connections yet') }}"></ui-heading>
+                        <ui-description class="max-w-md" text="{{ __('Connections appear here when a connector (claude.ai, ChatGPT) adds this site and a user completes the consent flow.') }}"></ui-description>
+                    </div>
                 </ui-card>
             @else
                 <ui-card inset class="overflow-x-auto">
@@ -156,7 +161,11 @@
     <ui-panel heading="{{ $isSuper ? __('All tokens') : __('Your tokens') }}">
         @if ($tokens->isEmpty())
             <ui-card>
-                <ui-empty-state-item icon="key" heading="{{ __('No tokens yet') }}" description="{{ __('Use the Create token button to issue your first token and connect an MCP client.') }}"></ui-empty-state-item>
+                <div class="flex flex-col items-center gap-2 py-10 text-center">
+                    <ui-icon name="key" class="size-6 text-gray-400"></ui-icon>
+                    <ui-heading size="lg" :level="3" text="{{ __('No tokens yet') }}"></ui-heading>
+                    <ui-description class="max-w-md" text="{{ __('Use the Create token button to issue your first token and connect an MCP client.') }}"></ui-description>
+                </div>
             </ui-card>
         @else
             <ui-card inset class="overflow-x-auto">
