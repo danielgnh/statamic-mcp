@@ -144,15 +144,22 @@ it('issues a token to a FILE user through the real authorize → consent → exc
         'updated_at' => now(),
     ])->save();
 
-    // Consent view as a closure: emit the auth_token and the serialized
+    // Consent view as a closure: capture the auth token and the raw session
     // authRequest so the approve POST can be seeded deterministically
     // (test-session persistence is driver-dependent; production uses a real
-    // session cookie).
-    Passport::authorizationView(fn (array $params) => response()->json([
-        'auth_token' => $params['authToken'],
-        'auth_request' => session('authRequest'),
-        'user_email' => $params['user']->email(),
-    ]));
+    // session cookie). Captured in-process, not via the JSON response — the
+    // session format changed from object to serialized string in Passport
+    // 13.7.5 and only the latter survives a JSON round-trip.
+    $consentSession = [];
+
+    Passport::authorizationView(function (array $params) use (&$consentSession) {
+        $consentSession = [
+            'authToken' => $params['authToken'],
+            'authRequest' => session('authRequest'),
+        ];
+
+        return response()->json(['user_email' => $params['user']->email()]);
+    });
 
     $verifier = Str::random(64);
     $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
@@ -174,11 +181,8 @@ it('issues a token to a FILE user through the real authorize → consent → exc
     // Step 2 — approve the consent screen.
     $approve = $this->actingAs($user, 'web')
         ->withoutMiddleware(ValidateCsrfToken::class)
-        ->withSession([
-            'authToken' => $consent->json('auth_token'),
-            'authRequest' => $consent->json('auth_request'),
-        ])
-        ->post('/oauth/authorize', ['auth_token' => $consent->json('auth_token')]);
+        ->withSession($consentSession)
+        ->post('/oauth/authorize', ['auth_token' => $consentSession['authToken']]);
 
     $approve->assertRedirect();
     parse_str(parse_url((string) $approve->headers->get('Location'), PHP_URL_QUERY), $query);
