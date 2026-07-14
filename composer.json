@@ -22,6 +22,7 @@
     "require-dev": {
         "driftingly/rector-laravel": "^2.5",
         "larastan/larastan": "^3.0",
+        "laravel/passport": "^13.0",
         "laravel/pint": "^1.13",
         "orchestra/testbench": "^10.0 || ^11.0",
         "pestphp/pest": "^4.0",
@@ -29,7 +30,7 @@
         "rector/rector": "^2.5"
     },
     "suggest": {
-        "laravel/passport": "Required for OAuth mode (claude.ai / ChatGPT connectors)."
+        "laravel/passport": "Required for OAuth mode (claude.ai / ChatGPT connectors) — works with file users, no user migration needed."
     },
     "autoload": {
         "psr-4": {

@@ -99,36 +99,6 @@ jobs:
       - name: Check for pending refactorings
         run: vendor/bin/rector --dry-run --no-progress-bar
 
-  # Runs the whole suite with laravel/passport installed: the Passport-skipped
-  # tests (ConnectionRepository, connections panel/controller) go live, and the
-  # one passport-absence test skips instead. composer.json is modified only
-  # inside the runner — passport must never land in require-dev (the main legs
-  # assert class_exists honestly).
-  passport:
-    runs-on: ubuntu-latest
-    name: Passport leg (OAuth connections)
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: bcmath, ctype, curl, dom, exif, gd, iconv, intl, libxml, mbstring, openssl, pdo, tokenizer, xml, zip
-          coverage: none
-
-      - name: Install dependencies (with Passport)
-        run: |
-          composer require laravel/passport --no-interaction --no-update
-          composer update --prefer-dist --no-interaction
-
-      - name: Run tests
-        run: vendor/bin/pest --ci
-
-  # Still earmarked for v1.1: the FULL OAuth integration leg (real Bearer 200s,
-  # token-lifecycle 401s, WWW-Authenticate/RFC 9728 metadata, DCR, scope-
-  # enforcement decision, Eloquent user normalization, wrong-driver 503,
-  # statelessness). The 9-item checklist lives in
-  # docs/superpowers/plans/EXECUTION-NOTES.md under "Task 27/28 (Passport CI leg)".
+  # No separate Passport leg anymore: laravel/passport lives in require-dev,
+  # so every matrix leg runs the full OAuth coverage — including real signed
+  # bearers and the authorize→consent→exchange flow with file users.

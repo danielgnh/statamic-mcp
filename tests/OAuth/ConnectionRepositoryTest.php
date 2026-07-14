@@ -2,32 +2,27 @@
 
 use Danielgnh\StatamicMcp\OAuth\ConnectionRepository;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Passport;
 
-// Every test here needs laravel/passport — the main CI leg (where the package
-// is deliberately absent) skips them; the Passport CI leg runs them.
-$requiresPassport = fn () => ! class_exists(Passport::class);
-
 beforeEach(function () {
-    if (class_exists(Passport::class)) {
-        OAuthFixtures::migratePassport();
-        OAuthFixtures::oauthReadyConfig();
-    }
+    OAuthFixtures::migratePassport();
+    OAuthFixtures::oauthReadyConfig();
 });
 
-it('is not ready without the oauth prerequisites', function () {
-    config(['auth.guards.api' => ['driver' => 'session', 'provider' => 'users']]);
+it('is not ready before the passport tables are migrated', function () {
+    Schema::drop('oauth_access_tokens');
 
     $repository = new ConnectionRepository;
 
     expect($repository->ready())->toBeFalse()
         ->and($repository->all())->toBeEmpty()
         ->and($repository->disconnect('u1', 'c1'))->toBeFalse();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
-it('is ready when users are eloquent, the api guard is passport, and the tables exist', function () {
+it('is ready once passport is installed and the tables exist', function () {
     expect((new ConnectionRepository)->ready())->toBeTrue();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('groups tokens into one connection per user and client with honest timestamps', function () {
     $claude = OAuthFixtures::client('Claude');
@@ -47,13 +42,13 @@ it('groups tokens into one connection per user and client with honest timestamps
     expect($pair['connected_at']->toDateString())->toBe(now()->subDays(10)->toDateString())
         ->and($pair['last_refreshed_at']->toDateString())->toBe(now()->toDateString())
         ->and($pair['active'])->toBeTrue();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('falls back to an unknown-client label when the client row is gone', function () {
     OAuthFixtures::accessToken('user-1', 'deleted-client-id');
 
     expect((new ConnectionRepository)->all()->first()['client_name'])->toBe('Unknown client');
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('marks a pair active when an expired access token still has a live refresh token', function () {
     $client = OAuthFixtures::client();
@@ -62,7 +57,7 @@ it('marks a pair active when an expired access token still has a live refresh to
     OAuthFixtures::refreshToken($tokenId);
 
     expect((new ConnectionRepository)->all()->first()['active'])->toBeTrue();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('marks a pair inactive when the access token is revoked, even with a live refresh row', function () {
     // Passport's refresh grant checks BOTH rows: a revoked access token kills
@@ -74,7 +69,7 @@ it('marks a pair inactive when the access token is revoked, even with a live ref
     OAuthFixtures::refreshToken($tokenId);
 
     expect((new ConnectionRepository)->all()->first()['active'])->toBeFalse();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('marks a pair inactive when every token is expired with no live refresh', function () {
     $client = OAuthFixtures::client();
@@ -83,7 +78,7 @@ it('marks a pair inactive when every token is expired with no live refresh', fun
     OAuthFixtures::refreshToken($tokenId, ['revoked' => true]);
 
     expect((new ConnectionRepository)->all()->first()['active'])->toBeFalse();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('disconnects a pair by revoking its access AND refresh tokens', function () {
     $client = OAuthFixtures::client();
@@ -103,15 +98,15 @@ it('disconnects a pair by revoking its access AND refresh tokens', function () {
     expect($tokenModel::query()->find($mine)->revoked)->toBeTrue()
         ->and($refreshModel::query()->find($myRefresh)->revoked)->toBeTrue()
         ->and($tokenModel::query()->find($unrelated)->revoked)->toBeFalse();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('returns false disconnecting a pair that has no tokens at all', function () {
     expect((new ConnectionRepository)->disconnect('nobody', 'no-client'))->toBeFalse();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});
 
 it('treats disconnecting an already-dead pair as a successful no-op', function () {
     $client = OAuthFixtures::client();
     OAuthFixtures::accessToken('user-1', $client, ['revoked' => true]);
 
     expect((new ConnectionRepository)->disconnect('user-1', $client))->toBeTrue();
-})->skip($requiresPassport, 'requires laravel/passport (Passport CI leg)');
+});

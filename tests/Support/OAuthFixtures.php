@@ -8,11 +8,10 @@ use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
 
 /**
- * Schema + seed helpers for Passport-leg tests. The tables mirror Passport's
- * schema for every column its models or ConnectionRepository touch; user_id
- * is a string (Passport uses foreignId) so file-user fixture ids work under
- * sqlite — production OAuth requires Eloquent users, but these tests exercise
- * grouping and revocation, not authentication.
+ * Schema + seed helpers for the OAuth tests. The tables mirror Passport's
+ * schema for every column its models or ConnectionRepository touch, with the
+ * string user_id columns the addon's own migration produces — Statamic ids
+ * are UUID strings, whoever stores the users.
  */
 class OAuthFixtures
 {
@@ -33,12 +32,21 @@ class OAuthFixtures
 
         Schema::create('oauth_access_tokens', function (Blueprint $table) {
             $table->string('id')->primary();
-            $table->string('user_id')->nullable()->index();
+            $table->string('user_id', 36)->nullable()->index();
             $table->string('client_id');
             $table->string('name')->nullable();
             $table->text('scopes')->nullable();
             $table->boolean('revoked');
             $table->timestamps();
+            $table->dateTime('expires_at')->nullable();
+        });
+
+        Schema::create('oauth_auth_codes', function (Blueprint $table) {
+            $table->char('id', 80)->primary();
+            $table->string('user_id', 36)->index();
+            $table->string('client_id');
+            $table->text('scopes')->nullable();
+            $table->boolean('revoked');
             $table->dateTime('expires_at')->nullable();
         });
 
@@ -50,13 +58,46 @@ class OAuthFixtures
         });
     }
 
-    /** Config that makes ConnectionRepository::ready() true (with the tables migrated). */
+    /**
+     * Passport's STOCK shape — bigint user_id — for tests proving the doctor
+     * flags it and the addon's migration converts it.
+     */
+    public static function migratePassportWithBigintUserIds(): void
+    {
+        Schema::create('oauth_clients', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->boolean('revoked')->default(false);
+            $table->timestamps();
+        });
+
+        Schema::create('oauth_access_tokens', function (Blueprint $table) {
+            $table->char('id', 80)->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('client_id');
+            $table->text('scopes')->nullable();
+            $table->boolean('revoked');
+            $table->timestamps();
+            $table->dateTime('expires_at')->nullable();
+        });
+
+        Schema::create('oauth_auth_codes', function (Blueprint $table) {
+            $table->char('id', 80)->primary();
+            $table->foreignId('user_id')->index();
+            $table->string('client_id');
+            $table->text('scopes')->nullable();
+            $table->boolean('revoked');
+            $table->dateTime('expires_at')->nullable();
+        });
+    }
+
+    /** Config that makes OAuth mode look fully configured (with the tables migrated). */
     public static function oauthReadyConfig(): void
     {
         config([
             'statamic.mcp.auth' => 'oauth',
-            'statamic.users.repository' => 'eloquent',
-            'auth.guards.api' => ['driver' => 'passport', 'provider' => 'users'],
+            'passport.private_key' => '-----BEGIN RSA PRIVATE KEY-----fixture',
+            'passport.public_key' => '-----BEGIN PUBLIC KEY-----fixture',
         ]);
     }
 

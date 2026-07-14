@@ -3,15 +3,11 @@
 namespace Danielgnh\StatamicMcp\Console;
 
 use Closure;
-use Danielgnh\StatamicMcp\Setup\AuthGuardEditor;
 use Danielgnh\StatamicMcp\Setup\EditResult;
 use Danielgnh\StatamicMcp\Setup\EnvWriter;
-use Danielgnh\StatamicMcp\Setup\UserModelEditor;
-use Danielgnh\StatamicMcp\Setup\UsersRepositoryEditor;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Process;
-use ReflectionClass;
 use Statamic\Console\RunsInPlease;
 
 use function Laravel\Prompts\confirm;
@@ -26,8 +22,7 @@ class Setup extends Command
         {--oauth : Set up OAuth mode without asking which mode}
         {--token : Set up token mode without asking which mode}
         {--user= : Email for the first token (token mode)}
-        {--yes : Run unattended — apply every change without confirming}
-        {--migrate-users : Allow --yes to migrate file users to the database}';
+        {--yes : Run unattended — apply every change without confirming}';
 
     protected $description = 'Setup wizard for the MCP server — token or OAuth mode. Interactive by default, unattended with --yes.';
 
@@ -55,7 +50,7 @@ class Setup extends Command
                     'oauth' => 'OAuth — claude.ai, Claude Desktop, ChatGPT connectors',
                 ],
                 default: config('statamic.mcp.auth', 'token'),
-                hint: 'OAuth requires database (Eloquent) users — a Passport constraint.',
+                hint: 'OAuth needs a database for Passport\'s own tables — your users stay where they are.',
             ),
         };
 
@@ -94,21 +89,26 @@ class Setup extends Command
     }
 
     /**
+     * Users stay wherever they are — file or Eloquent — because the addon's
+     * own guard resolves OAuth tokens through the Statamic repository. What
+     * OAuth needs is Passport itself, its keys, and its tables (with user_id
+     * columns wide enough for Statamic's UUID ids — the addon's migration).
+     *
      * Every step follows the same rhythm: already satisfied? report and move
-     * on — otherwise confirm and apply. The .env flip runs LAST so an aborted
-     * run never leaves a broken oauth mode live; token mode keeps working
-     * until everything else is in place.
+     * on — otherwise confirm and apply. The .env flip runs before the final
+     * migrate on purpose: the addon's user_id migration only loads in OAuth
+     * mode, so the subprocess must already see the new mode. An aborted run
+     * still never leaves a broken endpoint live — the route answers 503 with
+     * the exact remedy until every prerequisite is in place.
      */
     protected function setupOAuth(EnvWriter $env): int
     {
         $steps = [
-            $this->ensureEloquentUsers(...),
             $this->ensurePassportInstalled(...),
-            $this->ensurePassportPlumbing(...),
-            $this->ensureUserModelPrepared(...),
-            $this->ensureApiGuard(...),
+            $this->ensurePassportKeys(...),
             $this->offerConsentViews(...),
             fn (): bool => $this->flipAuthMode($env),
+            $this->runMigrations(...),
         ];
 
         foreach ($steps as $step) {
@@ -120,174 +120,6 @@ class Setup extends Command
         }
 
         return $this->finale();
-    }
-
-    protected function ensureEloquentUsers(): bool
-    {
-        if ($this->prereqs->usersAreEloquent()) {
-            $this->components->twoColumnDetail('Database (Eloquent) users', 'skipped — already configured');
-
-            return true;
-        }
-
-        $this->components->warn('OAuth mode requires database users (a Passport constraint). This migrates your user data — back up first if in doubt.');
-
-        // Refuse a doomed run BEFORE asking for (or spending) the caller's
-        // approval: on the schema mismatch there is nothing this wizard can
-        // safely do except name the exact fix.
-        if (! $this->schemaCanTakeUuidImport()) {
-            return false;
-        }
-
-        // A data migration never rides along silently: --yes alone won't run
-        // it — the caller must say --migrate-users too.
-        if (! $this->confirmStep('Migrate users to the database now?', whenYes: (bool) $this->option('migrate-users'))) {
-            $this->printManual($this->option('yes')
-                ? 'Re-run with --migrate-users to allow the migration, or migrate manually per https://statamic.dev/tips/storing-users-in-a-database.'
-                : 'Migrate users per https://statamic.dev/tips/storing-users-in-a-database, then re-run this wizard.');
-
-            return false; // everything after this depends on Eloquent users
-        }
-
-        // Only generate + run the auth migration when the columns aren't there
-        // already. Statamic's migration re-adds `super` unguarded, so re-running
-        // it (a half-finished earlier run, a manual setup) crashes on the
-        // duplicate column instead of moving on.
-        if ($this->prereqs->usersTableMigrated()) {
-            $this->components->twoColumnDetail('Statamic auth tables', 'skipped — already migrated');
-        } else {
-            if (! $this->runProcess('php please auth:migration')) {
-                return false;
-            }
-
-            $this->patchAuthMigrationUserFks();
-
-            if (! $this->runProcess('php artisan migrate')) {
-                return false;
-            }
-        }
-
-        // Remember what to restore if the import comes up empty — the
-        // in-memory config still holds the value this run STARTED with.
-        $original = $this->prereqs->usersRepository();
-
-        // Flip the repository BEFORE importing: eloquent:import-users refuses to
-        // run until config/statamic/users.php names the eloquent repository.
-        $editor = app(UsersRepositoryEditor::class);
-
-        $this->applyEdit(
-            "Set 'repository' => 'eloquent' in config/statamic/users.php",
-            config_path('statamic/users.php'),
-            fn () => $editor->apply(config_path('statamic/users.php')),
-            fn () => $editor->snippet(),
-        );
-
-        if (! $this->runProcess('php please eloquent:import-users')) {
-            $this->revertRepositoryFlip($original);
-
-            return false;
-        }
-
-        // The importer exits 0 even when it refused to import (it prints the
-        // error and returns success anyway) — trust rows, not exit codes.
-        // Leaving 'eloquent' live over an empty table locks everyone out of
-        // the control panel.
-        if (! $this->prereqs->eloquentUsersExist()) {
-            $this->components->error('eloquent:import-users reported success but no users landed in the database — scroll up for the importer output naming the reason.');
-
-            $this->revertRepositoryFlip($original);
-
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Statamic file users are keyed by UUID and eloquent:import-users
-     * preserves those ids — so the import needs the HasUuids trait on the
-     * user model and a UUID-capable users.id column. Laravel's stock users
-     * table (bigint auto-increment id) can never take it, and Statamic ships
-     * no converting migration. Detect that up front and print the exact
-     * remedy instead of half-migrating: the fix is the operator's (or their
-     * agent's) call, because it rewrites the auth schema.
-     */
-    protected function schemaCanTakeUuidImport(): bool
-    {
-        $problems = [];
-        $model = $this->prereqs->importUserModel() ?? 'App\Models\User';
-        $table = config('statamic.users.tables.users', 'users');
-
-        if (! $this->prereqs->importModelHasUuids()) {
-            $problems[] = $model.' is missing the Illuminate\Database\Eloquent\Concerns\HasUuids trait.';
-        }
-
-        if (! $this->prereqs->usersIdColumnAcceptsUuids()) {
-            $type = $this->prereqs->usersIdColumnType() ?? 'missing';
-            $problems[] = "The '{$table}' table id column is '{$type}' — a UUID needs a uuid/string column.";
-        }
-
-        if ($problems === []) {
-            return true;
-        }
-
-        $this->components->error('Statamic file users are keyed by UUID, and eloquent:import-users preserves those ids — this site cannot take them yet:');
-
-        foreach ($problems as $problem) {
-            $this->line('  • '.$problem);
-        }
-
-        $this->printManual(
-            "1. Add the HasUuids trait to {$model}:\n"
-            ."   use Illuminate\\Database\\Eloquent\\Concerns\\HasUuids;\n"
-            ."2. Write a migration converting the '{$table}' primary key to a UUID —\n"
-            ."   \$table->uuid('id')->primary() — and every column referencing it\n"
-            ."   (sessions.user_id; role_user.user_id and group_user.user_id if those tables exist).\n"
-            ."3. Run: php artisan migrate\n"
-            .'4. Re-run this wizard.'
-        );
-
-        return false;
-    }
-
-    /**
-     * Statamic's generated auth migration builds role_user/group_user with
-     * bigint foreignId('user_id') columns — but this branch only ever runs
-     * against a UUID users.id (schemaCanTakeUuidImport guarantees it), where
-     * those foreign keys can never attach. Patch the file this wizard itself
-     * just generated before running it.
-     */
-    protected function patchAuthMigrationUserFks(): void
-    {
-        $files = glob(database_path('migrations/*_statamic_auth_tables.php')) ?: [];
-
-        if ($files === []) {
-            return;
-        }
-
-        sort($files);
-        $file = end($files);
-        $contents = file_get_contents($file);
-
-        if ($contents === false) {
-            return;
-        }
-
-        $patched = str_replace("foreignId('user_id')", "foreignUuid('user_id')", $contents);
-
-        if ($patched !== $contents) {
-            file_put_contents($file, $patched);
-            $this->components->twoColumnDetail("user_id foreign keys → foreignUuid in {$file}", 'patched');
-        }
-    }
-
-    protected function revertRepositoryFlip(string $repository): void
-    {
-        $editor = app(UsersRepositoryEditor::class);
-
-        if ($editor->apply(config_path('statamic/users.php'), $repository) === EditResult::Applied) {
-            $this->components->warn("Reverted 'repository' => '{$repository}' in config/statamic/users.php — control panel login keeps working on your existing users while you fix the problem above.");
-        }
     }
 
     protected function ensurePassportInstalled(): bool
@@ -307,98 +139,29 @@ class Setup extends Command
         return $this->runProcess('composer require laravel/passport');
     }
 
-    protected function ensurePassportPlumbing(): bool
+    protected function ensurePassportKeys(): bool
     {
         if ($this->prereqs->passportKeysExist()) {
-            $this->components->twoColumnDetail('Passport migrations & keys', 'skipped — keys already exist');
+            $this->components->twoColumnDetail('Passport encryption keys', 'skipped — already available');
 
             return true;
         }
 
-        if (! $this->confirmStep('Publish Passport migrations, run them, and generate encryption keys?')) {
-            $this->printManual("php artisan vendor:publish --tag=passport-migrations\nphp artisan migrate\nphp artisan passport:keys");
+        if (! $this->confirmStep('Generate Passport encryption keys now?')) {
+            $this->printManual("php artisan passport:keys\nOr set PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY in the environment.");
 
             return false;
         }
 
-        // Subprocesses on purpose: when Passport was installed moments ago by
+        // Subprocess on purpose: when Passport was installed moments ago by
         // this very wizard, its commands are not registered in THIS process.
-        return $this->runProcess('php artisan vendor:publish --tag=passport-migrations')
-            && $this->runProcess('php artisan migrate')
-            && $this->runProcess('php artisan passport:keys');
-    }
-
-    protected function ensureUserModelPrepared(): bool
-    {
-        $model = $this->prereqs->userModel();
-
-        if (! $model || ! class_exists($model)) {
-            $this->printManual('No user model resolved from auth.providers — add the Laravel\Passport\HasApiTokens trait to your user model manually (see the README OAuth guide).');
-
-            return true; // not fatal for the remaining steps
+        if (! $this->runProcess('php artisan passport:keys')) {
+            return false;
         }
 
-        if ($this->prereqs->userModelHasTrait()) {
-            $this->components->twoColumnDetail('HasApiTokens trait on '.$model, 'skipped — already present');
-
-            return true;
-        }
-
-        $interface = $this->oauthenticatableInterface();
-        $path = (new ReflectionClass($model))->getFileName();
-
-        if ($path === false) {
-            $this->printManual('Could not locate the source file for '.$model.' — add the Laravel\Passport\HasApiTokens trait to your user model manually (see the README OAuth guide).');
-
-            return true; // not fatal for the remaining steps
-        }
-
-        $editor = app(UserModelEditor::class);
-
-        $this->applyEdit(
-            'Add HasApiTokens'.($interface ? ' + OAuthenticatable' : '').' to '.$model,
-            $path,
-            fn () => $editor->apply($path, $interface),
-            fn () => $editor->snippet($interface),
-        );
-
-        return true;
-    }
-
-    /**
-     * The FQCN is resolved from the environment, never hardcoded blind:
-     * interface_exists() covers Passport already loaded; the vendor-path probe
-     * covers Passport installed by this very wizard in a subprocess, where the
-     * running autoloader can't see the new package yet.
-     */
-    protected function oauthenticatableInterface(): ?string
-    {
-        $interface = 'Laravel\Passport\Contracts\OAuthenticatable';
-
-        if (interface_exists($interface)
-            || is_file(base_path('vendor/laravel/passport/src/Contracts/OAuthenticatable.php'))) {
-            return $interface;
-        }
-
-        return null;
-    }
-
-    protected function ensureApiGuard(): bool
-    {
-        if ($this->prereqs->apiGuardIsPassport()) {
-            $this->components->twoColumnDetail("'api' guard (passport driver)", 'skipped — already configured');
-
-            return true;
-        }
-
-        $editor = app(AuthGuardEditor::class);
-
-        $this->applyEdit(
-            "Add the 'api' guard (passport driver) to config/auth.php",
-            config_path('auth.php'),
-            fn () => $editor->apply(config_path('auth.php')),
-            fn () => $editor->snippet(),
-        );
+        $this->line('  Deploying? Put the keys in the environment instead of the filesystem —');
+        $this->line('  PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY survive releases and are shared');
+        $this->line('  across servers (storage/oauth-*.key is per-machine and gitignored).');
 
         return true;
     }
@@ -435,6 +198,29 @@ class Setup extends Command
         }
 
         return true;
+    }
+
+    /**
+     * Runs AFTER the mode flip so the subprocess loads the addon's user_id
+     * migration (OAuth mode only). Publishing Passport's migrations first is
+     * required — Passport 13 doesn't auto-load them — and is idempotent.
+     */
+    protected function runMigrations(): bool
+    {
+        if ($this->prereqs->oauthTablesMigrated() && $this->prereqs->oauthUserIdColumnsFitStatamicIds()) {
+            $this->components->twoColumnDetail('Passport tables (Statamic-ready user_id)', 'skipped — already migrated');
+
+            return true;
+        }
+
+        if (! $this->confirmStep('Publish and run the Passport migrations now?')) {
+            $this->printManual("php artisan vendor:publish --tag=passport-migrations\nphp artisan migrate");
+
+            return false;
+        }
+
+        return $this->runProcess('php artisan vendor:publish --tag=passport-migrations')
+            && $this->runProcess('php artisan migrate');
     }
 
     protected function finale(): int
@@ -478,7 +264,7 @@ class Setup extends Command
     /**
      * Every confirmation goes through here so --yes means one thing
      * everywhere: answer with $whenYes instead of prompting. Steps that are
-     * optional (or dangerous) say so by passing whenYes: false.
+     * optional say so by passing whenYes: false.
      */
     protected function confirmStep(string $label, bool $whenYes = true, bool $default = true): bool
     {

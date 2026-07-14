@@ -14,7 +14,7 @@ answers 401/503 and needs fixing.
 ## Pick the auth mode
 
 - **Token mode** — clients that can send an `Authorization: Bearer` header: Claude Code, Cursor, MCP Inspector. Works on every install, no database needed.
-- **OAuth mode** — connector clients that cannot send static headers: individual-plan claude.ai, Claude Desktop, ChatGPT. Requires Laravel Passport and database (Eloquent) users.
+- **OAuth mode** — connector clients that cannot send static headers: individual-plan claude.ai, Claude Desktop, ChatGPT. Requires Laravel Passport and a database for Passport's **own** tables (sqlite is fine). **Users stay wherever they are — file users work; no user migration.**
 
 ## Always diagnose first
 
@@ -41,45 +41,37 @@ The user must have the **Access MCP** permission (or be super).
 php please mcp:setup --oauth --yes
 ```
 
-Unattended, this installs Passport, publishes and runs its migrations, generates
-encryption keys, adds `HasApiTokens` (+ `OAuthenticatable`) to the user model, writes
-the `passport`-driver `api` guard into `config/auth.php`, and flips
-`STATAMIC_MCP_AUTH=oauth` last — so an aborted run never leaves a broken mode live.
-It finishes by running `mcp:doctor` and exits non-zero if anything is still wrong.
+Unattended, this installs Passport, generates encryption keys, flips
+`STATAMIC_MCP_AUTH=oauth`, and runs the migrations — Passport's tables plus the
+addon's conversion of their `user_id` columns to strings (Statamic ids are UUIDs;
+Passport's stock columns are bigint). The migrate step runs **after** the env flip
+on purpose: the addon's migration only loads in OAuth mode. It finishes by running
+`mcp:doctor` and exits non-zero if anything is still wrong.
 
-**The one human decision:** if the site stores users in files, they must be migrated to
-the database first (a Passport constraint). `--yes` refuses to run this data migration
-on its own. Ask the developer for explicit approval and recommend a backup, then:
-
-```shell
-php please mcp:setup --oauth --yes --migrate-users
-```
+There is no user migration, no `HasApiTokens` trait, and no `api` guard step: the
+addon registers its own auth guard that validates bearers with Passport's
+ResourceServer and resolves the user through the Statamic repository —
+`config/auth.php` and the user model are never touched.
 
 The wizard is idempotent — re-running skips satisfied steps, so it is always safe to
 run again after fixing a problem.
 
-### If the wizard stops on the users schema (UUID ids)
+## Deploying to other environments
 
-Statamic file users are keyed by **UUID**, and `eloquent:import-users` preserves those
-ids. A stock Laravel `users` table (bigint auto-increment `id`) can never hold them —
-Statamic ships no converting migration. The wizard detects this and refuses **before
-touching anything**, printing the remedy. This is a known, solvable state — apply the
-steps, don't abort:
+Nothing OAuth-related lands in git except composer.json. Each environment needs the
+env vars and a migrate run:
 
-1. Add `Illuminate\Database\Eloquent\Concerns\HasUuids` to `App\Models\User`.
-2. Write a migration converting `users.id` to a UUID primary key
-   (`$table->uuid('id')->primary()`) **and every column referencing it** —
-   `sessions.user_id` on a stock app, plus `role_user.user_id` / `group_user.user_id`
-   if a previous attempt already created those tables. On an empty or throwaway
-   `users` table, drop-and-recreate is the simplest correct conversion.
-3. `php artisan migrate`, then re-run the wizard with `--migrate-users`.
+```shell
+STATAMIC_MCP_AUTH=oauth
+PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+```
 
-When the schema is ready, the wizard handles the rest itself: it patches the
-generated Statamic auth migration's `user_id` foreign keys to `foreignUuid`, and it
-verifies the import actually landed users before leaving the eloquent repository
-active — if the import comes up empty, it reverts `config/statamic/users.php` so CP
-login keeps working. **Never flip the repository to `eloquent` by hand while the
-users table is empty** — that locks everyone out of the control panel.
+Copy the key contents from `storage/oauth-*.key` after `passport:keys` (or generate
+once and share). Keys in env survive releases, work on read-only filesystems, and
+stay identical across servers — re-running `passport:keys` per release silently
+invalidates every connected client. Then `php artisan migrate --force` and
+`php please mcp:doctor` (non-zero exit on problems — pipeline-friendly) per environment.
 
 ## Verify and connect
 
@@ -91,8 +83,7 @@ OAuth server and register themselves; no credentials are pasted anywhere.
 ## Troubleshooting
 
 - **503 from the endpoint** — the response body names the missing prerequisite and its remedy; `mcp:doctor` shows the full picture.
-- **Nobody can log into the Control Panel after an OAuth attempt** — `config/statamic/users.php` says `'repository' => 'eloquent'` but the users table is empty (an import that never ran). Set it back to `'file'` to restore login, then follow the UUID schema steps above.
-- **`php artisan migrate` crashes on a duplicate `super` column** — a leftover `*_statamic_auth_tables.php` from an interrupted run; `mcp:doctor` names which duplicate to delete.
-- **OAuth flow completes but every request 401s** — the `api` guard in `config/auth.php` exists but its driver is not `passport` (a leftover session/sanctum guard). The wizard fixes this; re-run it.
+- **First consent crashes on insert** — Passport's `user_id` columns are still bigint; run `php artisan migrate` with `STATAMIC_MCP_AUTH=oauth` set so the addon's conversion migration loads.
+- **Every request 401s after a deploy** — the environment regenerated Passport keys (`passport:keys` in the release script), invalidating old tokens. Move the keys to `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars and remove the per-release keygen.
 - **Wizard prints a manual snippet instead of editing** — the target file is non-standard and the wizard refused to guess. Show the snippet to the developer and let them place it; do not restructure their file yourself.
 - **403 from tools** — the acting user lacks the **Access MCP** permission; grant it on their role in the Control Panel.
