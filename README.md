@@ -109,7 +109,8 @@ php please mcp:setup
 It installs Passport, generates keys, flips `STATAMIC_MCP_AUTH=oauth`, and runs the
 migrations (including the addon's user_id conversion — Statamic ids are UUIDs,
 Passport's stock columns are bigint) — never editing a file without showing the
-change first. The manual steps, the deploy recipe (keys via `PASSPORT_PRIVATE_KEY` /
+change first. For production, `php please mcp:keys` prints the Passport keys as
+paste-ready env variables. The manual steps, the deploy recipe (keys via `PASSPORT_PRIVATE_KEY` /
 `PASSPORT_PUBLIC_KEY` env vars), and the CP panel for viewing and disconnecting
 OAuth connections are in **[docs/oauth.md](docs/oauth.md)**.
 

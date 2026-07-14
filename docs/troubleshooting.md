@@ -25,8 +25,9 @@ runtime.
   on it); token counts distinguish **active** from **expired** and **orphaned-user**
   tokens — "5 tokens issued but none are active" is a locked door that looks
   configured.
-- **OAuth mode** — Passport installed; encryption keys available (from `passport:keys`
-  files or the `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars); Passport's
+- **OAuth mode** — Passport installed; encryption keys available (from the
+  `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars or key files —
+  `php please mcp:keys` generates and exports them); Passport's
   tables migrated with string `user_id` columns (Statamic ids are UUIDs — the addon's
   migration converts them); a consent view bound. No user-repository check: file
   users work in OAuth mode.

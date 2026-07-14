@@ -35,7 +35,7 @@ it('answers 503 on the MCP route naming the missing keys prerequisite', function
         ->assertJsonPath('error', 'MCP OAuth mode is misconfigured.');
 
     expect($response->json('remedy'))
-        ->toContain('passport:keys')
+        ->toContain('mcp:keys')
         ->toContain('PASSPORT_PRIVATE_KEY');
 
     // The doctor checks the same prerequisites without short-circuiting.

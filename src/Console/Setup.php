@@ -148,7 +148,7 @@ class Setup extends Command
         }
 
         if (! $this->confirmStep('Generate Passport encryption keys now?')) {
-            $this->printManual("php artisan passport:keys\nOr set PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY in the environment.");
+            $this->printManual("php please mcp:keys\nGenerates a pair if needed and prints deploy-ready PASSPORT_* env variables.");
 
             return false;
         }
@@ -159,9 +159,9 @@ class Setup extends Command
             return false;
         }
 
-        $this->line('  Deploying? Put the keys in the environment instead of the filesystem —');
-        $this->line('  PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY survive releases and are shared');
-        $this->line('  across servers (storage/oauth-*.key is per-machine and gitignored).');
+        $this->line('  Deploying? Run `php please mcp:keys` and paste its output into the production');
+        $this->line('  environment — PASSPORT_* env vars survive releases and are shared across');
+        $this->line('  servers (storage/oauth-*.key is per-machine and gitignored).');
 
         return true;
     }

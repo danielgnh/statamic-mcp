@@ -152,7 +152,9 @@ it('fails oauth mode naming every missing prerequisite at once', function () {
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('Auth mode: oauth')
         ->expectsOutputToContain('[ OK ] Laravel Passport is installed.')
-        ->expectsOutputToContain("[FAIL] Passport's encryption keys are missing")
+        // One expectation on purpose: a written line satisfies only the first
+        // matching expectsOutputToContain, so the remedy rides along here.
+        ->expectsOutputToContain("[FAIL] Passport's encryption keys are missing. Run 'php please mcp:keys'")
         ->expectsOutputToContain("[FAIL] Passport's tables are missing")
         ->assertExitCode(1);
 });

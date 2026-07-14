@@ -33,5 +33,5 @@ idempotent — re-running skips satisfied steps.
 
 - OAuth setup never migrates users, never edits `config/auth.php`, and never touches the User model — do not do any of that by hand for MCP either. The addon registers its own auth guard in memory.
 - The env flip runs BEFORE the migrate step on purpose: the addon's migration converting Passport's `user_id` columns to strings (Statamic ids are UUIDs) only loads when `STATAMIC_MCP_AUTH=oauth`. If migrations ran too early, set the env var and run `php artisan migrate` again.
-- For deploys, put the Passport keys in `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars instead of relying on `storage/oauth-*.key` files — per-release `passport:keys` runs silently invalidate every connected client.
+- For deploys, put the Passport keys in `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars instead of relying on `storage/oauth-*.key` files — per-release `passport:keys` runs silently invalidate every connected client. `php please mcp:keys` prints the pair as paste-ready env variables (generating one first if needed).
 - The connected user needs the **Access MCP** permission (or super).

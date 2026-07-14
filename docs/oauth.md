@@ -17,8 +17,9 @@ What OAuth mode does need:
 1. **`laravel/passport`** — for the OAuth endpoints and token machinery.
 2. **A database for Passport's own tables** (clients, tokens, auth codes) — sqlite
    is fine. Only Passport's bookkeeping lives there; your users don't.
-3. **Passport's encryption keys** — from `passport:keys` files or (better for
-   deploys) the `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars.
+3. **Passport's encryption keys** — `php please mcp:keys` generates a pair and
+   prints it as deploy-ready `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env
+   vars (key files work too).
 4. **String `user_id` columns on Passport's tables** — Statamic ids are UUID
    strings, Passport's stock columns are bigint. The addon ships a migration that
    converts them (loaded automatically in OAuth mode; safe for integer ids too).
@@ -48,7 +49,7 @@ Token mode is scriptable too: `php please mcp:setup --token --user=you@site.com 
 
 ```bash
 composer require laravel/passport
-php artisan passport:keys                                   # or set PASSPORT_* env vars
+php please mcp:keys                                          # generates a pair, prints PASSPORT_* env vars
 # .env
 STATAMIC_MCP_AUTH=oauth
 php artisan vendor:publish --tag=passport-migrations
@@ -71,12 +72,15 @@ PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE
 PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-Generate the keys once (locally via `passport:keys`, then copy the file contents),
-and let the deploy pipeline run `php artisan migrate --force`. Keys in env survive
-releases, work on read-only filesystems (Vapor), and are shared across a
-horizontally-scaled fleet — re-running `passport:keys` per release would silently
-invalidate every connected client. `php please mcp:doctor` verifies each
-environment and exits non-zero, so it slots into a deploy step.
+Run `php please mcp:keys` once (anywhere — locally is fine): it generates the pair
+if none exists and prints exactly those two lines, escaping done, ready to paste
+into Forge's environment panel, Vapor's secrets, or a plain `.env` (`--json` pipes
+into secret-store CLIs; `--write` fills a local `.env` directly). Then let the
+deploy pipeline run `php artisan migrate --force`. Keys in env survive releases,
+work on read-only filesystems (Vapor), and are shared across a horizontally-scaled
+fleet — re-running `passport:keys` per release would silently invalidate every
+connected client. `php please mcp:doctor` verifies each environment and exits
+non-zero, so it slots into a deploy step.
 
 ## The consent screen
 

@@ -67,11 +67,13 @@ PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE
 PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-Copy the key contents from `storage/oauth-*.key` after `passport:keys` (or generate
-once and share). Keys in env survive releases, work on read-only filesystems, and
-stay identical across servers — re-running `passport:keys` per release silently
-invalidates every connected client. Then `php artisan migrate --force` and
-`php please mcp:doctor` (non-zero exit on problems — pipeline-friendly) per environment.
+Run `php please mcp:keys` once (anywhere): it generates a pair if none exists and
+prints exactly those two `PASSPORT_*` lines, escaping done, ready to paste
+(`--json` for secret-store CLIs, `--write` to fill a local `.env`). Keys in env
+survive releases, work on read-only filesystems, and stay identical across
+servers — re-running `passport:keys` per release silently invalidates every
+connected client. Then `php artisan migrate --force` and `php please mcp:doctor`
+(non-zero exit on problems — pipeline-friendly) per environment.
 
 ## Verify and connect
 
@@ -84,6 +86,6 @@ OAuth server and register themselves; no credentials are pasted anywhere.
 
 - **503 from the endpoint** — the response body names the missing prerequisite and its remedy; `mcp:doctor` shows the full picture.
 - **First consent crashes on insert** — Passport's `user_id` columns are still bigint; run `php artisan migrate` with `STATAMIC_MCP_AUTH=oauth` set so the addon's conversion migration loads.
-- **Every request 401s after a deploy** — the environment regenerated Passport keys (`passport:keys` in the release script), invalidating old tokens. Move the keys to `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars and remove the per-release keygen.
+- **Every request 401s after a deploy** — the environment regenerated Passport keys (`passport:keys` in the release script), invalidating old tokens. Run `php please mcp:keys`, put its output in the environment, and remove the per-release keygen.
 - **Wizard prints a manual snippet instead of editing** — the target file is non-standard and the wizard refused to guess. Show the snippet to the developer and let them place it; do not restructure their file yourself.
 - **403 from tools** — the acting user lacks the **Access MCP** permission; grant it on their role in the Control Panel.

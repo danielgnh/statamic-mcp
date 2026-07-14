@@ -285,7 +285,7 @@ class Doctor extends Command
         if ($this->prereqs->passportKeysExist()) {
             $this->info('[ OK ] Passport encryption keys are available.');
         } else {
-            $this->problem("Passport's encryption keys are missing. Run 'php artisan passport:keys', or provide them via the PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables (the deploy-friendly path — keys survive releases and are shared across servers).");
+            $this->problem("Passport's encryption keys are missing. Run 'php please mcp:keys' — it generates a pair if needed and prints deploy-ready PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables (keys in the environment survive releases and are shared across servers).");
         }
     }
 

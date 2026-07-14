@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- `php please mcp:keys` — one-command key provisioning for production. Ensures a
+  stable Passport key pair exists (generating one only when none exists — never
+  overwriting, since regeneration silently invalidates every connected client) and
+  prints it as paste-ready `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env
+  variables, escaping done. `--json` pipes into secret-store CLIs, `--write` fills
+  the local `.env`. Source precedence mirrors Passport's runtime: configured env
+  keys first (warning when stale key files differ), then key files, then generate.
+  `mcp:setup`, `mcp:doctor`, and the endpoint's 503 remedy all point at it.
+
 - **OAuth mode now works with file users — no user migration, ever.** The addon
   registers its own auth guard: bearers are validated by Passport's ResourceServer
   (signature, expiry, revocation — identical checks to Passport's stock guard) and

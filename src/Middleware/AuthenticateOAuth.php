@@ -80,7 +80,7 @@ class AuthenticateOAuth
         // preflight it into an actionable 503 instead.
         if (! $prereqs->passportKeysExist()) {
             return $this->unavailable(
-                "Passport's encryption keys are missing. Run 'php artisan passport:keys', or provide them via the PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables."
+                "Passport's encryption keys are missing. Run 'php please mcp:keys' — it generates a pair if needed and prints deploy-ready PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables."
             );
         }
 

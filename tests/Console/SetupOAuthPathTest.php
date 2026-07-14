@@ -72,6 +72,7 @@ it('walks a fresh install through every oauth step — no user migration anywher
         ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
         ->expectsConfirmation('Apply this change to '.base_path('.env').'?', 'yes')
         ->expectsConfirmation('Publish and run the Passport migrations now?', 'yes')
+        ->expectsOutputToContain('php please mcp:keys')
         ->assertExitCode(0);
 
     Process::assertRan('composer require laravel/passport');

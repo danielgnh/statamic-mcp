@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp;
 
 use Danielgnh\StatamicMcp\Console\Doctor;
 use Danielgnh\StatamicMcp\Console\IssueToken;
+use Danielgnh\StatamicMcp\Console\Keys;
 use Danielgnh\StatamicMcp\Console\ListTokens;
 use Danielgnh\StatamicMcp\Console\RevokeToken;
 use Danielgnh\StatamicMcp\Console\Setup;
@@ -33,6 +34,7 @@ class ServiceProvider extends AddonServiceProvider
         RevokeToken::class,
         Doctor::class,
         Setup::class,
+        Keys::class,
     ];
 
     #[\Override]
