@@ -54,6 +54,18 @@ it('exports existing key files verbatim and never regenerates them', function ()
         ->and(file_get_contents($this->keyDir.'/oauth-private.key'))->toBe("FAKE\nPRIVATE\nPEM");
 });
 
+it('handles passport config keys that exist as null — the real host-app shape', function () {
+    // On a host app Passport's config file is loaded, so the keys EXIST with
+    // value null (env('PASSPORT_PRIVATE_KEY') unset) — config()->string()
+    // throws on that; a missing key would silently get the default instead.
+    config(['passport.private_key' => null, 'passport.public_key' => null]);
+    file_put_contents($this->keyDir.'/oauth-private.key', "FILE\nPRIVATE");
+    file_put_contents($this->keyDir.'/oauth-public.key', "FILE\nPUBLIC");
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(0)
+        ->and(Artisan::output())->toContain('PASSPORT_PRIVATE_KEY="FILE\nPRIVATE"');
+});
+
 it('prefers configured env keys over files and warns about the stale files', function () {
     config(['passport.private_key' => "CONF\nPRIVATE", 'passport.public_key' => "CONF\nPUBLIC"]);
     file_put_contents($this->keyDir.'/oauth-private.key', 'stale');

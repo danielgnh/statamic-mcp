@@ -8,6 +8,26 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-15
+
+### Fixed
+
+- `mcp:keys` crashed on host apps with *"Configuration value for key
+  [passport.private_key] must be a string, NULL given"* — Passport's config
+  file defines the keys as `env(...)`, so they exist as `null` when the env
+  vars are unset, and the strict config read threw instead of falling through
+  to the key files.
+
+## [0.3.1] - 2026-07-15
+
+### Changed
+
+- Documentation only: the changelog history was rebuilt against the real
+  release tags (the package never shipped a `v1.0.0`; the old section under
+  that name is now `[0.1.0]`, and later work is attributed to the tag that
+  actually contained it), and `RELEASING.md` became a version-agnostic,
+  repeatable checklist with current tool counts and CI shape.
+
 ## [0.3.0] - 2026-07-15
 
 ### Added
@@ -157,7 +177,9 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.1.1...v0.2.0
