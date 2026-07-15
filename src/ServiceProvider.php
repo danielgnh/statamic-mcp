@@ -13,6 +13,7 @@ use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
+use Danielgnh\StatamicMcp\OAuth\PassportKeys;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
@@ -20,6 +21,8 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
+use League\OAuth2\Server\AuthorizationServer;
+use League\OAuth2\Server\ResourceServer;
 use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
 use Throwable;
@@ -111,6 +114,8 @@ class ServiceProvider extends AddonServiceProvider
         Mcp::web(config('statamic.mcp.route'), Server::class)->middleware($middleware);
 
         if ($oauth && class_exists(Passport::class)) {
+            $this->manageDatabaseKeys();
+
             Mcp::oauthRoutes(); // hard-requires Passport — guarded so bootAddon never throws
 
             // Passport 12+ ships no default consent view and never binds
@@ -122,6 +127,23 @@ class ServiceProvider extends AddonServiceProvider
                 Passport::authorizationView('statamic-mcp::oauth.authorize');
             }
         }
+    }
+
+    /**
+     * The runtime seam of database-managed keys. Passport reads
+     * config('passport.*_key') lazily while building its two server
+     * singletons (see PassportServiceProvider::makeCryptKey), and the
+     * container fires beforeResolving callbacks on every make() — so the
+     * stored pair is injected just in time, wherever the servers are resolved
+     * from (the addon's guard, /oauth/authorize, /oauth/token). PassportKeys
+     * skips out when the environment already configures keys.
+     */
+    protected function manageDatabaseKeys(): void
+    {
+        $inject = fn () => $this->app->make(PassportKeys::class)->inject();
+
+        $this->app->beforeResolving(AuthorizationServer::class, $inject);
+        $this->app->beforeResolving(ResourceServer::class, $inject);
     }
 
     /**

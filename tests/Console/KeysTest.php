@@ -1,9 +1,13 @@
 <?php
 
+use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Setup\EditResult;
 use Danielgnh\StatamicMcp\Setup\EnvWriter;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
+use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
 
@@ -124,6 +128,62 @@ it('writes the variables into .env with --write', function () {
             ['PASSPORT_PRIVATE_KEY', '"FAKE\nPRIVATE"'],
             ['PASSPORT_PUBLIC_KEY', '"FAKE\nPUBLIC"'],
         ]);
+});
+
+it('exports the stored database key with its derived public half', function () {
+    OAuthFixtures::migrateKeyStore();
+    $pem = OAuthFixtures::rsaPrivateKey();
+    (new KeyStore)->put($pem);
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(0)
+        ->and(Artisan::output())
+        ->toContain('PASSPORT_PRIVATE_KEY='.envEscapedKey($pem))
+        ->toContain('PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----');
+});
+
+it('prefers the stored database key over key files — mirroring the runtime', function () {
+    OAuthFixtures::migrateKeyStore();
+    $pem = OAuthFixtures::rsaPrivateKey();
+    (new KeyStore)->put($pem);
+
+    file_put_contents($this->keyDir.'/oauth-private.key', "STALE\nPRIVATE");
+    file_put_contents($this->keyDir.'/oauth-public.key', "STALE\nPUBLIC");
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(0)
+        ->and(Artisan::output())->toContain('PASSPORT_PRIVATE_KEY='.envEscapedKey($pem));
+});
+
+it('generates into the database instead of key files when the store table exists', function () {
+    OAuthFixtures::migrateKeyStore();
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(0)
+        ->and((new KeyStore)->get())->toContain('PRIVATE KEY-----')
+        ->and(file_exists($this->keyDir.'/oauth-private.key'))->toBeFalse();
+});
+
+it('adopts existing key files into the database', function () {
+    OAuthFixtures::migrateKeyStore();
+    $pem = OAuthFixtures::rsaPrivateKey();
+    file_put_contents($this->keyDir.'/oauth-private.key', $pem);
+    file_put_contents($this->keyDir.'/oauth-public.key', (new KeyStore)->publicKeyFor($pem));
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(0)
+        ->and((new KeyStore)->get())->toBe($pem)
+        ->and(Artisan::output())->toContain('PASSPORT_PRIVATE_KEY='.envEscapedKey($pem));
+});
+
+it('fails with the APP_KEY remedy instead of regenerating over an undecryptable stored key', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+    $cipher = DB::table(KeyStore::TABLE)->value('private_key');
+
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    expect(Artisan::call('statamic:mcp:keys'))->toBe(1)
+        ->and(Artisan::output())->toContain('APP_KEY')
+        ->and(DB::table(KeyStore::TABLE)->value('private_key'))->toBe($cipher);
 });
 
 it('fails with guidance when Passport is not installed', function () {

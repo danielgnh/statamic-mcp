@@ -41,12 +41,13 @@ The user must have the **Access MCP** permission (or be super).
 php please mcp:setup --oauth --yes
 ```
 
-Unattended, this installs Passport, generates encryption keys, flips
-`STATAMIC_MCP_AUTH=oauth`, and runs the migrations — Passport's tables plus the
-addon's conversion of their `user_id` columns to strings (Statamic ids are UUIDs;
-Passport's stock columns are bigint). The migrate step runs **after** the env flip
-on purpose: the addon's migration only loads in OAuth mode. It finishes by running
-`mcp:doctor` and exits non-zero if anything is still wrong.
+Unattended, this installs Passport, flips `STATAMIC_MCP_AUTH=oauth`, runs the
+migrations — Passport's tables, the addon's key table, and the conversion of
+`user_id` columns to strings (Statamic ids are UUIDs; Passport's stock columns
+are bigint) — and provisions the encryption keys into the database. The migrate
+step runs **after** the env flip on purpose: the addon's migrations only load in
+OAuth mode. It finishes by running `mcp:doctor` and exits non-zero if anything
+is still wrong.
 
 There is no user migration, no `HasApiTokens` trait, and no `api` guard step: the
 addon registers its own auth guard that validates bearers with Passport's
@@ -59,21 +60,21 @@ run again after fixing a problem.
 ## Deploying to other environments
 
 Nothing OAuth-related lands in git except composer.json. Each environment needs the
-env vars and a migrate run:
+mode flag and a migrate run:
 
 ```shell
 STATAMIC_MCP_AUTH=oauth
-PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
-PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-Run `php please mcp:keys` once (anywhere): it generates a pair if none exists and
-prints exactly those two `PASSPORT_*` lines, escaping done, ready to paste
-(`--json` for secret-store CLIs, `--write` to fill a local `.env`). Keys in env
-survive releases, work on read-only filesystems, and stay identical across
-servers — re-running `passport:keys` per release silently invalidates every
-connected client. Then `php artisan migrate --force` and `php please mcp:doctor`
-(non-zero exit on problems — pipeline-friendly) per environment.
+Then `php artisan migrate --force` and `php please mcp:doctor` (non-zero exit on
+problems — pipeline-friendly) per environment. There is no key step: keys are
+database-managed — provisioned automatically on first use, encrypted with
+APP_KEY, shared across every server, surviving releases and read-only
+filesystems. To override with explicit env keys, `php please mcp:keys` prints
+the pair as `PASSPORT_*` lines (`--json` for secret-store CLIs, `--write` to
+fill a local `.env`) — configured keys beat the database copy. Never run
+`passport:keys` per release: regenerating silently invalidates every connected
+client.
 
 ## Verify and connect
 
@@ -86,6 +87,7 @@ OAuth server and register themselves; no credentials are pasted anywhere.
 
 - **503 from the endpoint** — the response body names the missing prerequisite and its remedy; `mcp:doctor` shows the full picture.
 - **First consent crashes on insert** — Passport's `user_id` columns are still bigint; run `php artisan migrate` with `STATAMIC_MCP_AUTH=oauth` set so the addon's conversion migration loads.
-- **Every request 401s after a deploy** — the environment regenerated Passport keys (`passport:keys` in the release script), invalidating old tokens. Run `php please mcp:keys`, put its output in the environment, and remove the per-release keygen.
+- **Every request 401s after a deploy** — the environment regenerated Passport keys (`passport:keys` in the release script), invalidating old tokens. Remove the per-release keygen; with the database-managed keys (run `php artisan migrate`) the pair is stable across releases by construction.
+- **503 "stored signing key can't be decrypted"** — `APP_KEY` changed after the keys were provisioned. Restore the previous `APP_KEY`, or delete the row in `statamic_mcp_oauth_keys` to provision a fresh pair (every connected client must then reconnect).
 - **Wizard prints a manual snippet instead of editing** — the target file is non-standard and the wizard refused to guess. Show the snippet to the developer and let them place it; do not restructure their file yourself.
 - **403 from tools** — the acting user lacks the **Access MCP** permission; grant it on their role in the Control Panel.

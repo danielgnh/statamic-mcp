@@ -106,13 +106,16 @@ The easy path is the wizard:
 php please mcp:setup
 ```
 
-It installs Passport, generates keys, flips `STATAMIC_MCP_AUTH=oauth`, and runs the
-migrations (including the addon's user_id conversion — Statamic ids are UUIDs,
-Passport's stock columns are bigint) — never editing a file without showing the
-change first. For production, `php please mcp:keys` prints the Passport keys as
-paste-ready env variables. The manual steps, the deploy recipe (keys via `PASSPORT_PRIVATE_KEY` /
-`PASSPORT_PUBLIC_KEY` env vars), and the CP panel for viewing and disconnecting
-OAuth connections are in **[docs/oauth.md](docs/oauth.md)**.
+It installs Passport, flips `STATAMIC_MCP_AUTH=oauth`, runs the migrations
+(including the addon's user_id conversion — Statamic ids are UUIDs, Passport's
+stock columns are bigint), and provisions the Passport keys — never editing a
+file without showing the change first. Keys are managed in the database
+(encrypted with `APP_KEY`, shared across servers, provisioned automatically),
+so deploying is just `php artisan migrate --force` — no PEM blobs to paste
+anywhere. Explicit `PASSPORT_*` env vars still override for those who want
+them (`php please mcp:keys` exports the pair). The manual steps, the deploy
+recipe, and the CP panel for viewing and disconnecting OAuth connections are
+in **[docs/oauth.md](docs/oauth.md)**.
 
 If any prerequisite is missing, the MCP endpoint answers **503 with the exact
 remedy** — the rest of your site is untouched.
