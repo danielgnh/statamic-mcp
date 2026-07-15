@@ -64,8 +64,8 @@ class Keys extends Command
      */
     protected function resolvePair(): ?array
     {
-        $configPrivate = trim(config()->string('passport.private_key', ''));
-        $configPublic = trim(config()->string('passport.public_key', ''));
+        $configPrivate = trim((string) config('passport.private_key'));
+        $configPublic = trim((string) config('passport.public_key'));
 
         $privatePath = Passport::keyPath('oauth-private.key');
         $publicPath = Passport::keyPath('oauth-public.key');
