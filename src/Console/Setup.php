@@ -91,24 +91,26 @@ class Setup extends Command
     /**
      * Users stay wherever they are — file or Eloquent — because the addon's
      * own guard resolves OAuth tokens through the Statamic repository. What
-     * OAuth needs is Passport itself, its keys, and its tables (with user_id
-     * columns wide enough for Statamic's UUID ids — the addon's migration).
+     * OAuth needs is Passport itself, its tables (with user_id columns wide
+     * enough for Statamic's UUID ids — the addon's migration), and its keys.
      *
      * Every step follows the same rhythm: already satisfied? report and move
-     * on — otherwise confirm and apply. The .env flip runs before the final
-     * migrate on purpose: the addon's user_id migration only loads in OAuth
-     * mode, so the subprocess must already see the new mode. An aborted run
-     * still never leaves a broken endpoint live — the route answers 503 with
-     * the exact remedy until every prerequisite is in place.
+     * on — otherwise confirm and apply. The .env flip runs before migrate on
+     * purpose: the addon's migrations only load in OAuth mode, so the
+     * subprocess must already see the new mode. Keys come LAST, after
+     * migrate, so mcp:keys provisions the pair into the freshly created
+     * database table instead of the legacy key files. An aborted run still
+     * never leaves a broken endpoint live — the route answers 503 with the
+     * exact remedy until every prerequisite is in place.
      */
     protected function setupOAuth(EnvWriter $env): int
     {
         $steps = [
             $this->ensurePassportInstalled(...),
-            $this->ensurePassportKeys(...),
             $this->offerConsentViews(...),
             fn (): bool => $this->flipAuthMode($env),
             $this->runMigrations(...),
+            $this->ensurePassportKeys(...),
         ];
 
         foreach ($steps as $step) {
@@ -139,31 +141,29 @@ class Setup extends Command
         return $this->runProcess('composer require laravel/passport');
     }
 
+    /**
+     * Runs after migrate, so provisioning lands in the database — shared
+     * across every server, surviving releases, no env pasting. 'provisionable'
+     * is not "skipped": provisioning eagerly here beats surprising the first
+     * OAuth request with 4096-bit key generation.
+     */
     protected function ensurePassportKeys(): bool
     {
-        if ($this->prereqs->passportKeysExist()) {
+        if (! in_array($this->prereqs->keySource(), [null, 'provisionable'], true)) {
             $this->components->twoColumnDetail('Passport encryption keys', 'skipped — already available');
 
             return true;
         }
 
-        if (! $this->confirmStep('Generate Passport encryption keys now?')) {
-            $this->printManual("php please mcp:keys\nGenerates a pair if needed and prints deploy-ready PASSPORT_* env variables.");
+        if (! $this->confirmStep('Provision Passport encryption keys now?')) {
+            $this->line('  Keys will be provisioned into the database automatically on the first OAuth request.');
 
-            return false;
+            return true; // declining is fine — provisioning is self-serve
         }
 
         // Subprocess on purpose: when Passport was installed moments ago by
-        // this very wizard, its commands are not registered in THIS process.
-        if (! $this->runProcess('php artisan passport:keys')) {
-            return false;
-        }
-
-        $this->line('  Deploying? Run `php please mcp:keys` and paste its output into the production');
-        $this->line('  environment — PASSPORT_* env vars survive releases and are shared across');
-        $this->line('  servers (storage/oauth-*.key is per-machine and gitignored).');
-
-        return true;
+        // this very wizard, its classes are not autoloadable in THIS process.
+        return $this->runProcess('php please mcp:keys');
     }
 
     protected function offerConsentViews(): bool
@@ -207,7 +207,11 @@ class Setup extends Command
      */
     protected function runMigrations(): bool
     {
-        if ($this->prereqs->oauthTablesMigrated() && $this->prereqs->oauthUserIdColumnsFitStatamicIds()) {
+        // The key-store check keeps upgrades honest: a site set up before
+        // database-managed keys has Passport's tables but not the addon's.
+        if ($this->prereqs->oauthTablesMigrated()
+            && $this->prereqs->oauthUserIdColumnsFitStatamicIds()
+            && $this->prereqs->keyStoreMigrated()) {
             $this->components->twoColumnDetail('Passport tables (Statamic-ready user_id)', 'skipped — already migrated');
 
             return true;

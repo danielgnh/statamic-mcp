@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
+use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
@@ -282,11 +283,24 @@ class Doctor extends Command
 
     protected function checkPassportKeys(): void
     {
-        if ($this->prereqs->passportKeysExist()) {
-            $this->info('[ OK ] Passport encryption keys are available.');
-        } else {
-            $this->problem("Passport's encryption keys are missing. Run 'php please mcp:keys' — it generates a pair if needed and prints deploy-ready PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables (keys in the environment survive releases and are shared across servers).");
+        // Named first: an undecryptable stored key looks exactly like a
+        // missing one, and the missing-keys remedy (provision a fresh pair)
+        // would silently 401 every connected client.
+        if ($this->prereqs->passportKeysUndecryptable()) {
+            $this->problem("Passport's stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the row in '".KeyStore::TABLE."' to let a fresh pair provision (every connected client must then reconnect).");
+
+            return;
         }
+
+        $source = $this->prereqs->keySource();
+
+        match ($source) {
+            'config' => $this->info('[ OK ] Passport encryption keys are available (environment config).'),
+            'database' => $this->info('[ OK ] Passport encryption keys are available (database).'),
+            'files' => $this->info('[ OK ] Passport encryption keys are available (key files — they will be adopted into the database on first use).'),
+            'provisionable' => $this->info('[ OK ] Passport encryption keys will be provisioned into the database on first use.'),
+            default => $this->problem("Passport's encryption keys are missing. Run 'php artisan migrate' — the addon provisions a pair into the database automatically — or 'php please mcp:keys' to generate one now."),
+        };
     }
 
     protected function checkOAuthTables(): void

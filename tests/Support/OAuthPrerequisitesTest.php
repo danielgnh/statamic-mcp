@@ -1,7 +1,9 @@
 <?php
 
+use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
 
@@ -40,6 +42,95 @@ it('accepts keys from the files passport:keys writes', function () {
         @rmdir($dir);
         Passport::$keyPath = null;
     }
+});
+
+it('accepts a decryptable key stored in the database', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->passportKeysExist())->toBeTrue()
+        ->and($prereqs->keySource())->toBe('database');
+});
+
+it('treats an empty key-store table as provisionable keys', function () {
+    // Zero-step deploys: once `php artisan migrate` created the table, the
+    // first OAuth request self-provisions a pair — keys are not "missing".
+    OAuthFixtures::migrateKeyStore();
+
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->passportKeysExist())->toBeTrue()
+        ->and($prereqs->keySource())->toBe('provisionable');
+});
+
+it('reports an undecryptable stored key as blocking, not absent', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    $prereqs = new OAuthPrerequisites;
+
+    // "Absent" would trigger remedies that regenerate — 401ing every client
+    // over a key that might still be restorable by fixing APP_KEY.
+    expect($prereqs->passportKeysExist())->toBeFalse()
+        ->and($prereqs->passportKeysUndecryptable())->toBeTrue();
+});
+
+it('lets environment keys stand in front of an undecryptable stored key', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    config([
+        'passport.private_key' => '-----BEGIN RSA PRIVATE KEY-----fake',
+        'passport.public_key' => '-----BEGIN PUBLIC KEY-----fake',
+    ]);
+
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->passportKeysExist())->toBeTrue()
+        ->and($prereqs->keySource())->toBe('config')
+        ->and($prereqs->passportKeysUndecryptable())->toBeFalse();
+});
+
+it('prefers the database over key files when both provide a key', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    $dir = sys_get_temp_dir().'/mcp-prereqs-'.Str::random(8);
+    @mkdir($dir, 0700, true);
+    file_put_contents($dir.'/oauth-private.key', 'fake');
+    file_put_contents($dir.'/oauth-public.key', 'fake');
+    Passport::loadKeysFrom($dir);
+
+    try {
+        // Mirrors the runtime injection precedence exactly.
+        expect((new OAuthPrerequisites)->keySource())->toBe('database');
+    } finally {
+        array_map(unlink(...), glob($dir.'/*') ?: []);
+        @rmdir($dir);
+        Passport::$keyPath = null;
+    }
+});
+
+it('reports whether the key-store table itself is migrated', function () {
+    $prereqs = new OAuthPrerequisites;
+
+    // The setup wizard uses this to know a re-run must still migrate: an
+    // upgrading site has Passport's tables but not the addon's key table.
+    expect($prereqs->keyStoreMigrated())->toBeFalse();
+
+    OAuthFixtures::migrateKeyStore();
+
+    expect($prereqs->keyStoreMigrated())->toBeTrue();
 });
 
 it('reports the oauth tables as missing before migrate has run', function () {

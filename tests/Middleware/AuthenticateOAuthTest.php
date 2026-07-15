@@ -45,8 +45,8 @@ it('answers 503 with the keys remedy when Passport keys are missing', function (
     expect($response->getStatusCode())->toBe(503)
         ->and($response->headers->get('Retry-After'))->toBe('60')
         ->and(json_decode($response->getContent(), true)['remedy'])
-        ->toContain('mcp:keys')
-        ->toContain('PASSPORT_PRIVATE_KEY');
+        ->toContain('php artisan migrate')
+        ->toContain('mcp:keys');
 });
 
 it('rejects an unauthenticated request with 401 and WWW-Authenticate', function () {

@@ -1,9 +1,11 @@
 <?php
 
+use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\File;
 use Laravel\Passport\Passport;
 
@@ -154,7 +156,7 @@ it('fails oauth mode naming every missing prerequisite at once', function () {
         ->expectsOutputToContain('[ OK ] Laravel Passport is installed.')
         // One expectation on purpose: a written line satisfies only the first
         // matching expectsOutputToContain, so the remedy rides along here.
-        ->expectsOutputToContain("[FAIL] Passport's encryption keys are missing. Run 'php please mcp:keys'")
+        ->expectsOutputToContain("[FAIL] Passport's encryption keys are missing. Run 'php artisan migrate'")
         ->expectsOutputToContain("[FAIL] Passport's tables are missing")
         ->assertExitCode(1);
 });
@@ -167,8 +169,41 @@ it('accepts keys provided via environment config instead of key files', function
     ]);
 
     $this->artisan('statamic:mcp:doctor')
-        ->expectsOutputToContain('[ OK ] Passport encryption keys are available.')
+        ->expectsOutputToContain('[ OK ] Passport encryption keys are available (environment config).')
         ->assertExitCode(1); // tables still missing
+});
+
+it('names the database as the key source when a stored key serves', function () {
+    config(['statamic.mcp.auth' => 'oauth']);
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[ OK ] Passport encryption keys are available (database).')
+        ->assertExitCode(1); // passport tables still missing
+});
+
+it('reports keys as self-provisioning when the store table is empty', function () {
+    config(['statamic.mcp.auth' => 'oauth']);
+    OAuthFixtures::migrateKeyStore();
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[ OK ] Passport encryption keys will be provisioned into the database on first use.')
+        ->assertExitCode(1); // passport tables still missing
+});
+
+it('fails with the APP_KEY remedy when the stored key cannot be decrypted', function () {
+    config(['statamic.mcp.auth' => 'oauth']);
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain("[FAIL] Passport's stored signing key can't be decrypted — APP_KEY changed since it was stored.")
+        ->assertExitCode(1);
 });
 
 it('fails when Passport tables exist but user_id columns are integers', function () {

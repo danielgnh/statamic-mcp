@@ -43,6 +43,16 @@ function stubOAuthPrereqs(array $state = []): void
             return $this->state['keys'] ?? false;
         }
 
+        public function keySource(): ?string
+        {
+            return ($this->state['keys'] ?? false) ? 'config' : null;
+        }
+
+        public function keyStoreMigrated(): bool
+        {
+            return $this->state['tables'] ?? false;
+        }
+
         public function oauthTablesMigrated(): bool
         {
             return $this->state['tables'] ?? false;
@@ -68,20 +78,41 @@ it('walks a fresh install through every oauth step — no user migration anywher
     $this->artisan('statamic:mcp:setup')
         ->expectsChoice('How will AI clients connect to this site?', 'oauth', MODE_OPTIONS)
         ->expectsConfirmation('Install laravel/passport via composer now?', 'yes')
-        ->expectsConfirmation('Generate Passport encryption keys now?', 'yes')
         ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
         ->expectsConfirmation('Apply this change to '.base_path('.env').'?', 'yes')
         ->expectsConfirmation('Publish and run the Passport migrations now?', 'yes')
+        // Keys come AFTER migrate on purpose: with the addon's key table in
+        // place, mcp:keys provisions the pair into the database.
+        ->expectsConfirmation('Provision Passport encryption keys now?', 'yes')
         ->expectsOutputToContain('php please mcp:keys')
         ->assertExitCode(0);
 
     Process::assertRan('composer require laravel/passport');
-    Process::assertRan('php artisan passport:keys');
     Process::assertRan('php artisan vendor:publish --tag=passport-migrations');
     Process::assertRan('php artisan migrate');
+    Process::assertRan('php please mcp:keys');
     Process::assertRan('php please mcp:doctor');
 
     expect($env->writes)->toBe([['STATAMIC_MCP_AUTH', 'oauth']]);
+});
+
+it('continues when the user declines eager key provisioning — the first request self-provisions', function () {
+    Process::fake();
+    fakeEnvWriter();
+    stubOAuthPrereqs();
+
+    $this->artisan('statamic:mcp:setup')
+        ->expectsChoice('How will AI clients connect to this site?', 'oauth', MODE_OPTIONS)
+        ->expectsConfirmation('Install laravel/passport via composer now?', 'yes')
+        ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
+        ->expectsConfirmation('Apply this change to '.base_path('.env').'?', 'yes')
+        ->expectsConfirmation('Publish and run the Passport migrations now?', 'yes')
+        ->expectsConfirmation('Provision Passport encryption keys now?', 'no')
+        ->expectsOutputToContain('provisioned into the database automatically on the first OAuth request')
+        ->assertExitCode(0);
+
+    Process::assertDidntRun('php please mcp:keys');
+    Process::assertRan('php please mcp:doctor');
 });
 
 it('skips every oauth step on an already-configured install', function () {
@@ -115,8 +146,8 @@ it('runs every oauth step unattended with --oauth --yes', function () {
         ->assertExitCode(0);
 
     Process::assertRan('composer require laravel/passport');
-    Process::assertRan('php artisan passport:keys');
     Process::assertRan('php artisan migrate');
+    Process::assertRan('php please mcp:keys');
     Process::assertRan('php please mcp:doctor');
     // The optional consent views publish defaults to "no" — --yes keeps that.
     Process::assertDidntRun('php artisan vendor:publish --tag=statamic-mcp-views');
@@ -188,7 +219,7 @@ it('stops when an external command fails, before any later step runs', function 
         ->expectsOutputToContain('Setup stopped.')
         ->assertExitCode(1);
 
-    Process::assertDidntRun('php artisan passport:keys');
+    Process::assertDidntRun('php please mcp:keys');
 });
 
 it('exits non-zero when the final doctor run finds problems', function () {

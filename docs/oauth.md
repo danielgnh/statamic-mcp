@@ -17,9 +17,11 @@ What OAuth mode does need:
 1. **`laravel/passport`** — for the OAuth endpoints and token machinery.
 2. **A database for Passport's own tables** (clients, tokens, auth codes) — sqlite
    is fine. Only Passport's bookkeeping lives there; your users don't.
-3. **Passport's encryption keys** — `php please mcp:keys` generates a pair and
-   prints it as deploy-ready `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env
-   vars (key files work too).
+3. **Passport's encryption keys** — managed for you. The addon stores the pair
+   in the database (private key only, encrypted with `APP_KEY`) and provisions
+   one automatically on first use — nothing to generate, nothing to paste.
+   Explicit `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars and the
+   classic key files still work and take precedence.
 4. **String `user_id` columns on Passport's tables** — Statamic ids are UUID
    strings, Passport's stock columns are bigint. The addon ships a migration that
    converts them (loaded automatically in OAuth mode; safe for integer ids too).
@@ -31,10 +33,10 @@ php please mcp:setup
 ```
 
 One command checks, confirms, and applies all four prerequisites — installing
-Passport, generating keys, flipping `STATAMIC_MCP_AUTH=oauth`, and running the
-migrations (deliberately after the flip, so the addon's user_id migration loads).
-Re-running is safe — satisfied steps are skipped. It finishes by running
-`mcp:doctor` as proof.
+Passport, flipping `STATAMIC_MCP_AUTH=oauth`, running the migrations
+(deliberately after the flip, so the addon's migrations load), and provisioning
+the keys into the freshly migrated database. Re-running is safe — satisfied
+steps are skipped. It finishes by running `mcp:doctor` as proof.
 
 ### Unattended (for scripts and AI agents)
 
@@ -49,38 +51,45 @@ Token mode is scriptable too: `php please mcp:setup --token --user=you@site.com 
 
 ```bash
 composer require laravel/passport
-php please mcp:keys                                          # generates a pair, prints PASSPORT_* env vars
 # .env
 STATAMIC_MCP_AUTH=oauth
 php artisan vendor:publish --tag=passport-migrations
-php artisan migrate                                          # passport tables + the addon's user_id conversion
+php artisan migrate                # passport tables + the addon's key store + user_id conversion
+php please mcp:keys                # optional — provisions the keys now instead of on the first request
 ```
 
 Order matters once: set `STATAMIC_MCP_AUTH=oauth` **before** the final
-`php artisan migrate`, because the addon's user_id migration only loads in OAuth
+`php artisan migrate`, because the addon's migrations only load in OAuth
 mode. Running migrate again after the flip fixes an accidental early run.
 
 ## Deploying
 
-Everything above is either committed (nothing — no app files change) or
-per-environment (env vars, migrations, keys). To ship an existing site:
+Deploy as usual — there is no key step:
 
 ```bash
-# each environment's secret store
+# each environment
 STATAMIC_MCP_AUTH=oauth
-PASSPORT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
-PASSPORT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-Run `php please mcp:keys` once (anywhere — locally is fine): it generates the pair
-if none exists and prints exactly those two lines, escaping done, ready to paste
-into Forge's environment panel, Vapor's secrets, or a plain `.env` (`--json` pipes
-into secret-store CLIs; `--write` fills a local `.env` directly). Then let the
-deploy pipeline run `php artisan migrate --force`. Keys in env survive releases,
-work on read-only filesystems (Vapor), and are shared across a horizontally-scaled
-fleet — re-running `passport:keys` per release would silently invalidate every
-connected client. `php please mcp:doctor` verifies each environment and exits
-non-zero, so it slots into a deploy step.
+Let the deploy pipeline run `php artisan migrate --force`. Keys are provisioned
+into the database automatically (private key only, encrypted with `APP_KEY`),
+shared by every server of the environment, and survive releases and read-only
+filesystems (Vapor). Each environment gets its own pair — nothing to copy
+between machines, nothing to paste into env panels. `php please mcp:doctor`
+verifies each environment and exits non-zero, so it slots into a deploy step.
+
+Want explicit env-var keys instead (say, one pair shared across apps)?
+`php please mcp:keys` prints the pair as paste-ready `PASSPORT_PRIVATE_KEY` /
+`PASSPORT_PUBLIC_KEY` lines (`--json` pipes into secret-store CLIs; `--write`
+fills a local `.env`) — configured keys always override the database copy.
+Never run `passport:keys` per release: regenerating silently disconnects every
+client.
+
+One caveat to know: the stored key is encrypted with `APP_KEY`, so rotating
+`APP_KEY` makes it undecryptable. `mcp:doctor` (and the endpoint's 503) name
+that state precisely — restore the previous `APP_KEY`, or delete the row in
+`statamic_mcp_oauth_keys` to provision a fresh pair, after which every
+connected client reconnects through the OAuth flow.
 
 ## The consent screen
 
@@ -120,7 +129,10 @@ valid (same keys, same tables, same validation) — but none of it is required
 anymore. The leftover `api` guard and trait are harmless; remove them at leisure.
 Run `php artisan migrate` once after upgrading so the addon's user_id column
 conversion applies (it also fixes the latent bigint-column crash for imported
-UUID-keyed Eloquent users).
+UUID-keyed Eloquent users) and its key table is created. Existing keys are never
+touched: env-configured keys keep precedence, and `storage/oauth-*.key` files
+are adopted into the database on first use so the whole fleet converges on one
+managed copy.
 
 ## Seeing and disconnecting connections
 

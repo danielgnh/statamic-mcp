@@ -77,10 +77,18 @@ class AuthenticateOAuth
         }
 
         // Without keys the ResourceServer constructor throws a raw 500 —
-        // preflight it into an actionable 503 instead.
+        // preflight it into an actionable 503 instead. The undecryptable
+        // case is named first: it looks exactly like "missing", but its
+        // remedy is restoring APP_KEY, never provisioning a fresh pair.
         if (! $prereqs->passportKeysExist()) {
+            if ($prereqs->passportKeysUndecryptable()) {
+                return $this->unavailable(
+                    "Passport's stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the stored key row to let a fresh pair provision (every connected client must then reconnect)."
+                );
+            }
+
             return $this->unavailable(
-                "Passport's encryption keys are missing. Run 'php please mcp:keys' — it generates a pair if needed and prints deploy-ready PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY environment variables."
+                "Passport's encryption keys are missing. Run 'php artisan migrate' — the addon provisions a pair into the database automatically — or 'php please mcp:keys' to generate one now."
             );
         }
 

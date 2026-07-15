@@ -91,6 +91,26 @@ class OAuthFixtures
         });
     }
 
+    /** Create the addon's own key-store table by running its real migration. */
+    public static function migrateKeyStore(): void
+    {
+        (require __DIR__.'/../../database/migrations/2026_07_15_100000_create_statamic_mcp_oauth_keys_table.php')->up();
+    }
+
+    /**
+     * A real (small) RSA key per test run instead of a committed fixture PEM —
+     * secret scanners flag key-shaped literals in a public repo (see
+     * TestCase's APP_KEY note). 2048 bits: real enough for OpenSSL and
+     * league's CryptKey, an order of magnitude faster than production's 4096.
+     */
+    public static function rsaPrivateKey(): string
+    {
+        $rsa = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($rsa, $pem);
+
+        return trim((string) $pem);
+    }
+
     /** Config that makes OAuth mode look fully configured (with the tables migrated). */
     public static function oauthReadyConfig(): void
     {

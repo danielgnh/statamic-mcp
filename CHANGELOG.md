@@ -8,6 +8,33 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **Database-managed Passport keys** — the signing pair now lives where the
+  rest of the OAuth state already does: a new `statamic_mcp_oauth_keys` table
+  (private key only — the public half is derived — encrypted at rest with
+  `APP_KEY`), injected into Passport just in time as its servers resolve.
+  Deploys need no key step anymore: once `php artisan migrate` has run, the
+  first OAuth request provisions a pair automatically (race-safe across a
+  fleet), every server reads the same copy, and releases and read-only
+  filesystems are a non-issue. Existing setups keep working untouched —
+  `PASSPORT_*` env keys take precedence, and `storage/oauth-*.key` files are
+  adopted into the database on first use.
+- `mcp:doctor` names the key source (environment config / database / key
+  files / pending provision) and fails with a dedicated remedy when the stored
+  key can't be decrypted after an `APP_KEY` change — deliberately never
+  regenerating over it, which would silently disconnect every client.
+
+### Changed
+
+- `mcp:keys` mirrors the runtime precedence exactly (config → database → key
+  files), generates into the database when its table exists (key files remain
+  the pre-migrate fallback), adopts existing key files into the store, and
+  refuses to touch an undecryptable stored key.
+- `mcp:setup` provisions keys **after** the migrate step so they land in the
+  database, and declining the key step is no longer fatal — the first OAuth
+  request self-provisions.
+
 ## [0.3.2] - 2026-07-15
 
 ### Fixed

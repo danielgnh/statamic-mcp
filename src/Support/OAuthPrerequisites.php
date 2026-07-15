@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Support;
 
+use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
@@ -19,6 +20,8 @@ use Laravel\Passport\Passport;
  */
 class OAuthPrerequisites
 {
+    public function __construct(protected KeyStore $keys = new KeyStore) {}
+
     public function passportInstalled(): bool
     {
         return class_exists(Passport::class);
@@ -26,15 +29,63 @@ class OAuthPrerequisites
 
     /**
      * Both keys must be available — the private key signs at issuance, the
-     * public key verifies at every request. Passport reads each from config
-     * (PASSPORT_PRIVATE_KEY / PASSPORT_PUBLIC_KEY env — the deploy-friendly
-     * path) before falling back to the key files passport:keys writes.
+     * public key verifies at every request. keySource() mirrors the runtime
+     * precedence exactly, including "the store's table exists and a pair will
+     * self-provision on first use".
      */
     public function passportKeysExist(): bool
     {
         return $this->passportInstalled()
-            && $this->keyAvailable('private')
-            && $this->keyAvailable('public');
+            && $this->keySource() !== null;
+    }
+
+    /**
+     * Where the runtime gets its keys — the exact mirror of
+     * PassportKeys::inject(): explicit config short-circuits everything, an
+     * undecryptable store row blocks the database path (Passport then falls
+     * back to key files natively), a stored key beats files, and an empty
+     * store table means a pair self-provisions on first use.
+     *
+     * @return 'config'|'database'|'files'|'provisionable'|null
+     */
+    public function keySource(): ?string
+    {
+        // Either config key set → the addon's injection steps aside and
+        // Passport reads config-or-file per key, exactly as stock.
+        if (filled(config('passport.private_key')) || filled(config('passport.public_key'))) {
+            return $this->keyAvailable('private') && $this->keyAvailable('public') ? 'config' : null;
+        }
+
+        if (! $this->keys->undecryptable() && $this->keys->get() !== null) {
+            return 'database';
+        }
+
+        if (file_exists(Passport::keyPath('oauth-private.key')) && file_exists(Passport::keyPath('oauth-public.key'))) {
+            return 'files';
+        }
+
+        return $this->keys->available() && ! $this->keys->has() ? 'provisionable' : null;
+    }
+
+    /**
+     * A stored key APP_KEY can no longer decrypt. Deliberately its own
+     * predicate: "missing" remedies regenerate, which would 401 every
+     * connected client over a key that restoring APP_KEY could still save.
+     */
+    public function passportKeysUndecryptable(): bool
+    {
+        return blank(config('passport.private_key'))
+            && $this->keys->undecryptable();
+    }
+
+    /**
+     * Whether the addon's own key table exists — distinct from
+     * oauthTablesMigrated() because an upgrading site has Passport's tables
+     * already but still needs one `php artisan migrate` for this one.
+     */
+    public function keyStoreMigrated(): bool
+    {
+        return $this->keys->available();
     }
 
     protected function keyAvailable(string $type): bool
