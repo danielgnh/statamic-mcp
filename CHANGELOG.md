@@ -8,6 +8,8 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-15
+
 ### Added
 
 - `php please mcp:keys` — one-command key provisioning for production. Ensures a
@@ -47,7 +49,11 @@ called out here explicitly.
 
 ### Changed
 
-- `laravel/passport` requirement bumped to `^13.0`.
+- `laravel/passport` is now a dev dependency at `^13.0` (previously
+  suggest-only, with a dedicated CI leg installing it) — the separate Passport
+  CI leg is gone; every matrix leg runs the full OAuth coverage, including
+  real signed tokens. For host apps Passport remains an opt-in `suggest`
+  dependency, required only for OAuth mode.
 
 ## [0.1.1] - 2026-07-14
 
@@ -151,7 +157,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.1.0...v0.1.1
