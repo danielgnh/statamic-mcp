@@ -105,23 +105,56 @@ it('does not warn when the user has the access mcp permission', function () {
         ->assertDontSee('does not have the', false);
 });
 
-it('shows the oauth-mode notice only when auth mode is oauth', function () {
+it('hides the token issuing ui in oauth mode', function () {
     config(['statamic.mcp.auth' => 'oauth']);
 
     $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
 
-    // 'This site is in OAuth mode' is unique to the banner — the help panel's
-    // static copy also mentions "OAuth mode", so a bare sentinel would always match.
     $this->actingAs($user)
         ->get(cp_route('utilities.mcp-tokens'))
         ->assertOk()
-        ->assertSee('This site is in OAuth mode', false);
+        ->assertDontSee('Create token', false)
+        ->assertDontSee('Authorization: Bearer', false);
+});
 
-    config(['statamic.mcp.auth' => 'token']);
+it('403s issuance in oauth mode', function () {
+    config(['statamic.mcp.auth' => 'oauth']);
+
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->actingAs($user)
+        ->postJson(cp_route('utilities.mcp-tokens.store'), ['expiry' => 'never'])
+        ->assertForbidden();
+
+    expect(app(TokenRepository::class)->all())->toBeEmpty();
+});
+
+// Switching a live site to OAuth must not strand the tokens it already issued:
+// they stay listed — and revokable — until they're gone.
+it('lists leftover tokens in oauth mode so they can still be revoked', function () {
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    app(TokenRepository::class)->issue($user, 'leftover-alpha');
+
+    config(['statamic.mcp.auth' => 'oauth']);
 
     $this->actingAs($user)
         ->get(cp_route('utilities.mcp-tokens'))
-        ->assertDontSee('This site is in OAuth mode', false);
+        ->assertOk()
+        ->assertSee('leftover-alpha', false)
+        ->assertSee('Revoke', false);
+});
+
+it('hides the token panel entirely in oauth mode when no tokens are left', function () {
+    config(['statamic.mcp.auth' => 'oauth']);
+
+    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+
+    $this->actingAs($user)
+        ->get(cp_route('utilities.mcp-tokens'))
+        ->assertOk()
+        ->assertDontSee('leftover tokens', false)
+        ->assertDontSee('No tokens yet', false);
 });
 
 it('warns about plain http and shows the endpoint in the help panel', function () {
