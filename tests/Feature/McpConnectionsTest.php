@@ -135,29 +135,30 @@ it('shows a permitted user only their own connections', function () {
     $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
     $other = Fixtures::makeUser();
 
-    // Client name must not collide with static page copy ("Claude Code",
-    // "claude.ai") — the assertion below has to fail when the panel is empty.
-    $client = OAuthFixtures::client('Claude Team Laptop');
+    // Client names must not collide with static page copy ("Claude Code",
+    // "claude.ai", "ChatGPT") — the assertions below have to fail when the
+    // panel is empty or shows the wrong row.
+    $client = OAuthFixtures::client('Acme Team Laptop');
     OAuthFixtures::accessToken((string) $user->id(), $client);
-    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('ChatGPT'));
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('Zebra Desktop'));
 
     $this->actingAs($user)
         ->get(cp_route('utilities.mcp-tokens'))
         ->assertOk()
-        ->assertSee('Claude Team Laptop', false)
-        ->assertDontSee('ChatGPT', false);
+        ->assertSee('Acme Team Laptop', false)
+        ->assertDontSee('Zebra Desktop', false);
 });
 
 it("shows a super admin everyone's connections with their emails", function () {
     $super = Fixtures::makeSuper();
     $other = Fixtures::makeUser();
 
-    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('ChatGPT'));
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('Zebra Desktop'));
 
     $this->actingAs($super)
         ->get(cp_route('utilities.mcp-tokens'))
         ->assertOk()
-        ->assertSee('ChatGPT', false)
+        ->assertSee('Zebra Desktop', false)
         ->assertSee($other->email(), false);
 });
 

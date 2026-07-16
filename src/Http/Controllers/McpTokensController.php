@@ -18,6 +18,10 @@ class McpTokensController extends CpController
 {
     public function store(Request $request, TokenRepository $tokens): RedirectResponse
     {
+        // OAuth mode hides the whole token UI, and nothing would accept a token
+        // issued here — so the route refuses too rather than minting a dud.
+        abort_if(config('statamic.mcp.auth') === 'oauth', 403);
+
         $validated = $request->validate([
             'name' => ['nullable', 'string', 'max:100'],
             'expiry' => ['required', 'in:never,30,90,365'],
