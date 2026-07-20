@@ -50,6 +50,10 @@ class OAuthPrerequisites
      */
     public function keySource(): ?string
     {
+        if (! $this->passportInstalled()) {
+            return null;
+        }
+
         // Either config key set → the addon's injection steps aside and
         // Passport reads config-or-file per key, exactly as stock.
         if (filled(config('passport.private_key')) || filled(config('passport.public_key'))) {
