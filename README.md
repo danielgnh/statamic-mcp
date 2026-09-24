@@ -6,7 +6,7 @@
 
 Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
 
-It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package. Until 1.0, a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
+It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package and works with its 0.8, 0.9, and 1.x releases. This addon is still pre-1.0, so a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
 
 ## Requirements
 
