@@ -46,17 +46,17 @@ class EntriesPreview extends Tool
 
         $entry = $this->findExposedEntry($validated['id'], $user, data_get($validated, 'site'));
 
-        $collection = $entry->collection()->handle();
+        $collectionHandle = $entry->collection()->handle();
 
         // CP parity (PreviewController@edit, 6.x): live preview authorizes
         // 'update', which EntryPolicy grants on the edit permission.
-        $this->ensurePermission($user, "edit {$collection} entries");
+        $this->ensurePermission($user, "edit {$collectionHandle} entries");
 
         if (blank($entry->route())) {
             throw new ToolException(sprintf(
                 "entry '%s' cannot be previewed — collection '%s' has no route for site '%s', so its entries have no page",
                 $entry->id(),
-                $collection,
+                $collectionHandle,
                 $entry->locale(),
             ));
         }
