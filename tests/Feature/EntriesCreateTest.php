@@ -47,22 +47,21 @@ it('creates a draft by default with a slug generated from the title', function (
         ->and($entry->get('updated_by'))->toBe($user->id()); // CP parity: creates carry updated_by/updated_at
 });
 
-it("requires 'publish blog entries' for published: true", function () {
+it('rejects published even for a user who could publish', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser('create blog entries');
+    // A client with a stale tool cache may still send the old parameter.
+    // Silently saving a draft the agent believes is live would be worse
+    // than an error, so it is refused outright.
+    foreach ([true, false] as $published) {
+        Server::actingAs(Fixtures::makeUser('create blog entries', 'publish blog entries'))
+            ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Live Post'], 'published' => $published])
+            ->assertHasErrors(['published is not accepted by entries_create — publish state changes only through entries_publish and entries_unpublish']);
+    }
 
-    Server::actingAs($user)
-        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Live Post'], 'published' => true])
-        ->assertHasErrors(["requires 'publish blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
-
-    Server::actingAs(Fixtures::makeUser('create blog entries', 'publish blog entries'))
-        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Live Post'], 'published' => true])
-        ->assertOk()
-        ->assertSee('"status":"published"')
-        ->assertSee('"result":"published"');
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
 });
 
 it('requires date for dated collections', function () {

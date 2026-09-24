@@ -50,18 +50,21 @@ guidelines teach AI coding agents to use. Boost users get them automatically on
 
 ## What Statamic MCP can do?
 
-19 tools across five areas — every agent session is starting with `statamic_overview`,
+21 tools across five areas — every agent session is starting with `statamic_overview`,
 which reports the sites, resources, and capabilities visible to the acting user:
 
 - **Discovery** — `statamic_overview`, `blueprints_get` (fields + a valid example payload for writes)
-- **Entries** — `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_delete`
+- **Entries** — `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_publish`, `entries_unpublish`, `entries_delete`
 - **Taxonomy terms** — `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete`
 - **Globals** — `globals_get`, `globals_update`
 - **Assets** — `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete`
 
 The write semantics are deliberately conservative:
 
-- Entry creates and updates save **drafts by default** — agents draft, humans publish.
+- Entry creates and updates **never publish**. Creates save drafts, updates leave
+  publish state alone, and going live is its own tool, `entries_publish`. Because it
+  is a separate tool, your MCP client asks about it separately: allow `entries_update`
+  for a session and still approve every publish by hand.
 - On revision-enabled collections, edits become **working copies** through the same
   mechanism the CP uses; the live entry is never touched.
 - Delete tools aren't even registered unless you opt in (`deletes` config).

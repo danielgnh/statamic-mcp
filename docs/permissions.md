@@ -12,19 +12,21 @@ always Statamic's native permission system. Four gates, in order:
    on every call in case a client cached the old tool list.
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
-   (and term/global equivalents) via the user's roles. Changing publish state — in
-   either direction — additionally requires `publish {handle} entries`, exactly like
-   the CP. Non-default-site writes require `access {site} site` (the default site
-   is never gated by a site permission). Denials name the missing permission and
-   the remedy.
+   (and term/global equivalents) via the user's roles. Publish state changes only
+   through `entries_publish` and `entries_unpublish`, both gated on
+   `publish {handle} entries`, the same permission the CP checks. Non-default-site
+   writes require `access {site} site` (the default site is never gated by a site
+   permission). Denials name the missing permission and the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
 
-Entry creates and updates save **drafts by default**: agents draft, humans publish
-(unless you explicitly pass `published: true` and the user holds the publish
-permission). On revision-enabled collections publish state is CP-owned entirely:
-explicit `published` values are rejected, edits become working copies, and the live
-entry is never touched. Terms and globals have no draft state — writes to them are
-live immediately.
+Entry creates and updates **never publish**. Creates save drafts. On revision-enabled
+collections, edits to a live entry become working copies and the live entry is never
+touched. Going live is a separate tool, `entries_publish`, and it needs the publish
+permission. Two things follow from that split. A role without the publish permission
+cannot publish through MCP at all, whatever the agent sends. And because publishing is
+its own tool, MCP clients ask about it separately: you can allow `entries_update` for
+a session and still approve each publish by hand. Terms and globals have no draft
+state, so writes to them are live immediately.
 
 ## Recipes
 
@@ -42,9 +44,9 @@ other collections in `statamic_overview`.
 agent's role only `Access MCP` + `View … entries` permissions — both work, use the
 role when other agents on the same server still need write access.
 
-**A publishing agent:** add `Publish blog entries` to the role. Transitions to
-`published: true` now succeed (on non-revision collections — revisions publish from
-the CP).
+**A publishing agent:** add `Publish blog entries` to the role. `entries_publish` and
+`entries_unpublish` now work, on revision-enabled collections too, where they promote
+or apply the working copy the same way the CP does.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
 add `Delete blog entries` to the role. Both gates must open.

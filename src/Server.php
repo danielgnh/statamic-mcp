@@ -14,6 +14,8 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesList;
+use Danielgnh\StatamicMcp\Tools\EntriesPublish;
+use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsGet;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
@@ -33,7 +35,7 @@ use Laravel\Mcp\Server\Tool;
  * the subclass in config('statamic.mcp.server').
  */
 #[Name('Statamic')]
-#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, and asset containers you can work with, plus your own permission flags per resource. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). Writes save drafts by default; publishing requires an explicit published: true and the matching Statamic permission. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
+#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, and asset containers you can work with, plus your own permission flags per resource. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
 class Server extends McpServer
 {
     /** @var list<class-string<Tool>> */
@@ -44,6 +46,8 @@ class Server extends McpServer
         EntriesGet::class,
         EntriesCreate::class,
         EntriesUpdate::class,
+        EntriesPublish::class,
+        EntriesUnpublish::class,
         EntriesDelete::class,
         TermsList::class,
         TermsGet::class,
@@ -59,9 +63,6 @@ class Server extends McpServer
         AssetsDelete::class,
     ];
 
-    // The full tool set (19 with deletes enabled) exceeds laravel/mcp's
-    // 15-per-page tools/list default, and clients that never send a cursor
-    // would silently miss the overflow — advertise everything in one page.
     public int $defaultPaginationLength = 50;
 
     /** @var array<int, class-string<Tool>> */

@@ -1,6 +1,6 @@
 # Tool reference
 
-All 19 tools, in the order an agent typically meets them. Every agent session
+All 21 tools, in the order an agent typically meets them. Every agent session
 should start with `statamic_overview`.
 
 ## Discovery
@@ -16,8 +16,10 @@ should start with `statamic_overview`.
 |---|---|
 | `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
 | `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes; the returned data is always the live entry. |
-| `entries_create` | Raw-data create through Statamic's own validation. Saves an unpublished **draft by default**; `published: true` requires the publish permission. On revision-enabled collections entries are always created as drafts with an attributed initial revision. |
-| `entries_update` | Shallow top-level merge of raw data (nested structures replaced wholesale). On revision-enabled collections, edits to a published entry become a **working copy** — the live entry is never touched; an existing working copy is amended (created vs amended is stated in the result). No-op updates save nothing. |
+| `entries_create` | Raw-data create through Statamic's own validation. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
+| `entries_update` | Shallow top-level merge of raw data (nested structures replaced wholesale). Never changes publish state. On revision-enabled collections, edits to a published entry become a **working copy** — the live entry is never touched; an existing working copy is amended (created vs amended is stated in the result). No-op updates save nothing. |
+| `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An already-published entry with nothing staged is a no-op. |
+| `entries_unpublish` | Takes a live entry offline. Same permission as publish, since Statamic has no separate unpublish permission. On revision-enabled collections a staged working copy is applied to the entry and cleared, with an unpublish revision attributed to you. A draft is a no-op. |
 | `entries_delete` | Only registered when `deletes` is enabled. Deleting an origin cascades to all localizations (requires site access to each); revision files stay on disk as orphans, same as the CP. |
 
 ## Taxonomy terms
@@ -50,11 +52,13 @@ should start with `statamic_overview`.
 ## Write responses
 
 Every write response states the resulting liveness ("saved as draft — not live",
-"published", "working copy created — live entry unchanged", "working copy amended —
-live entry unchanged", "created — live", "updated — live") and includes `cp_edit_url`
-linking the CP edit page (delete responses omit `cp_edit_url` — the page would 404).
+"published", "published — working copy is now live", "unpublished — not live",
+"working copy created — live entry unchanged", "working copy amended — live entry
+unchanged", "created — live", "updated — live") and includes `cp_edit_url` linking
+the CP edit page (delete responses omit `cp_edit_url` — the page would 404).
 Collections with revisions enabled get working copies through the same mechanism
-the CP uses — the live entry is never mutated, publishing stays in the Control Panel.
+the CP uses. An edit never mutates the live entry; `entries_publish` promotes the
+working copy exactly as the CP's Publish button does.
 
 ## Asset uploads and the SSRF policy
 

@@ -32,6 +32,12 @@ abstract class Tool extends BaseTool
 
     public const LIVENESS_PUBLISHED = 'published';
 
+    public const LIVENESS_PUBLISHED_WORKING_COPY = 'published — working copy is now live';
+
+    public const LIVENESS_UNPUBLISHED = 'unpublished — not live';
+
+    public const LIVENESS_UNPUBLISHED_WORKING_COPY = 'unpublished — working copy applied, not live';
+
     public const LIVENESS_WORKING_COPY = 'working copy created — live entry unchanged';
 
     public const LIVENESS_WORKING_COPY_AMENDED = 'working copy amended — live entry unchanged';
