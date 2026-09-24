@@ -90,6 +90,13 @@ class EntriesCreate extends Tool
             ));
         }
 
+        // CP parity (EntriesController@store): a structured collection places
+        // a new entry in its tree once it is saved, except an orderable one
+        // (max_depth 1), whose tree lists the entry when it is next read.
+        $tree = $collection->hasStructure() && ! $collection->orderable()
+            ? $collection->structure()->in($site)
+            : null;
+
         // Reject the ambiguous slug/date-in-data spelling BEFORE blueprint
         // validation so our targeted error beats the validator's raw
         // "The Date field is required."
@@ -129,6 +136,14 @@ class EntriesCreate extends Tool
 
         if ($date) {
             $entry->date($date);
+        }
+
+        if ($tree) {
+            // appendTo() edits the stored tree, which lacks the entries created
+            // outside the CP until the tree is next saved. Storing the tree the
+            // way it reads keeps them in their place; this entry comes out of
+            // it first, since the read may already list it at the top level.
+            $entry->afterSave(fn ($entry) => $tree->tree($tree->tree())->remove($entry)->appendTo(null, $entry)->save());
         }
 
         // CP parity: created entries carry updated_by/updated_at. save()

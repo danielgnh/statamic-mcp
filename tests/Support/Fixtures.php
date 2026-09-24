@@ -99,6 +99,16 @@ class Fixtures
         )->save()->id();
     }
 
+    // Gives an existing collection a tree, with URLs that follow its nesting:
+    // call pages() first. max_depth 1 makes it a flat, orderable list.
+    public static function structure(string $collection = 'pages', ?int $maxDepth = null, bool $root = false): void
+    {
+        Collection::findByHandle($collection)
+            ->structureContents(['root' => $root, 'max_depth' => $maxDepth])
+            ->routes('{parent_uri}/{slug}')
+            ->save();
+    }
+
     // Call assetContainer('images') first: the single-file fields point at it.
     public static function landing(): void
     {
