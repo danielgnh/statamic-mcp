@@ -96,6 +96,8 @@ Three config options restrict every user at once. `read_only` hides all write to
 
 Publishing is its own tool, `entries_publish`, and it needs the collection's publish permission. Because it's a separate tool, your MCP client asks you about it separately. You can let an agent call `entries_update` all session and still approve each publish yourself.
 
+To see how a draft or working copy looks, an agent calls `entries_preview`. It returns a Live Preview URL that renders the entry through your templates. Anyone with the URL can open it for an hour, so the agent can fetch the page itself and check its work before anyone publishes.
+
 Terms, globals, and assets have no draft state. Writes to them go live immediately.
 
 ## Tools
@@ -103,7 +105,7 @@ Terms, globals, and assets have no draft state. Writes to them go live immediate
 | Area | Tools |
 |---|---|
 | Discovery | `statamic_overview`, `blueprints_get` |
-| Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_publish`, `entries_unpublish`, `entries_delete` |
+| Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_preview`, `entries_publish`, `entries_unpublish`, `entries_delete` |
 | Taxonomy terms | `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete` |
 | Globals | `globals_get`, `globals_update` |
 | Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
