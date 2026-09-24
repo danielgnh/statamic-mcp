@@ -137,3 +137,32 @@ it('refuses a date on a localization that inherits it from its origin', function
 
     expect(Entry::find($localization->id())->date()->toIso8601String())->toBe('2026-09-01T09:00:00+00:00');
 });
+
+it("keeps the author rule when scheduling someone else's entry", function () {
+    Fixtures::site();
+    Fixtures::news();
+    Fixtures::authors('news');
+
+    $entry = tap(makeNewsStory('2026-09-01T09:00:00+00:00')->set('author', Fixtures::makeUser()->id()))->save();
+    $user = Fixtures::makeUser('edit news entries', 'publish news entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'date' => '2026-10-06T09:00:00+02:00'])
+        ->assertHasErrors(["requires 'edit other authors news entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesPublish::class, ['id' => $entry->id()])
+        ->assertHasErrors(["requires 'publish other authors news entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    $editor = Fixtures::makeUser('edit news entries', 'edit other authors news entries', 'publish news entries', 'publish other authors news entries');
+
+    Server::actingAs($editor)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'date' => '2026-10-06T09:00:00+02:00'])
+        ->assertOk();
+
+    Server::actingAs($editor)
+        ->tool(EntriesPublish::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"status":"scheduled"')
+        ->assertSee('"result":"scheduled — published, but not live until its date"');
+});
