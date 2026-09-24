@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -15,10 +16,11 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Entries\Entry;
 
 #[Name('entries_delete')]
-#[Description('Permanently delete an entry by id. Deleting an origin also deletes all of its localizations (this requires site access to every localization\'s site); the response lists everything that was removed. On revision-enabled collections the entry\'s revision and working-copy files stay on disk as orphans (the Control Panel behaves the same way). This cannot be undone.')]
+#[Description('Permanently delete an entry by id. When the blueprint has an author field, deleting an entry you are not an author of needs \'delete other authors {collection} entries\'. Deleting an origin also deletes all of its localizations (this requires site access to every localization\'s site); the response lists everything that was removed. On revision-enabled collections the entry\'s revision and working-copy files stay on disk as orphans (the Control Panel behaves the same way). This cannot be undone.')]
 #[IsDestructive]
 class EntriesDelete extends Tool
 {
+    use AuthorizesEntries;
     use ResolvesEntries;
     use ResolvesSites;
 
@@ -49,7 +51,7 @@ class EntriesDelete extends Tool
 
         $collection = $entry->collection()->handle();
 
-        $this->ensurePermission($user, "delete {$collection} entries");
+        $this->ensureEntryPermission($user, 'delete', $entry);
 
         // Vendor Entry::delete() refuses origins that still have localizations
         // (it throws) — v6 never cascades implicitly. The CP resolves this by

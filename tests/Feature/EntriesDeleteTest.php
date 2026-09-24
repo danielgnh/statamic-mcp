@@ -337,3 +337,27 @@ it('reports a clean error when a listener cancels a second-level localization de
         ->and(Entry::find($de->id()))->not->toBeNull()
         ->and(Entry::find($at->id()))->not->toBeNull();
 });
+
+it("requires 'delete other authors blog entries' to delete someone else's entry, but not one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser('delete blog entries');
+    $theirs = tap(Entry::make()->collection('blog')->slug('theirs')->data(['title' => 'Theirs', 'author' => [Fixtures::makeUser()->id()]]))->save();
+    $mine = tap(Entry::make()->collection('blog')->slug('mine')->data(['title' => 'Mine', 'author' => [$user->id()]]))->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesDelete::class, ['id' => $theirs->id()])
+        ->assertHasErrors(["requires 'delete other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesDelete::class, ['id' => $mine->id()])
+        ->assertOk();
+
+    expect(Entry::find($theirs->id()))->not->toBeNull()
+        ->and(Entry::find($mine->id()))->toBeNull();
+});
