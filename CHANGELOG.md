@@ -136,6 +136,13 @@ called out here explicitly.
   `author` field and `data` names none, as the Control Panel does. Naming
   anyone else, and changing an entry's author with `entries_update`, needs
   `edit other authors {collection} entries`.
+- `laravel/mcp` 0.9 and 1.x are supported alongside 0.8, and nothing changes
+  on 0.8. On 1.x, clients on the 2026-07-28 protocol revision connect through
+  `server/discover`, clients that open with `initialize` keep working, and
+  JSON-RPC errors come back as HTTP 400, 404, or 500 instead of 200.
+  laravel/mcp 0.9.6 and 1.0.1 fix the loopback redirect URI check in OAuth
+  client registration, and 0.8 won't get that fix. Upgrade if you run OAuth
+  mode and have narrowed `mcp.redirect_domains`.
 
 ### Fixed
 
