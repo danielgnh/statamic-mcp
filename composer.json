@@ -1,6 +1,6 @@
 {
     "name": "danielgnh/statamic-mcp",
-    "description": "MCP server for Statamic — manage entries, terms, and globals from AI clients over streamable HTTP.",
+    "description": "MCP server for Statamic that lets AI clients manage entries, terms, globals, and assets over streamable HTTP.",
     "license": "MIT",
     "keywords": [
         "statamic",
