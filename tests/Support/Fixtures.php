@@ -14,6 +14,7 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
 use Statamic\Facades\Site;
+use Statamic\Facades\Stache;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\User;
 
@@ -97,6 +98,21 @@ class Fixtures
         return tap(
             Entry::make()->collection('pages')->locale($site)->slug($slug)->data(['title' => $title])->published($published)
         )->save()->id();
+    }
+
+    // The id of the pages entry with this slug, for entries a tool created.
+    public static function pageId(string $slug, string $site = 'en'): string
+    {
+        return Entry::query()->where('collection', 'pages')->where('site', $site)->where('slug', $slug)->first()->id();
+    }
+
+    // The pages tree as stored. tree() would append the entries missing from
+    // the stored tree, so this reads fileData() after rehydrating from disk.
+    public static function storedPagesTree(string $site = 'en'): array
+    {
+        Stache::clear();
+
+        return Collection::findByHandle('pages')->structure()->in($site)->fileData()['tree'];
     }
 
     // Gives an existing collection a tree, with URLs that follow its nesting:
