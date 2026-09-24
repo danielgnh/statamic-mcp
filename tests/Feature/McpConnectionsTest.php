@@ -44,7 +44,7 @@ it("403s disconnecting another user's connection before revealing whether it exi
         ->assertForbidden();
 });
 
-// ── Real disconnect behavior (Passport CI leg) ──
+// ── Real disconnect behavior ──
 
 it('lets a user disconnect their own connection, revoking access and refresh tokens', function () {
     $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');

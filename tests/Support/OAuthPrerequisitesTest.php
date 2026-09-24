@@ -12,6 +12,13 @@ it('reports passport as installed', function () {
     expect((new OAuthPrerequisites)->passportInstalled())->toBeTrue();
 });
 
+it('reports no key source when passport is not installed', function () {
+    $prereqs = new OAuthPrerequisites;
+
+    expect($prereqs->passportInstalled())->toBeFalse()
+        ->and($prereqs->keySource())->toBeNull();
+})->group('without-passport')->skip(fn () => class_exists(Passport::class), 'runs in the without-passport CI job');
+
 it('reports keys as missing when neither config nor key files provide them', function () {
     expect((new OAuthPrerequisites)->passportKeysExist())->toBeFalse();
 });

@@ -47,9 +47,11 @@ git tag vX.Y.Z
 git push origin main vX.Y.Z
 ```
 
-Verify the Actions run for the push/tag is green — **11 jobs**: 8 test-matrix legs
+Verify the Actions run for the push/tag is green — **12 jobs**: 8 test-matrix legs
 (PHP 8.3/8.4 × Laravel 12/13 × prefer-lowest/prefer-stable) + Pint + PHPStan +
-Rector. Every leg runs the full OAuth coverage (Passport is a dev dependency).
+Rector + token mode without Passport. Every matrix leg runs the full OAuth
+coverage (Passport is a dev dependency). The last job removes Passport and runs
+the `without-passport` test group.
 Then:
 
 ```bash
