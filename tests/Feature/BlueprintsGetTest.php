@@ -157,6 +157,25 @@ it('wraps the first option in an array for a multi-select', function () {
         ->assertSee('"material":"wool"');
 });
 
+it('uses the first key of options saved as key and value pairs', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    // The CP saves options as a list of key/value pairs.
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'variant' => ['type' => 'select', 'options' => [['key' => 'default', 'value' => 'Default'], ['key' => 'search', 'value' => 'Search']]],
+        'alignment' => ['type' => 'button_group', 'options' => [['key' => 'center', 'value' => 'Center'], ['key' => 'top', 'value' => 'Top']]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"variant":"default"')
+        ->assertSee('"alignment":"center"');
+});
+
 it('returns the requested blueprint when a collection has several', function () {
     Fixtures::site();
     Fixtures::tags();

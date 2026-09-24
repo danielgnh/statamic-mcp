@@ -217,7 +217,7 @@ class BlueprintsGet extends Tool
             'date' => $this->dateExample($field),
             // multi-selects store arrays
             'select' => $this->firstOption($field, wrapInArray: (bool) ($field->config()['multiple'] ?? false)),
-            'radio' => $this->firstOption($field),
+            'radio', 'button_group' => $this->firstOption($field),
             'checkboxes' => $this->firstOption($field, wrapInArray: true),
             'entries' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-ENTRY-ID'),
             'terms' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-TERM-ID'),
@@ -251,8 +251,9 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * First option of a select/radio/checkboxes field. Options may be an
-     * associative map (value => label) or a plain list of values.
+     * First option of a select/radio/button_group/checkboxes field. Options
+     * may be an associative map (value => label), a plain list of values, or
+     * the list of key/value pairs the CP saves.
      *
      * @return array{0: mixed, 1: ?string}
      */
@@ -267,7 +268,7 @@ class BlueprintsGet extends Tool
             )];
         }
 
-        $first = array_is_list($options) ? $options[0] : array_key_first($options);
+        $first = array_is_list($options) ? data_get($options[0], 'key', $options[0]) : array_key_first($options);
 
         return [$wrapInArray ? [$first] : $first, null];
     }
