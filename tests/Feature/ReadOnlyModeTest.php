@@ -11,6 +11,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesPublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
+use Danielgnh\StatamicMcp\Tools\NavigationsUpdate;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Danielgnh\StatamicMcp\Tools\TermsDelete;
 use Danielgnh\StatamicMcp\Tools\TermsUpdate;
@@ -39,6 +40,7 @@ const WRITE_TOOLS = [
     'entries_unpublish',
     'entries_update',
     'globals_update',
+    'navigations_update',
     'terms_create',
     'terms_update',
 ];
@@ -62,6 +64,7 @@ const WRITE_TOOL_CLASSES = [
     'terms_update' => TermsUpdate::class,
     'terms_delete' => TermsDelete::class,
     'globals_update' => GlobalsUpdate::class,
+    'navigations_update' => NavigationsUpdate::class,
 ];
 
 function readOnlyPost(array $payload, string $token, ?string $sessionId = null): TestResponse

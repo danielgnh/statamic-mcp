@@ -20,6 +20,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsGet;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
 use Danielgnh\StatamicMcp\Tools\NavigationsGet;
+use Danielgnh\StatamicMcp\Tools\NavigationsUpdate;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Danielgnh\StatamicMcp\Tools\TermsDelete;
@@ -58,6 +59,7 @@ class Server extends McpServer
         GlobalsGet::class,
         GlobalsUpdate::class,
         NavigationsGet::class,
+        NavigationsUpdate::class,
         AssetsList::class,
         AssetsGet::class,
         AssetsUpload::class,
