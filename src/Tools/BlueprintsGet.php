@@ -18,7 +18,7 @@ use Statamic\Fields\Field;
 use Statamic\Fieldtypes\Date;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -82,6 +82,7 @@ class BlueprintsGet extends Tool
         $fields = [];
         $example = [];
         $notes = [];
+        $parameters = $this->topLevelParameters($type, $handle);
 
         foreach ($blueprint->fields()->all() as $field) {
             $fields[] = $this->describe($field);
@@ -90,6 +91,12 @@ class BlueprintsGet extends Tool
             // rejects visibility=computed) — never offer them as writable
             if ($field->visibility() === 'computed') {
                 $notes[$field->handle()] = 'computed — not writable';
+
+                continue;
+            }
+
+            if ($tools = data_get($parameters, $field->handle())) {
+                $notes[$field->handle()] = sprintf('pass %s as a top-level parameter of %s, not inside data', $field->handle(), $tools);
 
                 continue;
             }
@@ -131,6 +138,24 @@ class BlueprintsGet extends Tool
             'taxonomy' => "view {$handle} terms",
             'global' => "edit {$handle} globals",
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
+        };
+    }
+
+    /**
+     * Blueprint fields the write tools take as top-level parameters and
+     * reject inside data, mapped to those tools.
+     *
+     * @return array<string, string>
+     */
+    private function topLevelParameters(string $type, string $handle): array
+    {
+        return match ($type) {
+            'collection' => array_fill_keys(
+                Collection::findByHandle($handle)?->dated() ? ['slug', 'date'] : ['slug'],
+                'entries_create and entries_update',
+            ),
+            'taxonomy' => ['slug' => 'terms_create and terms_update'],
+            default => [],
         };
     }
 
