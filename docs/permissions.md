@@ -9,22 +9,25 @@ Every MCP request is authenticated as a real Statamic user, and authorization is
 always Statamic's native permission system. Four gates, in order:
 
 1. **Read-only switch** — `read_only` hides all write/delete tools; handlers re-check
-   on every call in case a client cached the old tool list.
+   on every call in case a client cached the old tool list. `entries_preview` stays,
+   because a preview link changes no content.
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Reading a navigation takes
    `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry with
    `parent` on `entries_update` also takes `reorder {handle} entries`. Publish state
    changes only through `entries_publish` and `entries_unpublish`, both gated on
-   `publish {handle} entries`, the same permission the CP checks. When a collection's
-   blueprint has an `author` field, editing, publishing, or deleting an entry the user
-   is not an author of takes `edit other authors {handle} entries`,
-   `publish other authors {handle} entries`, or `delete other authors {handle} entries`
-   instead, as in Statamic's own entry policy. Moving someone else's entry takes
-   `edit other authors {handle} entries` too, next to `reorder {handle} entries`, which
-   has no other-authors variant. An entry with no author counts as someone else's. On
-   multi-site installs every site needs `access {site} site`, the default site included.
-   Denials name the missing permission and the remedy.
+   `publish {handle} entries`, the same permission the CP checks. `entries_preview`
+   needs `edit {handle} entries`, the permission the CP checks for Live Preview, so it
+   follows the author rule below. When a collection's blueprint has an `author` field,
+   editing, publishing, or deleting an entry the user is not an author of takes
+   `edit other authors {handle} entries`, `publish other authors {handle} entries`, or
+   `delete other authors {handle} entries` instead, as in Statamic's own entry policy.
+   Moving someone else's entry takes `edit other authors {handle} entries` too, next to
+   `reorder {handle} entries`, which has no other-authors variant. An entry with no
+   author counts as someone else's. On multi-site installs every site needs
+   `access {site} site`, the default site included. Denials name the missing permission
+   and the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
 
 Entry creates and updates **never publish**. Creates save drafts. On revision-enabled
@@ -43,6 +46,11 @@ with `entries_update`, needs `edit other authors {handle} entries`. `statamic_ov
 reports the other-authors permissions per collection and the acting user's `id`, so an
 agent can tell which entries are its own.
 
+Agents check how their drafts look with `entries_preview`. It returns a Live Preview
+URL, the same kind the CP opens. Anyone who has the URL can view that entry until the
+link expires an hour later, so treat it as you would the draft itself. The token opens
+only that one entry, and other drafts still return 404 with it.
+
 ## Recipes
 
 **A drafting agent for the blog (no publishing, no deleting):**
@@ -53,20 +61,23 @@ agent can tell which entries are its own.
 3. `php please mcp:token claude@your-site.com --name="Blog agent"`.
 
 Entries this agent creates are drafts, and it cannot publish, delete, or even see other
-collections in `statamic_overview`. Its edits to entries that are already live depend on
+collections in `statamic_overview`. It can preview its drafts, because previews need
+only the edit permission. Its edits to entries that are already live depend on
 the collection. With revisions enabled, an edit becomes a working copy and the live
 entry stays unchanged until someone publishes it. Without revisions, the edit saves
 straight to the live entry, as it would in the CP. Statamic has no permission for
 editing live entries specifically, so if this agent must never change live content,
 enable revisions on the collection. Revisions need Statamic Pro.
 
-If the blog blueprint has an `author` field, this agent can only edit entries it is an
-author of, which includes every entry it creates. Add `Edit other authors blog entries`
-to let it edit everyone's.
+If the blog blueprint has an `author` field, this agent can only edit and preview
+entries it is an author of, which includes every entry it creates. Add
+`Edit other authors blog entries` to let it edit and preview everyone's.
 
 **A read-only analyst:** either set `'read_only' => true` server-wide, or give the
 agent's role only `Access MCP` + `View … entries` permissions — both work, use the
-role when other agents on the same server still need write access.
+role when other agents on the same server still need write access. With `read_only` on,
+a role that keeps edit permissions can still create preview links. View permissions
+alone rule that out.
 
 **A publishing agent:** add `Publish blog entries` to the role. `entries_publish` and
 `entries_unpublish` now work, on revision-enabled collections too, where they promote

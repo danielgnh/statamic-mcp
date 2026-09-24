@@ -25,6 +25,7 @@ const READ_TOOLS = [
     'blueprints_get',
     'entries_get',
     'entries_list',
+    'entries_preview', // mints a preview token but changes no content
     'globals_get',
     'navigations_get',
     'statamic_overview',
@@ -115,7 +116,7 @@ function readOnlyToolNames(string $token): array
     return collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
 }
 
-it('advertises only the ten read tools over HTTP in read_only mode', function () {
+it('advertises only the eleven read tools over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
 
     $user = Fixtures::makeUser();
@@ -123,7 +124,7 @@ it('advertises only the ten read tools over HTTP in read_only mode', function ()
 
     $names = readOnlyToolNames($token);
 
-    // Exact set equality: ONLY the ten read tools remain...
+    // Exact set equality: ONLY the eleven read tools remain...
     expect($names)->toBe(READ_TOOLS);
 
     // ...and every write/delete tool is absent BY NAME — if the exact-set

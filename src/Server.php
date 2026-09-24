@@ -14,6 +14,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesList;
+use Danielgnh\StatamicMcp\Tools\EntriesPreview;
 use Danielgnh\StatamicMcp\Tools\EntriesPublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
@@ -37,7 +38,7 @@ use Laravel\Mcp\Server\Tool;
  * config('statamic.mcp.server').
  */
 #[Name('Statamic')]
-#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, and navigations you can work with, plus your own permission flags per resource, and the site\'s guidelines for agents when it has them. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). It also lists page builder blocks with their instructions, and the collection\'s guidelines when written; follow both. Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. To schedule a post, give it a future date and publish it: on collections whose date_behavior.future is private it stays scheduled and Statamic takes it live on that date. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
+#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, and navigations you can work with, plus your own permission flags per resource, and the site\'s guidelines for agents when it has them. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). It also lists page builder blocks with their instructions, and the collection\'s guidelines when written; follow both. Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. To check how a draft or working copy renders, call entries_preview and fetch its URL. To schedule a post, give it a future date and publish it: on collections whose date_behavior.future is private it stays scheduled and Statamic takes it live on that date. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
 class Server extends McpServer
 {
     /** @var array<int, class-string<Tool>> */
@@ -48,6 +49,7 @@ class Server extends McpServer
         EntriesGet::class,
         EntriesCreate::class,
         EntriesUpdate::class,
+        EntriesPreview::class,
         EntriesPublish::class,
         EntriesUnpublish::class,
         EntriesDelete::class,
