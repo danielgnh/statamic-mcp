@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\GuidelineFiles;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
@@ -19,7 +20,7 @@ use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and server flags (read_only, deletes).')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and server flags (read_only, deletes). When the site has written guidelines for agents (voice, tone, rules for all content), they come back in guidelines — follow them in everything you write.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -52,6 +53,7 @@ class StatamicOverview extends Tool
                 'read_only' => ! $this->writesEnabled(),
                 'deletes' => $this->deletesEnabled(),
             ],
+            ...array_filter(['guidelines' => app(GuidelineFiles::class)->site()]),
         ]);
     }
 
