@@ -227,10 +227,10 @@ it('refuses to cascade into a localization site the user cannot access', functio
 
     [$origin, $localization] = makeDeletableLocalizedPair();
 
-    // 'en' is the default site (never gated); 'de' needs 'access de site'.
-    // CP parity: the Delete action only offers cascade when the user can
-    // access every descendant's site.
-    $user = Fixtures::makeUser('delete blog entries');
+    // The origin's site is accessible, the localization's is not. CP parity:
+    // the Delete action only offers cascade when the user can access every
+    // descendant's site.
+    $user = Fixtures::makeUser('delete blog entries', 'access en site');
 
     Server::actingAs($user)
         ->tool(EntriesDelete::class, ['id' => $origin->id()])
@@ -296,7 +296,7 @@ it('refuses to cascade when a deeper localization site is inaccessible', functio
 
     // Access to the direct child's site is not enough — the gate must sweep
     // every level of the chain before anything is deleted.
-    $user = Fixtures::makeUser('delete blog entries', 'access de site');
+    $user = Fixtures::makeUser('delete blog entries', 'access en site', 'access de site');
 
     Server::actingAs($user)
         ->tool(EntriesDelete::class, ['id' => $origin->id()])
@@ -336,4 +336,28 @@ it('reports a clean error when a listener cancels a second-level localization de
     expect(Entry::find($origin->id()))->not->toBeNull()
         ->and(Entry::find($de->id()))->not->toBeNull()
         ->and(Entry::find($at->id()))->not->toBeNull();
+});
+
+it("requires 'delete other authors blog entries' to delete someone else's entry, but not one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser('delete blog entries');
+    $theirs = tap(Entry::make()->collection('blog')->slug('theirs')->data(['title' => 'Theirs', 'author' => [Fixtures::makeUser()->id()]]))->save();
+    $mine = tap(Entry::make()->collection('blog')->slug('mine')->data(['title' => 'Mine', 'author' => [$user->id()]]))->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesDelete::class, ['id' => $theirs->id()])
+        ->assertHasErrors(["requires 'delete other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesDelete::class, ['id' => $mine->id()])
+        ->assertOk();
+
+    expect(Entry::find($theirs->id()))->not->toBeNull()
+        ->and(Entry::find($mine->id()))->toBeNull();
 });

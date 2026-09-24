@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Nav;
 
 it('returns sites, resources with capability flags, acting user, and server flags for a super', function () {
     Fixtures::site();
@@ -22,8 +23,8 @@ it('returns sites, resources with capability flags, acting user, and server flag
         ->assertSee('"collections":[{"handle":"blog","title":"Blog","dated":false,"revisions":false,"blueprints":["article"],"can_create":true,"can_edit":true,"can_publish":true}]')
         ->assertSee('"taxonomies":[{"handle":"tags","title":"Tags","blueprints":["tag"],"can_create":true,"can_edit":true}]')
         ->assertSee('"globals":[{"handle":"settings","title":"Settings","can_edit":true}]')
-        ->assertSee(sprintf('"user":{"email":"%s","roles":[],"is_super":true}', $super->email()))
-        ->assertSee('"server":{"read_only":false,"deletes":false}');
+        ->assertSee(sprintf('"user":{"id":"%s","email":"%s","roles":[],"is_super":true}', $super->id(), $super->email()))
+        ->assertSee('"server":{"read_only":false,"deletes":false,"timezone":"UTC"}');
 });
 
 it('omits collections excluded by the resources allowlist', function () {
@@ -71,8 +72,8 @@ it('hides global sets the user may not edit', function () {
     Server::actingAs($user)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        // asset_containers sits between globals and user since v1.1
-        ->assertSee('"globals":[],"asset_containers":[],"user"');
+        // asset_containers and navigations sit between globals and user
+        ->assertSee('"globals":[],"asset_containers":[],"navigations":[],"user"');
 });
 
 it('lists global sets the user may edit', function () {
@@ -85,6 +86,49 @@ it('lists global sets the user may edit', function () {
         ->tool(StatamicOverview::class, [])
         ->assertOk()
         ->assertSee('"globals":[{"handle":"settings","title":"Settings","can_edit":true}]');
+});
+
+it('lists navigations the user may view with their max depth and edit flag', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav('main', maxDepth: 2);
+    Fixtures::nav('footer');
+    Fixtures::nav('secret');
+
+    // 'secret' (no 'view secret nav') is filtered out entirely; single-site
+    // navigations carry no sites list.
+    Server::actingAs(Fixtures::makeUser('view main nav', 'edit main nav', 'view footer nav'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"footer","title":"Footer","max_depth":null,"can_edit":false},{"handle":"main","title":"Main","max_depth":2,"can_edit":true}],"user"');
+});
+
+it('lists the sites each navigation has a tree in under multisite', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::nav('main');
+    Fixtures::nav('footer');
+
+    Nav::find('footer')->in('de')->delete();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"footer","title":"Footer","max_depth":null,"sites":["en"],"can_edit":true},{"handle":"main","title":"Main","max_depth":null,"sites":["en","de"],"can_edit":true}]');
+});
+
+it('omits navigations excluded by the resources allowlist', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav('main');
+    Fixtures::nav('footer');
+
+    config(['statamic.mcp.resources.navigations' => ['main']]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"main","title":"Main","max_depth":null,"can_edit":true}]');
 });
 
 it('includes can_delete flags only when deletes are enabled', function () {
@@ -114,22 +158,42 @@ it('reports the read_only server flag and forces the deletes flag off', function
     Server::actingAs($super)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertSee('"server":{"read_only":true,"deletes":false}');
+        ->assertSee('"server":{"read_only":true,"deletes":false,"timezone":"UTC"}');
 });
 
-it('flags per-site access under multisite, never gating the default site', function () {
+it('flags per-site access under multisite, the default site included', function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser('view blog entries'); // no 'access de site'
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access en site'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"en_US","can_access":true')
+        ->assertSee('"locale":"de_DE","can_access":false');
+
+    // CP parity: Statamic's SitePolicy gates the default site like any other.
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"en_US","can_access":false');
+});
+
+it('adds other-authors flags to collections with an author field', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser('view blog entries', 'edit blog entries', 'edit other authors blog entries');
 
     Server::actingAs($user)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        // ensureSiteAccess never gates the default site, so en stays accessible
-        ->assertSee('"locale":"en_US","can_access":true')
-        ->assertSee('"locale":"de_DE","can_access":false');
+        ->assertSee('"can_create":false,"can_edit":true,"can_publish":false,"can_delete":false,"can_edit_other_authors":true,"can_publish_other_authors":false,"can_delete_other_authors":false}]')
+        ->assertSee(sprintf('"user":{"id":"%s"', $user->id()));
 });
 
 it('reflects a granted site permission in the can_access flag', function () {
@@ -220,4 +284,20 @@ it('omits unexposed asset containers entirely', function () {
         ->tool(StatamicOverview::class, [])
         ->assertOk()
         ->assertSee('"asset_containers":[]');
+});
+
+it('reports date behavior on dated collections and the timezone dates are read in', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::news(past: 'unlisted');
+
+    config(['app.timezone' => 'Europe/Berlin']);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('{"handle":"blog","title":"Blog","dated":false,"revisions":false,"blueprints":["article"],"can_create":true,"can_edit":true,"can_publish":true}')
+        ->assertSee('{"handle":"news","title":"News","dated":true,"revisions":false,"blueprints":["story"],"can_create":true,"can_edit":true,"can_publish":true,"date_behavior":{"future":"private","past":"unlisted"}}')
+        ->assertSee('"server":{"read_only":false,"deletes":false,"timezone":"Europe/Berlin"}');
 });

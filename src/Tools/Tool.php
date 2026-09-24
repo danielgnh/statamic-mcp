@@ -13,6 +13,7 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
 use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
@@ -33,6 +34,10 @@ abstract class Tool extends BaseTool
     public const LIVENESS_PUBLISHED = 'published';
 
     public const LIVENESS_PUBLISHED_WORKING_COPY = 'published — working copy is now live';
+
+    public const LIVENESS_SCHEDULED = 'scheduled — published, but not live until its date';
+
+    public const LIVENESS_EXPIRED = 'expired — published, but its date has passed, not live';
 
     public const LIVENESS_UNPUBLISHED = 'unpublished — not live';
 
@@ -80,7 +85,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      *
      * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
      * by design; the error lists only exposed handles.
@@ -95,7 +100,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      * @return list<string> handles that exist AND pass config('statamic.mcp.resources.{$type}')
      */
     protected function exposedHandles(string $type): array
@@ -111,6 +116,7 @@ abstract class Tool extends BaseTool
             'taxonomies' => Taxonomy::handles()->all(),
             'globals' => GlobalSet::all()->map->handle()->values()->all(),
             'asset_containers' => AssetContainer::all()->map->handle()->values()->all(),
+            'navigations' => Nav::all()->map->handle()->values()->all(),
         };
 
         return $configured === true
@@ -206,6 +212,22 @@ abstract class Tool extends BaseTool
             'result' => $state,
             'cp_edit_url' => $saved->editUrl(),
         ];
+    }
+
+    /**
+     * Liveness for an entry that was just saved live. On dated collections a
+     * published entry is only live when its date allows it, so the result
+     * follows status() and $whenLive applies only when nothing overrides it.
+     *
+     * @return array{result: string, cp_edit_url: mixed}
+     */
+    protected function entryLiveness(EntryContract $entry, string $whenLive): array
+    {
+        return $this->liveness($entry, match ($entry->status()) {
+            'scheduled' => self::LIVENESS_SCHEDULED,
+            'expired' => self::LIVENESS_EXPIRED,
+            default => $whenLive,
+        });
     }
 
     /**

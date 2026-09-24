@@ -26,7 +26,7 @@ class EntriesList extends Tool
         return [
             'collection' => $schema->string()->description('Collection handle — see statamic_overview for what is available.')->required(),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
-            'status' => $schema->string()->enum(['published', 'draft', 'scheduled'])->description('Filter by status.'),
+            'status' => $schema->string()->enum(['published', 'draft', 'scheduled', 'expired'])->description('Filter by status. scheduled and expired exist only on dated collections whose date_behavior.future or .past is private (see statamic_overview); elsewhere a future-dated entry is published.'),
             'search' => $schema->string()->description('Only entries whose title contains this text.'),
             'limit' => $schema->integer()->description('Page size. Defaults to the server default (25); hard-capped at 100.'),
             'page' => $schema->integer()->default(1)->description('Page number, starting at 1.'),
@@ -39,14 +39,14 @@ class EntriesList extends Tool
             [
                 'collection' => 'required|string',
                 'site' => 'nullable|string',
-                'status' => 'nullable|string|in:published,draft,scheduled',
+                'status' => 'nullable|string|in:published,draft,scheduled,expired',
                 'search' => 'nullable|string',
                 'limit' => 'nullable|integer|min:1',
                 'page' => 'nullable|integer|min:1',
             ],
             [
                 'collection.required' => 'Pass a collection handle, e.g. "blog" — see statamic_overview.',
-                'status.in' => 'status must be one of: published, draft, scheduled.',
+                'status.in' => 'status must be one of: published, draft, scheduled, expired.',
             ],
         );
 

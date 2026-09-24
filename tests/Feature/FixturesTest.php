@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
 
 it('builds content fixtures in the sandboxed stache', function () {
@@ -31,4 +32,18 @@ it('creates super users', function () {
     Fixtures::site();
 
     expect(Fixtures::makeSuper()->isSuper())->toBeTrue();
+});
+
+it('builds a navigation with an empty tree in every site', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    $nav = Nav::find('main');
+
+    expect($nav->title())->toBe('Main')
+        ->and($nav->collections()->map->handle()->all())->toBe(['pages'])
+        ->and($nav->sites()->all())->toBe(['en', 'de'])
+        ->and($nav->in('de')->tree())->toBe([])
+        ->and($nav->blueprint()->fields()->all()->keys()->all())->toBe(['icon', 'new_tab']);
 });

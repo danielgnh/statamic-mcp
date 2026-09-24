@@ -9,9 +9,12 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
 use Statamic\Facades\Site;
+use Statamic\Facades\Stache;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\User;
 
@@ -61,6 +64,26 @@ class Fixtures
         ])->setHandle('article')->setNamespace('collections.blog')->save();
     }
 
+    // A dated collection that schedules: the CP creates dated collections with
+    // future dates private, while a collection made in code defaults to public.
+    public static function news(string $future = 'private', string $past = 'public'): void
+    {
+        tap(
+            Collection::make('news')
+                ->title('News')
+                ->dated(true)
+                ->futureDateBehavior($future)
+                ->pastDateBehavior($past)
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/news/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'date' => ['type' => 'date', 'time_enabled' => true],
+        ])->setHandle('story')->setNamespace('collections.news')->save();
+    }
+
     // Revisions need Statamic Pro; the collection must already exist.
     public static function revisions(string $collection = 'blog'): void
     {
@@ -70,6 +93,17 @@ class Fixtures
         ]);
 
         Collection::findByHandle($collection)->revisionsEnabled(true)->save();
+    }
+
+    // An author field turns on Statamic's author rules: entries by anyone
+    // else need the "other authors" permissions.
+    public static function authors(string $collection = 'blog', ?int $maxItems = 1): void
+    {
+        $handle = Collection::findByHandle($collection)->entryBlueprint()->handle();
+
+        Blueprint::find("collections.{$collection}.{$handle}")
+            ->ensureField('author', array_filter(['type' => 'users', 'max_items' => $maxItems]))
+            ->save();
     }
 
     // The CP's blueprint builder lets editors mark slug required — Statamic's
@@ -87,6 +121,80 @@ class Fixtures
             'title' => ['type' => 'text', 'validate' => 'required'],
             'slug' => ['type' => 'slug', 'validate' => 'required|max:200'],
         ])->setHandle('page')->setNamespace('collections.pages')->save();
+    }
+
+    // An entry of the pages collection: call pages() first. Returns its id.
+    public static function page(string $slug, string $title, string $site = 'en', bool $published = true): string
+    {
+        return tap(
+            Entry::make()->collection('pages')->locale($site)->slug($slug)->data(['title' => $title])->published($published)
+        )->save()->id();
+    }
+
+    // The id of the pages entry with this slug, for entries a tool created.
+    public static function pageId(string $slug, string $site = 'en'): string
+    {
+        return Entry::query()->where('collection', 'pages')->where('site', $site)->where('slug', $slug)->first()->id();
+    }
+
+    // The pages tree as stored. tree() would append the entries missing from
+    // the stored tree, so this reads fileData() after rehydrating from disk.
+    public static function storedPagesTree(string $site = 'en'): array
+    {
+        Stache::clear();
+
+        return Collection::findByHandle('pages')->structure()->in($site)->fileData()['tree'];
+    }
+
+    // Gives an existing collection a tree, with URLs that follow its nesting:
+    // call pages() first. max_depth 1 makes it a flat, orderable list.
+    public static function structure(string $collection = 'pages', ?int $maxDepth = null, bool $root = false): void
+    {
+        Collection::findByHandle($collection)
+            ->structureContents(['root' => $root, 'max_depth' => $maxDepth])
+            ->routes('{parent_uri}/{slug}')
+            ->save();
+    }
+
+    // Call assetContainer('images') first: the single-file fields point at it.
+    public static function landing(): void
+    {
+        tap(
+            Collection::make('landing')
+                ->title('Landing')
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/landing/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'hero' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+            'starts' => ['type' => 'date'],
+            'page_builder' => ['type' => 'replicator', 'sets' => [
+                'website' => ['display' => 'Website', 'sets' => [
+                    'section_hero' => ['display' => 'Section - Hero', 'fields' => [
+                        ['handle' => 'heading', 'field' => ['type' => 'text', 'validate' => 'required']],
+                        ['handle' => 'image', 'field' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1]],
+                    ]],
+                    'section_text_block' => ['display' => 'Section - Text Block', 'fields' => [
+                        ['handle' => 'text', 'field' => ['type' => 'textarea']],
+                    ]],
+                ]],
+            ]],
+            'body' => ['type' => 'bard', 'sets' => [
+                'main' => ['display' => 'Main', 'sets' => [
+                    'callout' => ['display' => 'Callout', 'fields' => [
+                        ['handle' => 'text', 'field' => ['type' => 'text']],
+                    ]],
+                ]],
+            ]],
+            'facts' => ['type' => 'grid', 'fields' => [
+                ['handle' => 'label', 'field' => ['type' => 'text']],
+            ]],
+            'seo' => ['type' => 'group', 'fields' => [
+                ['handle' => 'meta_title', 'field' => ['type' => 'text']],
+            ]],
+        ])->setHandle('landing_page')->setNamespace('collections.landing')->save();
     }
 
     public static function tags(): void
@@ -111,6 +219,28 @@ class Fixtures
         $set->makeLocalization(Site::default()->handle())
             ->data(['site_name' => 'Acme'])
             ->save();
+    }
+
+    // Links entries of the pages collection: call pages() first. Every site
+    // gets an empty tree, the way the CP creates one.
+    public static function nav(string $handle = 'main', ?int $maxDepth = null, bool $root = false): void
+    {
+        $nav = Nav::make($handle)
+            ->title(Str::headline($handle))
+            ->collections(['pages'])
+            ->maxDepth($maxDepth)
+            ->expectsRoot($root);
+
+        $nav->save();
+
+        foreach (Site::all()->keys() as $site) {
+            $nav->makeTree($site)->save();
+        }
+
+        Blueprint::makeFromFields([
+            'icon' => ['type' => 'text', 'validate' => 'max:30'],
+            'new_tab' => ['type' => 'toggle'],
+        ])->setHandle($handle)->setNamespace('navigation')->save();
     }
 
     /**

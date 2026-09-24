@@ -20,9 +20,12 @@ return [
         'taxonomies' => true,
         'globals' => true,
         'asset_containers' => true,
+        'navigations' => true,
     ],
 
     'per_page' => 25,
+
+    'guidelines_path' => resource_path('mcp/guidelines'),
 
     'uploads' => [
         'max_size' => 10240,

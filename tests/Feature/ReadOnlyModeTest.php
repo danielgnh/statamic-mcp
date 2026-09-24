@@ -11,6 +11,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesPublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
+use Danielgnh\StatamicMcp\Tools\NavigationsUpdate;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Danielgnh\StatamicMcp\Tools\TermsDelete;
 use Danielgnh\StatamicMcp\Tools\TermsUpdate;
@@ -26,6 +27,7 @@ const READ_TOOLS = [
     'entries_list',
     'entries_preview', // mints a preview token but changes no content
     'globals_get',
+    'navigations_get',
     'statamic_overview',
     'terms_get',
     'terms_list',
@@ -39,6 +41,7 @@ const WRITE_TOOLS = [
     'entries_unpublish',
     'entries_update',
     'globals_update',
+    'navigations_update',
     'terms_create',
     'terms_update',
 ];
@@ -62,6 +65,7 @@ const WRITE_TOOL_CLASSES = [
     'terms_update' => TermsUpdate::class,
     'terms_delete' => TermsDelete::class,
     'globals_update' => GlobalsUpdate::class,
+    'navigations_update' => NavigationsUpdate::class,
 ];
 
 function readOnlyPost(array $payload, string $token, ?string $sessionId = null): TestResponse
@@ -112,7 +116,7 @@ function readOnlyToolNames(string $token): array
     return collect($response->json('result.tools'))->pluck('name')->sort()->values()->all();
 }
 
-it('advertises only the ten read tools over HTTP in read_only mode', function () {
+it('advertises only the eleven read tools over HTTP in read_only mode', function () {
     config(['statamic.mcp.read_only' => true]);
 
     $user = Fixtures::makeUser();
@@ -120,7 +124,7 @@ it('advertises only the ten read tools over HTTP in read_only mode', function ()
 
     $names = readOnlyToolNames($token);
 
-    // Exact set equality: ONLY the ten read tools remain...
+    // Exact set equality: ONLY the eleven read tools remain...
     expect($names)->toBe(READ_TOOLS);
 
     // ...and every write/delete tool is absent BY NAME — if the exact-set

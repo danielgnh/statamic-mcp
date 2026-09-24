@@ -2,6 +2,8 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\GuidelineFiles;
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
@@ -15,15 +17,17 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site has written guidelines for agents (voice, tone, rules for all content), they come back in guidelines — follow them in everything you write.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
 {
+    use ResolvesNavs;
     use ResolvesSites;
 
     #[\Override]
@@ -42,7 +46,9 @@ class StatamicOverview extends Tool
             'taxonomies' => $this->taxonomies($user),
             'globals' => $this->globals($user),
             'asset_containers' => $this->assetContainers($user),
+            'navigations' => $this->navigations($user),
             'user' => [
+                'id' => $user->id(),
                 'email' => $user->email(),
                 'roles' => $user->roles()->map->handle()->values()->all(),
                 'is_super' => $user->isSuper(),
@@ -50,7 +56,9 @@ class StatamicOverview extends Tool
             'server' => [
                 'read_only' => ! $this->writesEnabled(),
                 'deletes' => $this->deletesEnabled(),
+                'timezone' => config('app.timezone'),
             ],
+            ...array_filter(['guidelines' => app(GuidelineFiles::class)->site()]),
         ]);
     }
 
@@ -90,20 +98,39 @@ class StatamicOverview extends Tool
             ->filter(fn (string $handle) => $this->can($user, "view {$handle} entries"))
             ->map(function (string $handle) use ($collections, $user) {
                 $collection = $collections->get($handle);
+                $blueprints = $collection->entryBlueprints();
 
                 $resource = [
                     'handle' => $handle,
                     'title' => $collection->title(),
                     'dated' => $collection->dated(),
                     'revisions' => $collection->revisionsEnabled(),
-                    'blueprints' => $collection->entryBlueprints()->map->handle()->values()->all(),
+                    'blueprints' => $blueprints->map->handle()->values()->all(),
                     'can_create' => $this->can($user, "create {$handle} entries"),
                     'can_edit' => $this->can($user, "edit {$handle} entries"),
                     'can_publish' => $this->can($user, "publish {$handle} entries"),
                 ];
 
+                if ($collection->dated()) {
+                    $resource['date_behavior'] = [
+                        'future' => $collection->futureDateBehavior(),
+                        'past' => $collection->pastDateBehavior(),
+                    ];
+                }
+
                 if ($this->deletesEnabled()) {
                     $resource['can_delete'] = $this->can($user, "delete {$handle} entries");
+                }
+
+                // The same author rule the entry tools enforce: with an author
+                // field, entries you are not an author of need these instead.
+                if ($blueprints->contains(fn ($blueprint) => $blueprint->hasField('author'))) {
+                    $resource['can_edit_other_authors'] = $this->can($user, "edit other authors {$handle} entries");
+                    $resource['can_publish_other_authors'] = $this->can($user, "publish other authors {$handle} entries");
+
+                    if ($this->deletesEnabled()) {
+                        $resource['can_delete_other_authors'] = $this->can($user, "delete other authors {$handle} entries");
+                    }
                 }
 
                 return $resource;
@@ -192,7 +219,37 @@ class StatamicOverview extends Tool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @return array<int, array<string, mixed>>
+     */
+    private function navigations(UserContract $user): array
+    {
+        $navs = Nav::all()->keyBy->handle();
+
+        return $this->sortedExposed('navigations')
+            ->filter(fn (string $handle) => $this->can($user, "view {$handle} nav"))
+            ->map(function (string $handle) use ($navs, $user) {
+                $nav = $navs->get($handle);
+
+                $resource = [
+                    'handle' => $handle,
+                    'title' => $nav->title(),
+                    'max_depth' => $nav->maxDepth(),
+                ];
+
+                if (Site::multiEnabled()) {
+                    $resource['sites'] = $this->navSites($nav)->all();
+                }
+
+                $resource['can_edit'] = $this->can($user, "edit {$handle} nav");
+
+                return $resource;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      * @return SupportCollection<int, string> exposed handles, sorted for deterministic output
      */
     private function sortedExposed(string $type): SupportCollection
