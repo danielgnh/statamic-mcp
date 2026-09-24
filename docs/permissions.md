@@ -13,8 +13,9 @@ always Statamic's native permission system. Four gates, in order:
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Reading a navigation takes
-   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Publish state
-   changes only through `entries_publish` and `entries_unpublish`, both gated on
+   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry
+   with `parent` on `entries_update` also takes `reorder {handle} entries`. Publish
+   state changes only through `entries_publish` and `entries_unpublish`, both gated on
    `publish {handle} entries`, the same permission the CP checks. Non-default-site
    writes require `access {site} site` (the default site is never gated by a site
    permission). Denials name the missing permission and the remedy.
@@ -60,6 +61,12 @@ it to the role. `navigations_update` can then replace the Main navigation's tree
 tools check these per-navigation permissions and ignore `Configure Navigation`. The CP
 treats that one as access to every navigation and hides the per-navigation checkboxes
 while it is ticked, so untick it to grant them.
+
+**An agent that restructures pages:** add `Reorder entries` under `View pages entries`
+to the role, next to `Edit entries`. `entries_update` can then move pages with `parent`.
+A move is live at once, even on revision-enabled collections, so leave `Reorder entries`
+off the role of an agent whose changes must wait for a person. Creating a page under a
+parent needs only `Create entries`, as in the CP.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
 add `Delete blog entries` to the role. Both gates must open.

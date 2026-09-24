@@ -25,6 +25,16 @@ called out here explicitly.
   to nest the new one under. The parent has to be in the same collection and
   site, and the nesting has to fit the collection's `max_depth`. A root page
   as parent means the top level, as in the CP.
+- `entries_update` takes `parent` to move an entry, with its children, in a
+  structured collection's tree. The id of an entry in the same collection and
+  site makes it that entry's last child, and `""` moves it to the top level.
+  An omitted or null `parent` never moves anything, so a client that sends
+  null for every unset parameter can't move an entry by accident. Moving needs
+  `reorder {collection} entries`, the permission the CP's tree view checks, on
+  top of `edit`. The move saves the live tree at once, also on revision-enabled
+  collections, where the data change still waits in the working copy. An
+  entry can't move under itself or its descendants, the root page doesn't
+  move, and `max_depth` counts the entry's deepest descendant.
 - `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
   now, the same split Statamic's CP makes with `PublishedEntriesController`.
   Both need the collection's publish permission. On revision-enabled collections

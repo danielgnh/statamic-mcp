@@ -91,7 +91,7 @@ Three config options restrict every user at once. `read_only` hides all write to
 
 `entries_create` always saves a draft, and `entries_update` never changes an entry's published status. What an edit does to a live entry depends on the collection:
 
-- With revisions enabled, the edit becomes a working copy, the same one the Control Panel creates. Visitors keep seeing the live version until someone publishes it.
+- With revisions enabled, the edit becomes a working copy, the same one the Control Panel creates. Visitors keep seeing the live version until someone publishes it. Moving an entry with `parent` is the exception. Working copies don't store an entry's place in the tree, so the move is live at once, as in the Control Panel's tree view.
 - Without revisions, the edit saves straight to the entry. If the entry is live, visitors see the change right away, same as saving it in the Control Panel.
 
 Publishing is its own tool, `entries_publish`, and it needs the collection's publish permission. Because it's a separate tool, your MCP client asks you about it separately. You can let an agent call `entries_update` all session and still approve each publish yourself.
