@@ -4,7 +4,6 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
 use Statamic\Facades\Blueprint;
@@ -352,8 +351,7 @@ it('returns examples that entries_create stores, a looked-up set row included', 
         (string) (new BlueprintsGet)->handle(new Request(['type' => 'collection', 'handle' => 'landing', ...$arguments]))->content(),
     ), true), 'example');
 
-    // slug is a top-level parameter of entries_create, never a data key
-    $data = [...Arr::except($example(), 'slug'), 'page_builder' => [$example(['set' => 'section_hero'])]];
+    $data = [...$example(), 'page_builder' => [$example(['set' => 'section_hero'])]];
 
     Server::actingAs($user)
         ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => $data])
