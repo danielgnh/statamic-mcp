@@ -117,7 +117,7 @@ it('reads the tree of the requested site', function () {
         ->assertSee('"cp_edit_url":"http://localhost/cp/navigation/main?site=de"');
 });
 
-it('denies a non-default site without access to it', function () {
+it("requires 'access {site} site' on multisite, the default site included", function () {
     Fixtures::multisite();
     Fixtures::pages();
     Fixtures::nav();
@@ -127,6 +127,16 @@ it('denies a non-default site without access to it', function () {
     Server::actingAs($user)
         ->tool(NavigationsGet::class, ['handle' => 'main', 'site' => 'de'])
         ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    // CP parity: NavTreePolicy gates the default site like any other.
+    Server::actingAs($user)
+        ->tool(NavigationsGet::class, ['handle' => 'main'])
+        ->assertHasErrors(["requires 'access en site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs(Fixtures::makeUser('view main nav', 'access en site'))
+        ->tool(NavigationsGet::class, ['handle' => 'main'])
+        ->assertOk()
+        ->assertSee('"site":"en"');
 });
 
 it('rejects a site the navigation has no tree in', function () {

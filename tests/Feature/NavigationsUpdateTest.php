@@ -314,7 +314,7 @@ it('writes the tree of the requested site only', function () {
         ->and(storedNavTree(site: 'en'))->toBe([]);
 });
 
-it('denies a non-default site without access to it', function () {
+it("requires 'access {site} site' on multisite, the default site included", function () {
     Fixtures::multisite();
     Fixtures::pages();
     Fixtures::nav();
@@ -324,6 +324,19 @@ it('denies a non-default site without access to it', function () {
     Server::actingAs($user)
         ->tool(NavigationsUpdate::class, ['handle' => 'main', 'site' => 'de', 'tree' => []])
         ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    // CP parity: NavTreePolicy gates the default site like any other.
+    Server::actingAs($user)
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [['id' => 'b-docs', 'title' => 'Docs', 'url' => '/docs']]])
+        ->assertHasErrors(["requires 'access en site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(storedNavTree())->toBe([]);
+
+    Server::actingAs(Fixtures::makeUser('edit main nav', 'access en site'))
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [['id' => 'b-docs', 'title' => 'Docs', 'url' => '/docs']]])
+        ->assertOk();
+
+    expect(storedNavTree())->toBe([['id' => 'b-docs', 'title' => 'Docs', 'url' => '/docs']]);
 });
 
 it('denies updating without the edit permission, naming it', function () {

@@ -51,7 +51,7 @@ class NavigationsGet extends Tool
         $nav = $this->findNav($handle);
 
         // A navigation only has trees in its own sites; the trait enforces
-        // 'access {site} site' for non-default sites on multisite.
+        // 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $this->navSites($nav));
 
         // makeTree() is the empty stand-in for a navigation without a tree
