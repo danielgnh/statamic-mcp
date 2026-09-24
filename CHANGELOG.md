@@ -16,6 +16,14 @@ called out here explicitly.
   fieldset that six blueprints import used to repeat all six on every row,
   which made the table wider than any terminal.
 
+### Added
+
+- `blueprints_get` returns `tabs`: the tabs whose own or whose sections'
+  `instructions` say how their fields go together, with the handles of the
+  fields under them. That is where a note about one blueprint goes, such as
+  which existing entry to follow; the Control Panel shows the same text above
+  the fields.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added

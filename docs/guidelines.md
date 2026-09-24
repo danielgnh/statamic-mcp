@@ -83,6 +83,45 @@ Don't give a set a custom key for agents. When someone saves a Replicator's
 settings in the Control Panel, Statamic rebuilds every set from a fixed list of
 keys and drops the rest. `instructions` is on that list.
 
+## Tab and section instructions
+
+A tab and a section of a blueprint take `instructions` too, like a set. The
+Control Panel shows them above the fields, and `blueprints_get` returns the
+tabs that carry any, with the handles of the fields under them:
+
+```yaml
+tabs:
+  main:
+    display: Page
+    sections:
+      -
+        display: Basics
+        instructions: 'One page per service. Follow bike-rental-nazare: an intro whose bold first sentence states the offer and price, then the blocks.'
+        fields:
+          -
+            handle: title
+            field:
+              type: text
+```
+
+```json
+"tabs": [
+  {
+    "handle": "main",
+    "display": "Page",
+    "fields": ["title", "intro", "page_builder"],
+    "sections": [
+      { "display": "Basics", "instructions": "One page per service. Follow bike-rental-nazare: an intro whose bold first sentence states the offer and price, then the blocks.", "fields": ["title", "intro"] }
+    ]
+  }
+]
+```
+
+A note about one blueprint goes in its first section: what one entry is, which
+existing entry to follow, what its page builder usually holds. The Control
+Panel keeps section instructions when someone saves the blueprint there; a
+tab's only survive in a blueprint you edit as YAML.
+
 ## Guideline files
 
 Anything that isn't about one block goes in markdown files under
