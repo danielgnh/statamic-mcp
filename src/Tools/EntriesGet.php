@@ -26,7 +26,7 @@ class EntriesGet extends Tool
     use ResolvesEntries;
     use ResolvesSites;
 
-    private const METADATA = ['updated_at', 'updated_by', 'blueprint'];
+    private const array METADATA = ['updated_at', 'updated_by', 'blueprint'];
 
     #[\Override]
     public function schema(JsonSchema $schema): array
