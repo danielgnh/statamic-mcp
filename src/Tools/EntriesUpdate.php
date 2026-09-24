@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
@@ -22,10 +23,11 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
+    use AuthorizesEntries;
     use ComparesPatchData;
     use NormalizesEntryInput;
     use ResolvesEntries;
@@ -39,7 +41,7 @@ class EntriesUpdate extends Tool
             'id' => $schema->string()->description('Entry id.')->required(),
             'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug or date.')->required(),
             'slug' => $schema->string()->description('New slug.'),
-            'date' => $schema->string()->description('New date (e.g. 2026-07-09 or 2026-07-09 15:30) — dated collections only.'),
+            'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
         ];
     }
@@ -76,7 +78,7 @@ class EntriesUpdate extends Tool
         $collection = $entry->collection();
         $collectionHandle = $collection->handle();
 
-        $this->ensurePermission($user, "edit {$collectionHandle} entries");
+        $this->ensureEntryPermission($user, 'edit', $entry);
 
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
@@ -103,6 +105,8 @@ class EntriesUpdate extends Tool
         // already staged, edits rebase onto it. fromWorkingCopy() hydrates a
         // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
+
+        $this->ensureAuthorUnchanged($user, $basis, $data);
 
         $current = $basis->data()->all();
 
@@ -215,7 +219,7 @@ class EntriesUpdate extends Tool
             'slug' => $entry->slug(),
             'status' => $entry->status(),
             'url' => $entry->url(),
-            ...$this->liveness($entry, $entry->published() ? self::LIVENESS_PUBLISHED : self::LIVENESS_DRAFT),
+            ...$this->entryLiveness($entry, $entry->published() ? self::LIVENESS_PUBLISHED : self::LIVENESS_DRAFT),
         ];
 
         if ($collection->dated()) {
@@ -234,13 +238,22 @@ class EntriesUpdate extends Tool
         // Symmetry with the slug path: an empty value is an error, never a
         // silent ignore (Carbon::parse('') would quietly mean "now").
         if (trim($date) === '') {
-            throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09 15:30, or omit date');
+            throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00, or omit date');
         }
 
         if (! $entry->collection()->dated()) {
             throw new ToolException(sprintf(
                 "collection '%s' is not dated — omit date",
                 $entry->collection()->handle(),
+            ));
+        }
+
+        // CP parity: a localization inherits a non-localizable date, and
+        // publishing a working copy would silently drop one staged here.
+        if ($entry->hasOrigin() && ! $entry->blueprint()->field('date')?->isLocalizable()) {
+            throw new ToolException(sprintf(
+                "this localization inherits its date from entry '%s' — change the date there, or omit date",
+                $entry->origin()->id(),
             ));
         }
 

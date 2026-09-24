@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Statamic\Events\EntryCreating;
@@ -71,7 +72,7 @@ it('requires date for dated collections', function () {
 
     Server::actingAs(Fixtures::makeUser('create events entries'))
         ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => ['title' => 'Launch Party']])
-        ->assertHasErrors(["collection 'events' is dated — pass date (e.g. 2026-07-09 or 2026-07-09 15:30)"]);
+        ->assertHasErrors(["collection 'events' is dated — pass date (e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00)"]);
 
     Server::actingAs(Fixtures::makeUser('create events entries'))
         ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => ['title' => 'Launch Party'], 'date' => '2026-08-01'])
@@ -488,4 +489,72 @@ it('names the field when Statamic cannot process its value', function () {
         ->assertHasErrors(["field starts has a value its fieldtype (date) can't process"]);
 
     expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+});
+
+it('makes the acting user the author, so they can edit what they create', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('create blog entries', 'edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'My Post']])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'blog')->first();
+
+    expect($entry->authors()->all())->toBe([$user->id()]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'My Post, edited']])
+        ->assertOk();
+});
+
+it('stores the default author the way the CP does', function (?int $maxItems, bool $plainId) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors(maxItems: $maxItems);
+
+    $user = Fixtures::makeUser('create blog entries', 'edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'My Post']])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'blog')->first();
+
+    expect($entry->get('author'))->toBe($plainId ? $user->id() : [$user->id()]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['author' => $entry->get('author')]])
+        ->assertOk()
+        ->assertSee('no-op');
+})->with([
+    'a plain id with max_items 1' => [1, true],
+    'a list without max_items' => [null, false],
+]);
+
+it("requires 'edit other authors blog entries' to name someone else as author", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $someoneElse = Fixtures::makeUser()->id();
+    $user = Fixtures::makeUser('create blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Ghostwritten', 'author' => [$someoneElse]]])
+        ->assertHasErrors(["author can only be you without 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel, or leave author out"]);
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
+
+    Server::actingAs(Fixtures::makeUser('create blog entries', 'edit blog entries', 'edit other authors blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Ghostwritten', 'author' => [$someoneElse]]])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'blog')->first()->authors()->all())->toBe([$someoneElse]);
 });

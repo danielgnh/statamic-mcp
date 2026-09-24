@@ -209,6 +209,59 @@ it('surfaces has_working_copy on revision-enabled entries in entries_get', funct
         ->assertSee('"has_working_copy":true');
 });
 
+it('returns the staged working copy from entries_get on request', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = makePublishedRevisableEntry();
+    $user = Fixtures::makeUser('view blog entries', 'edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Staged Title'], 'slug' => 'staged-post'])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"title":"Live Title"')
+        ->assertDontSee('"source"');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'working_copy' => true])
+        ->assertOk()
+        ->assertSee('"slug":"staged-post"')
+        ->assertSee('"url":"/blog/staged-post"')
+        ->assertSee('"title":"Staged Title"')
+        ->assertDontSee('Live Title')
+        ->assertSee('"has_working_copy":true')
+        ->assertSee('"source":"working_copy"');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"url":"/blog/live-post"');
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('Live Title');
+});
+
+it('returns the entry itself when a working copy is requested but nothing is staged', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = makePublishedRevisableEntry();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'working_copy' => true])
+        ->assertOk()
+        ->assertSee('"title":"Live Title"')
+        ->assertSee('"has_working_copy":false')
+        ->assertSee('"source":"entry"');
+});
+
 it('saves unpublished drafts directly without a working copy (CP parity)', function () {
     Fixtures::site();
     Fixtures::tags();

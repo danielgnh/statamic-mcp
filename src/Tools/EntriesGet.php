@@ -13,11 +13,12 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Entry;
 use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist; the returned data is always the live entry.')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the live entry unless working_copy is true: then it is the staged working copy, exactly what entries_publish would promote, and source says which one you got.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
@@ -35,6 +36,7 @@ class EntriesGet extends Tool
             'site' => $schema->string()->description("Site handle. With an id it must match that entry's own site (omit it otherwise); with collection + slug it selects the localization. Defaults to the default site."),
             'format' => $schema->string()->enum(['raw', 'augmented'])->description('raw (default): $entry->data(), writable. augmented: rendered values, display only — never writable.'),
             'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation.'),
+            'working_copy' => $schema->boolean()->description('Return the staged working copy instead of the live entry (revision-enabled collections) — review it before entries_publish. When nothing is staged, the entry itself is returned.'),
         ];
     }
 
@@ -49,6 +51,7 @@ class EntriesGet extends Tool
                 'format' => 'nullable|string|in:raw,augmented',
                 'fields' => 'nullable|array',
                 'fields.*' => 'string',
+                'working_copy' => 'nullable|boolean',
             ],
             [
                 'format.in' => 'format must be one of: raw, augmented.',
@@ -56,10 +59,21 @@ class EntriesGet extends Tool
         );
 
         $user = $this->user($request);
-        $entry = $this->resolveEntry($request, $user);
+        $live = $this->resolveEntry($request, $user);
 
-        $collection = $entry->collection()->handle();
+        $collection = $live->collection()->handle();
         $this->ensurePermission($user, "view {$collection} entries");
+
+        $staged = data_get($validated, 'working_copy') && $live->revisionsEnabled() && $live->hasWorkingCopy();
+
+        $entry = $staged ? $live->fromWorkingCopy() : $live;
+
+        // Statamic caches URIs by entry id and the working copy shares the live
+        // entry's id, so forget it here for a staged slug, and again below so
+        // the staged URI never sticks to the live entry.
+        if ($staged) {
+            Blink::store('entry-uris')->forget($entry->id());
+        }
 
         $format = $validated['format'] ?? 'raw';
         $requestedFields = array_values($validated['fields'] ?? []);
@@ -131,11 +145,12 @@ class EntriesGet extends Tool
             $response['date'] = $entry->date()?->toIso8601String();
         }
 
-        // One-key working-copy surfacing (staged values themselves are v1.1):
-        // data above is always the LIVE entry — a true here means CP or MCP
-        // edits are staged on top of it.
-        if ($entry->revisionsEnabled()) {
-            $response['has_working_copy'] = $entry->hasWorkingCopy();
+        if ($live->revisionsEnabled()) {
+            $response['has_working_copy'] = $live->hasWorkingCopy();
+        }
+
+        if (filled(data_get($validated, 'working_copy'))) {
+            $response['source'] = $staged ? 'working_copy' : 'entry';
         }
 
         if ($format === 'augmented') {
@@ -144,6 +159,10 @@ class EntriesGet extends Tool
 
         if ($localization !== null) {
             $response['localization'] = $localization;
+        }
+
+        if ($staged) {
+            Blink::store('entry-uris')->forget($entry->id());
         }
 
         return $this->json($response);
