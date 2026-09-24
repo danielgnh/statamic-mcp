@@ -21,10 +21,9 @@ use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Date;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
-use Statamic\Fieldtypes\Replicator;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle for its fields. Grid and group fields list their nested fields; the example shows one set or row, and example_notes keys notes on nested values by path, like page_builder.0.image. When the site has written guidelines for this collection or blueprint, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. When the site has written guidelines for this collection or blueprint, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -42,7 +41,7 @@ class BlueprintsGet extends Tool
             'blueprint' => $schema->string()
                 ->description("Blueprint handle. Defaults to the resource's first blueprint."),
             'set' => $schema->string()
-                ->description('A set handle from the sets of a replicator or Bard field. Returns only that set, with its fields, instead of the whole blueprint. When a handle has different fields in different places, the error lists their paths; pass one of those instead.'),
+                ->description('A set handle from the sets of a replicator or Bard field. Returns only that set, with its fields and an example row, instead of the whole blueprint. When a handle has different fields in different places, the error lists their paths; pass one of those instead.'),
         ];
     }
 
@@ -257,8 +256,9 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * One set with its fields, described recursively. Sets nested in them
-     * are listed by handle again, so every response stays one level deep.
+     * One set with its fields, described recursively, and an example row
+     * with notes keyed by their path in it. Sets nested in the fields are
+     * listed by handle again, so every response stays one level deep.
      *
      * @return array<string, mixed>
      */
@@ -266,7 +266,18 @@ class BlueprintsGet extends Tool
     {
         [$found, $fields] = $this->findSet($blueprint, $set);
 
-        return ['set' => [...$this->describeSet($found), 'fields' => $fields]];
+        [$example, $notes] = $this->exampleObject($found['fields'], '');
+
+        $payload = [
+            'set' => [...$this->describeSet($found), 'fields' => $fields],
+            'example' => ['type' => $found['handle'], ...$example],
+        ];
+
+        if ($notes !== []) {
+            $payload['example_notes'] = $notes;
+        }
+
+        return $payload;
     }
 
     /**
@@ -342,15 +353,14 @@ class BlueprintsGet extends Tool
 
     /**
      * An example in the stored shape, plus notes keyed by their path in the
-     * example. A replicator gets one set, a grid one row, and a group one
-     * object, each built from the examples of its own fields.
+     * example. A grid gets one row and a group one object, each built from
+     * the examples of its own fields.
      *
      * @return array{0: mixed, 1: array<string, string>}
      */
     private function exampleFor(Field $field, string $path): array
     {
         return match ($field->type()) {
-            'replicator' => $this->replicatorExample($field, $path),
             'grid' => $this->gridExample($field, $path),
             'group' => $this->groupExample($field, $path),
             default => $this->leafExample($field, $path),
@@ -360,7 +370,7 @@ class BlueprintsGet extends Tool
     /**
      * Bounded example generation: real examples for a fixed
      * set of fieldtypes, obviously-fake placeholders for relation fields, and
-     * a null + note fallback for everything else (bard, link, …).
+     * a null + note fallback for everything else (replicator, bard, link, …).
      *
      * @return array{0: mixed, 1: array<string, string>}
      */
@@ -383,6 +393,7 @@ class BlueprintsGet extends Tool
             'terms' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-TERM-ID'),
             'users' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-USER-ID'),
             'assets' => $this->assetsFieldExample($field),
+            'replicator' => $this->replicatorExample($field),
             'bard' => $this->bardExample($field),
             default => $this->noExample($field),
         };
@@ -414,7 +425,7 @@ class BlueprintsGet extends Tool
         $notes = [];
 
         foreach ($fields->all() as $field) {
-            $key = "{$path}.{$field->handle()}";
+            $key = ltrim("{$path}.{$field->handle()}", '.');
 
             if ($field->visibility() === 'computed') {
                 $notes[$key] = 'computed — not writable';
@@ -433,25 +444,21 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * One set in the stored shape: its type plus an example of each of its
-     * fields. id and enabled are generated on write.
+     * A set's fields only come with a lookup, so the example leaves the
+     * rows out and the note says how to get one.
      *
-     * @return array{0: list<array<string, mixed>>, 1: array<string, string>}
+     * @return array{0: ?array{}, 1: ?string}
      */
-    private function replicatorExample(Field $field, string $path): array
+    private function replicatorExample(Field $field): array
     {
-        /** @var Replicator $fieldtype */
-        $fieldtype = $field->fieldtype();
-
         if (($set = $this->firstSet($field)) === null) {
-            return [[], []];
+            return [[], null];
         }
 
-        [$values, $notes] = $this->exampleObject($fieldtype->fields($set), "{$path}.0");
-
-        $note = sprintf('shows one %s set — sets lists every set type with its fields. Each set is an object with its type plus its field values; id and enabled are optional.', $set);
-
-        return [[['type' => $set, ...$values]], [$path => $note, ...$notes]];
+        return [null, sprintf(
+            "a list of sets, each an object with its type plus its field values (id and enabled are optional) — call blueprints_get with set: %s, or another handle from sets, for a set's fields and an example",
+            $set,
+        )];
     }
 
     /**
@@ -491,7 +498,7 @@ class BlueprintsGet extends Tool
         }
 
         return [null, sprintf(
-            'no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves. A set is a node {"type":"set","attrs":{"values":{"type":"%s", ...its field values}}}, and sets lists every set type; HTML cannot hold sets.',
+            'no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves. A set is a node {"type":"set","attrs":{"values":{"type":"%1$s", ...its field values}}}; call blueprints_get with set: %1$s, or another handle from sets, for a set\'s fields and an example of its values. HTML cannot hold sets.',
             $set,
         )];
     }
