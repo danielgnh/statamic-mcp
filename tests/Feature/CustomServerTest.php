@@ -29,7 +29,7 @@ function customServerInitialize(string $token): TestResponse
     ], $token)->assertOk();
 }
 
-it('mounts the configured server class and advertises its tools alongside the built-in set', function () {
+it('adds, replaces and removes tools through the tools() hook', function () {
     $user = Fixtures::makeUser();
     $token = app(TokenRepository::class)->issue($user, 'custom')->token;
 
@@ -42,10 +42,13 @@ it('mounts the configured server class and advertises its tools alongside the bu
         'params' => (object) [],
     ], $token)->assertOk();
 
-    $names = collect($response->json('result.tools'))->pluck('name');
+    $tools = collect($response->json('result.tools'));
+    $names = $tools->pluck('name');
 
-    expect($names)->toContain('echo_user')
-        ->and($names)->toContain('statamic_overview', 'entries_list', 'globals_update');
+    expect($names)->toContain('echo_user', 'statamic_overview', 'globals_update')
+        ->and($names)->not->toContain('assets_upload')
+        ->and($tools->where('name', 'entries_list'))->toHaveCount(1)
+        ->and($tools->firstWhere('name', 'entries_list')['description'])->toBe('Overridden by the host app.');
 });
 
 it('keeps the server name and instructions on a subclass', function () {

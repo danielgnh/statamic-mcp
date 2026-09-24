@@ -31,15 +31,15 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
 
 /**
- * Host apps extend this class, spread TOOLS into their own $tools, and name
- * the subclass in config('statamic.mcp.server').
+ * Host apps extend this class, override tools(), and name the subclass in
+ * config('statamic.mcp.server').
  */
 #[Name('Statamic')]
 #[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, and asset containers you can work with, plus your own permission flags per resource. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
 class Server extends McpServer
 {
-    /** @var list<class-string<Tool>> */
-    public const array TOOLS = [
+    /** @var array<int, class-string<Tool>> */
+    protected array $tools = [
         StatamicOverview::class,
         BlueprintsGet::class,
         EntriesList::class,
@@ -65,6 +65,18 @@ class Server extends McpServer
 
     public int $defaultPaginationLength = 50;
 
-    /** @var array<int, class-string<Tool>> */
-    protected array $tools = self::TOOLS;
+    #[\Override]
+    protected function boot(): void
+    {
+        $registry = new ToolRegistry($this->tools);
+
+        $this->tools($registry);
+
+        $this->tools = $registry->all();
+    }
+
+    protected function tools(ToolRegistry $tools): void
+    {
+        //
+    }
 }
