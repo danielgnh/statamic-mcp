@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Danielgnh\StatamicMcp\Server;
+
 return [
     'enabled' => env('STATAMIC_MCP_ENABLED', true),
     'route' => 'mcp/statamic',
+    'server' => Server::class,
 
     'auth' => env('STATAMIC_MCP_AUTH', 'token'),
     'middleware' => ['throttle:60,1'],

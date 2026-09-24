@@ -18,7 +18,9 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
+use Laravel\Mcp\Server as McpServer;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
@@ -111,7 +113,7 @@ class ServiceProvider extends AddonServiceProvider
             EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes
         ];
 
-        Mcp::web(config('statamic.mcp.route'), Server::class)->middleware($middleware);
+        Mcp::web(config('statamic.mcp.route'), $this->serverClass())->middleware($middleware);
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
@@ -127,6 +129,22 @@ class ServiceProvider extends AddonServiceProvider
                 Passport::authorizationView('statamic-mcp::oauth.authorize');
             }
         }
+    }
+
+    /** @return class-string<McpServer> */
+    protected function serverClass(): string
+    {
+        $server = config('statamic.mcp.server', Server::class);
+
+        if (! is_string($server) || ! is_subclass_of($server, McpServer::class)) {
+            throw new InvalidArgumentException(sprintf(
+                "statamic.mcp.server must name a subclass of %s, got '%s'.",
+                McpServer::class,
+                is_string($server) ? $server : get_debug_type($server),
+            ));
+        }
+
+        return $server;
     }
 
     /**
