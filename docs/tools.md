@@ -78,8 +78,52 @@ on top, exactly as in the Control Panel.
 
 The README shows the shape: a server class that extends `Danielgnh\StatamicMcp\Server`,
 overrides `tools()` to add, replace, or remove tool classes, and is named in the
-`server` config key. This section covers what the base tool class gives you, how to
-replace one of ours, what `read_only` expects from you, and how to test.
+`server` config key. This section starts with a complete tool, then covers what the
+base tool class gives you, how to replace one of ours, what `read_only` expects from
+you, and how to test.
+
+### A complete tool
+
+```php
+namespace App\Mcp\Tools;
+
+use Danielgnh\StatamicMcp\Tools\Tool;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Mcp\Request;
+use Laravel\Mcp\Response;
+use Laravel\Mcp\Server\Attributes\Description;
+use Laravel\Mcp\Server\Attributes\Name;
+
+#[Name('newsletter_send')]
+#[Description('Send the newsletter draft to every subscriber.')]
+class NewsletterSend extends Tool
+{
+    #[\Override]
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'draft_id' => $schema->string()->description('Entry id of the newsletter draft.')->required(),
+        ];
+    }
+
+    public function shouldRegister(Request $request): bool
+    {
+        return $this->writesEnabled();
+    }
+
+    protected function execute(Request $request): Response
+    {
+        $this->ensureWritesEnabled();
+        $this->ensurePermission($this->user($request), 'edit newsletter entries');
+
+        $validated = $request->validate(['draft_id' => 'required|string']);
+
+        // ...
+
+        return $this->json(['sent' => true]);
+    }
+}
+```
 
 ### What the base class gives you
 
@@ -97,25 +141,9 @@ a tool error response instead of a 500. The protected helpers:
 | `json($data)` | A compact JSON text response. |
 | `notFound($what, $given, $available)` | The same not-found shape the built-in tools return. |
 
-Declare parameters in `schema()` and validate them in `execute()`. laravel/mcp does not
-enforce the declared schema server-side, so `$request->validate()` is the real guard:
-
-```php
-#[\Override]
-public function schema(JsonSchema $schema): array
-{
-    return [
-        'draft_id' => $schema->string()->description('Entry id of the newsletter draft.')->required(),
-    ];
-}
-
-protected function execute(Request $request): Response
-{
-    $validated = $request->validate(['draft_id' => 'required|string']);
-
-    // ...
-}
-```
+Declare parameters in `schema()` and validate them in `execute()`, as `NewsletterSend`
+does. laravel/mcp does not enforce the declared schema server-side, so
+`$request->validate()` is the real guard.
 
 A plain `Laravel\Mcp\Server\Tool` works too. It just runs behind the addon's middleware
 without the helpers above.
@@ -124,22 +152,9 @@ without the helpers above.
 
 `read_only` hides the built-in write tools because each one implements `shouldRegister()`.
 The switch knows nothing about your tools, so a tool that writes needs the same two lines
-the built-in ones have. The first hides it from `tools/list`; the second refuses the call
-when a client still has it cached:
-
-```php
-public function shouldRegister(Request $request): bool
-{
-    return $this->writesEnabled();
-}
-
-protected function execute(Request $request): Response
-{
-    $this->ensureWritesEnabled();
-
-    // ...
-}
-```
+the built-in ones have, as `NewsletterSend` shows. `shouldRegister()` returning
+`$this->writesEnabled()` hides the tool from `tools/list`, and `$this->ensureWritesEnabled()`
+at the top of `execute()` refuses the call when a client still has the tool cached.
 
 Read tools need neither. Mark them `#[IsReadOnly]` so clients can tell.
 
