@@ -106,7 +106,7 @@ class EntriesCreate extends Tool
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
 
         // The injected date field is required — satisfy it with the resolved
-        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright). Slug
+        // Carbon, which preProcess() turns into the date picker's shape. Slug
         // likewise: the CP form always submits it into validation, so a
         // blueprint that marks slug required must see the resolved value —
         // without it that field is unsatisfiable (slug is barred from data).
@@ -117,9 +117,10 @@ class EntriesCreate extends Tool
             $values['date'] = $date;
         }
 
-        $this->validateAgainstBlueprint(
+        $data = $this->processAgainstBlueprint(
             $blueprint,
             $values,
+            array_keys($data),
             ['collection' => $collectionHandle, 'site' => $site],
         );
 

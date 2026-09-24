@@ -60,6 +60,32 @@ called out here explicitly.
   anyone else, and changing an entry's author with `entries_update`, needs
   `edit other authors {collection} entries`.
 
+### Fixed
+
+- Writes store what the Control Panel stores. `entries_create`,
+  `entries_update`, `terms_create`, `terms_update`, `globals_update`, and
+  `assets_update` now take each value through the fieldtype's `preProcess()`,
+  validate it, and save the result of `process()`, the same steps as a CP save.
+  A single-file asset or single-item relationship is saved as a plain string,
+  sets and grid rows get ids, dates use the field's save format, and HTML sent
+  to a Bard field becomes ProseMirror. Values are accepted in the shape the get
+  tools return, so what `entries_get` or `globals_get` returned can be written
+  back unchanged. Before, a single-file asset had to be sent as a list and was
+  saved as one, which themes reading the raw value do not expect.
+- Updating an entry, term, or global set no longer fails because the CP saved
+  a single-file asset, a single-item relationship, or a date on it. Validation
+  used to run against the stored value, so even an unrelated title change was
+  refused.
+- Replicator and Bard sets are checked like top-level fields. A set type the
+  field does not define is rejected with the valid types and a did-you-mean
+  hint, and so are unknown keys inside sets, grid rows, and groups. A set
+  without a type returns an error naming its path instead of "An internal
+  server error occurred."
+- An asset reference has to exist in the field's container. A missing path, a
+  URL, or another container's id used to be saved and render as nothing.
+- `blueprints_get` examples use the stored shape: a plain id for single-item
+  relationship fields, and each date field's save format.
+
 ### Security
 
 - **Breaking:** the entry write tools skipped Statamic's author rules. On a
