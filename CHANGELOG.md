@@ -8,6 +8,16 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-25
+
+### Added
+
+- `blueprints_get` returns `tabs`: the tabs whose own or whose sections'
+  `instructions` say how their fields go together, with the handles of the
+  fields under them. That is where a note about one blueprint goes, such as
+  which existing entry to follow; the Control Panel shows the same text above
+  the fields.
+
 ### Changed
 
 - **Breaking:** guidelines for agents moved from markdown files under
@@ -30,14 +40,6 @@ called out here explicitly.
   them, then one line per field with the names of its sets. A page builder
   fieldset that six blueprints import used to repeat all six on every row,
   which made the table wider than any terminal.
-
-### Added
-
-- `blueprints_get` returns `tabs`: the tabs whose own or whose sections'
-  `instructions` say how their fields go together, with the handles of the
-  fields under them. That is where a note about one blueprint goes, such as
-  which existing entry to follow; the Control Panel shows the same text above
-  the fields.
 
 ## [0.5.0] - 2026-09-24
 
@@ -491,7 +493,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.0...v0.4.1
