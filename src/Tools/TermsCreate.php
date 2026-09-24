@@ -97,7 +97,7 @@ class TermsCreate extends Tool
         // The CP's term store path (TermsController@store, 6.x) passes no rule
         // placeholder replacements — slug uniqueness is its own explicit rule
         // there, and our collision check below covers it.
-        $this->validateAgainstBlueprint($blueprint, [...$data, 'slug' => $slug]);
+        $data = $this->processAgainstBlueprint($blueprint, [...$data, 'slug' => $slug], array_keys($data));
 
         // The id IS taxonomy::slug, so the collision check doubles as the
         // uniqueness rule — and a collided save would silently OVERWRITE the

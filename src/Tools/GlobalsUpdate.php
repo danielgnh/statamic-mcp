@@ -104,6 +104,19 @@ class GlobalsUpdate extends Tool
         // The merge basis is the SITE's own data bucket — the exact
         // round-trippable shape globals_get returns for that site.
         $existing = $variables->data()->all();
+
+        // Validate the EFFECTIVE values (origin-site values under the local
+        // overrides, mirroring the CP's full-form submit) so a partial
+        // localized patch never false-fails required fields — only the local
+        // bucket is stored.
+        if ($blueprint) {
+            $patch = $this->processAgainstBlueprint($blueprint, [
+                ...($variables->hasOrigin() ? $variables->origin()->values()->all() : []),
+                ...$existing,
+                ...$patch,
+            ], array_keys($patch));
+        }
+
         $merged = array_merge($existing, $patch);
 
         // Strict compare over normalized values: assoc key
@@ -116,17 +129,6 @@ class GlobalsUpdate extends Tool
                 'result' => 'no-op — merged data equals current data; nothing saved',
                 'cp_edit_url' => $variables->editUrl(),
             ]);
-        }
-
-        // Validate the EFFECTIVE values (origin-site values under the local
-        // overrides, mirroring the CP's full-form submit) so a partial
-        // localized patch never false-fails required fields — only the local
-        // bucket is stored.
-        if ($blueprint) {
-            $this->validateAgainstBlueprint($blueprint, array_merge(
-                $variables->hasOrigin() ? $variables->origin()->values()->all() : [],
-                $merged,
-            ));
         }
 
         // Variables carry no Statamic-managed metadata (no TracksLastModified

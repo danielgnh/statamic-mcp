@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Statamic\Events\EntryCreating;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
@@ -317,4 +318,174 @@ it('rejects reserved keys in data even when the blueprint defines them', functio
     Server::actingAs(Fixtures::makeUser('create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hi', 'published' => true]])
         ->assertHasErrors(['field published is reserved — never writable via data']);
+});
+
+it('stores sets and single-file assets the way the CP does', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => [
+            'title' => 'Home',
+            'hero' => ['hero.jpg'],
+            'page_builder' => [['type' => 'section_hero', 'heading' => 'Welcome', 'image' => ['hero.jpg']]],
+        ]])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'landing')->where('slug', 'home')->first();
+    $set = $entry->get('page_builder')[0];
+
+    expect($entry->get('hero'))->toBe('hero.jpg')
+        ->and($set)->toMatchArray(['type' => 'section_hero', 'enabled' => true, 'heading' => 'Welcome', 'image' => 'hero.jpg'])
+        ->and($set['id'])->toBeString()->not->toBeEmpty();
+});
+
+it('stores a single-item relationship as a plain id', function (mixed $topic) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Post', 'topic' => $topic]])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'blog')->where('slug', 'post')->first()->get('topic'))->toBe('laravel');
+})->with([
+    'a plain id' => 'laravel',
+    'a one-item list' => [['laravel']],
+]);
+
+it('stores dates in the field save format', function (string $starts) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Launch', 'starts' => $starts]])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'landing')->where('slug', 'launch')->first()->get('starts'))
+        ->toBe('2026-01-15 09:30');
+})->with([
+    'the stored format' => '2026-01-15 09:30',
+    'an ISO-8601 instant' => '2026-01-15T09:30:00.000Z',
+]);
+
+it('converts HTML sent to a Bard field into ProseMirror nodes', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'body' => '<p>Hello</p>']])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'landing')->where('slug', 'home')->first()->get('body')[0])
+        ->toMatchArray(['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Hello']]]);
+});
+
+it('rejects a set type the field does not define', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => [
+            'title' => 'Home',
+            'page_builder' => [['type' => 'section_heros', 'heading' => 'Hi']],
+        ]])
+        ->assertHasErrors(["unknown set type 'section_heros' in page_builder.0 — valid set types: section_hero, section_text_block — did you mean 'section_hero'?"]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+});
+
+it('rejects malformed nested data before anything is saved', function (array $data, string $error) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', ...$data]])
+        ->assertHasErrors([$error]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'a typo inside a set' => [
+        ['page_builder' => [['type' => 'section_hero', 'heading' => 'Hi', 'headng' => 'Hi']]],
+        "unknown field headng in page_builder.0 — valid handles: heading, image — did you mean 'heading' instead of 'headng'?",
+    ],
+    'a set without a type' => [
+        ['page_builder' => [['heading' => 'Hi']]],
+        'page_builder.0 must be a set object with a type — valid set types: section_hero, section_text_block',
+    ],
+    'a set that is not an object' => [
+        ['page_builder' => ['section_hero']],
+        'page_builder.0 must be a set object with a type',
+    ],
+    'sets that are not a list' => [
+        ['page_builder' => 'section_hero'],
+        'page_builder must be a list of sets',
+    ],
+    'an unknown Bard set' => [
+        ['body' => [['type' => 'set', 'attrs' => ['values' => ['type' => 'quote', 'text' => 'Hi']]]]],
+        "unknown set type 'quote' in body.0.attrs.values — valid set types: callout",
+    ],
+    'a Bard node without a type' => [
+        ['body' => [['text' => 'Hi']]],
+        'body.0 must be a ProseMirror node object with a type',
+    ],
+    'a typo inside a grid row' => [
+        ['facts' => [['lable' => 'Rooms']]],
+        "unknown field lable in facts.0 — valid handles: label — did you mean 'label' instead of 'lable'?",
+    ],
+    'a typo inside a group' => [
+        ['seo' => ['meta_titel' => 'Home']],
+        "unknown field meta_titel in seo — valid handles: meta_title — did you mean 'meta_title' instead of 'meta_titel'?",
+    ],
+]);
+
+it('rejects an asset reference that does not resolve in the field container', function (array $data, string $error) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', ...$data]])
+        ->assertHasErrors([$error]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'a missing path' => [
+        ['hero' => 'missing.jpg'],
+        "asset 'missing.jpg' not found in container 'images' (hero) — pass a path from assets_list or assets_upload",
+    ],
+    'a url' => [
+        ['hero' => '/assets/images/hero.jpg'],
+        "asset '/assets/images/hero.jpg' not found in container 'images' (hero)",
+    ],
+    "another container's id" => [
+        ['hero' => 'files::hero.jpg'],
+        "asset 'files::hero.jpg' not found in container 'images' (hero)",
+    ],
+    'a missing path inside a set' => [
+        ['page_builder' => [['type' => 'section_hero', 'heading' => 'Hi', 'image' => ['missing.jpg']]]],
+        "asset 'missing.jpg' not found in container 'images' (page_builder.0.image)",
+    ],
+]);
+
+it('names the field when Statamic cannot process its value', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Launch', 'starts' => 'TBD']])
+        ->assertHasErrors(["field starts has a value its fieldtype (date) can't process"]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
 });

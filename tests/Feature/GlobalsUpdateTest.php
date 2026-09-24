@@ -4,9 +4,11 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Statamic\Contracts\Globals\GlobalRepository;
 use Statamic\Events\GlobalVariablesSaving;
 use Statamic\Facades\Blink;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Stache;
 
@@ -279,4 +281,66 @@ it('is hidden when the server is read-only', function () {
 
     expect(GlobalSet::findByHandle('settings')->in('en')->data()->get('site_name'))
         ->toBe('Acme');
+});
+
+function makeThemeGlobal(): void
+{
+    Fixtures::assetContainer('images');
+
+    Storage::disk('images')->put('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    Storage::disk('images')->put('acme.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    Blueprint::makeFromFields([
+        'logo' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+        'menu_position' => ['type' => 'text'],
+    ])->setHandle('theme')->setNamespace('globals')->save();
+
+    $set = GlobalSet::make('theme')->title('Theme');
+    $set->save();
+
+    // What the CP writes for a single-file asset field.
+    $set->makeLocalization('en')->data(['logo' => 'logo.svg', 'menu_position' => 'left'])->save();
+}
+
+it('stores a single-file asset as a plain string, the way the CP does', function (mixed $logo) {
+    Fixtures::site();
+    makeThemeGlobal();
+
+    Server::actingAs(Fixtures::makeUser('edit theme globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'theme', 'data' => ['logo' => $logo]])
+        ->assertOk()
+        ->assertSee('"logo":"acme.svg"');
+
+    Stache::clear();
+
+    expect(GlobalSet::findByHandle('theme')->in('en')->get('logo'))->toBe('acme.svg');
+})->with([
+    'a path' => 'acme.svg',
+    'a one-item list' => [['acme.svg']],
+    'the asset id' => 'images::acme.svg',
+]);
+
+it('updates other variables when the CP saved a single-file asset', function () {
+    Fixtures::site();
+    makeThemeGlobal();
+
+    Server::actingAs(Fixtures::makeUser('edit theme globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'theme', 'data' => ['menu_position' => 'center']])
+        ->assertOk();
+
+    Stache::clear();
+
+    expect(GlobalSet::findByHandle('theme')->in('en')->data()->all())
+        ->toEqual(['logo' => 'logo.svg', 'menu_position' => 'center']);
+});
+
+it('rejects an asset that does not exist in the field container', function () {
+    Fixtures::site();
+    makeThemeGlobal();
+
+    Server::actingAs(Fixtures::makeUser('edit theme globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'theme', 'data' => ['logo' => 'missing.svg']])
+        ->assertHasErrors(["asset 'missing.svg' not found in container 'images' (logo) — pass a path from assets_list or assets_upload"]);
+
+    expect(GlobalSet::findByHandle('theme')->in('en')->get('logo'))->toBe('logo.svg');
 });

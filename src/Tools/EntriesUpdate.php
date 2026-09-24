@@ -105,9 +105,28 @@ class EntriesUpdate extends Tool
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
         $current = $basis->data()->all();
-        $merged = array_merge($current, $data);
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
+
+        // The injected date field on dated collections is required — satisfy
+        // it with the effective Carbon, which preProcess() turns into the
+        // date picker's shape. Slug likewise: entries never store it in
+        // data, so a blueprint that marks slug required must be fed the
+        // effective value (the new slug, or the entry's current one).
+        // Replacements mirror the CP's update path, so unique_entry_value
+        // excludes this entry itself.
+        $values = [...$current, ...$data, 'slug' => $slug ?? $basis->slug()];
+
+        if ($collection->dated()) {
+            $values['date'] = $date ?? $basis->date();
+        }
+
+        $merged = array_merge($current, $this->processAgainstBlueprint(
+            $blueprint,
+            $values,
+            array_keys($data),
+            ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
+        ));
 
         // Strict compare over normalized values: assoc key order is
         // irrelevant (sorted recursively), but types matter — loose == would
@@ -127,25 +146,6 @@ class EntriesUpdate extends Tool
                 'cp_edit_url' => $entry->editUrl(),
             ]);
         }
-
-        // The injected date field on dated collections is required — satisfy
-        // it with a Carbon (Statamic\Rules\DateFieldtype accepts Carbon,
-        // rejects plain strings). Slug likewise: entries never store it in
-        // data, so a blueprint that marks slug required must be fed the
-        // effective value (the new slug, or the entry's current one).
-        // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself.
-        $values = [...$merged, 'slug' => $slug ?? $basis->slug()];
-
-        if ($collection->dated()) {
-            $values['date'] = $date ?? $basis->date();
-        }
-
-        $this->validateAgainstBlueprint(
-            $blueprint,
-            $values,
-            ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
-        );
 
         // Stage on the rebased clone when amending, on a fresh clone of live
         // when creating the first working copy — the live Stache instance

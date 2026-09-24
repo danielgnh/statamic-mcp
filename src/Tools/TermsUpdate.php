@@ -112,7 +112,6 @@ class TermsUpdate extends Tool
         // round-trippable shape terms_get returns for that site (globals
         // rule: localizations are data overrides within one term).
         $existingLocal = $localized->data()->all();
-        $newLocal = array_merge($existingLocal, $patch);
 
         $newSlug = $this->resolveSlug($validated['slug'] ?? null);
         $slugChanged = $newSlug !== null && $newSlug !== $localized->slug();
@@ -123,6 +122,19 @@ class TermsUpdate extends Tool
         if ($slugChanged && $site === $defaultSite && Term::find("{$taxonomyHandle}::{$newSlug}")) {
             throw new ToolException("term '{$newSlug}' already exists in taxonomy '{$taxonomyHandle}' — pick another slug");
         }
+
+        // Validate the EFFECTIVE values (origin-site data under the local
+        // overrides) so a partial localized patch never false-fails required
+        // fields — only the local override is stored. v6 injects a required
+        // 'slug' field into term blueprints: feed the effective slug in the
+        // same way the CP does. Terms need no rule replacements (the CP's
+        // term update path passes none; the id is the uniqueness key).
+        $newLocal = array_merge($existingLocal, $this->processAgainstBlueprint($blueprint, [
+            ...$term->in($defaultSite)->data()->all(),
+            ...$existingLocal,
+            ...$patch,
+            'slug' => $newSlug ?? $localized->slug(),
+        ], array_keys($patch)));
 
         // Strict compare over normalized values: assoc key
         // order is irrelevant, but types matter — loose == would turn an
@@ -135,18 +147,6 @@ class TermsUpdate extends Tool
                 'cp_edit_url' => $localized->editUrl(),
             ]);
         }
-
-        // Validate the EFFECTIVE values (origin-site data under the local
-        // overrides) so a partial localized patch never false-fails required
-        // fields — only the local override is stored. v6 injects a required
-        // 'slug' field into term blueprints: feed the effective slug in the
-        // same way the CP does. Terms need no rule replacements (the CP's
-        // term update path passes none; the id is the uniqueness key).
-        $this->validateAgainstBlueprint($blueprint, array_merge(
-            $term->in($defaultSite)->data()->all(),
-            $newLocal,
-            ['slug' => $newSlug ?? $localized->slug()],
-        ));
 
         $renamed = $slugChanged && $site === $defaultSite;
         $previousId = $term->id();
