@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Nav;
 
 it('returns sites, resources with capability flags, acting user, and server flags for a super', function () {
     Fixtures::site();
@@ -71,8 +72,8 @@ it('hides global sets the user may not edit', function () {
     Server::actingAs($user)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        // asset_containers sits between globals and user since v1.1
-        ->assertSee('"globals":[],"asset_containers":[],"user"');
+        // asset_containers and navigations sit between globals and user
+        ->assertSee('"globals":[],"asset_containers":[],"navigations":[],"user"');
 });
 
 it('lists global sets the user may edit', function () {
@@ -85,6 +86,49 @@ it('lists global sets the user may edit', function () {
         ->tool(StatamicOverview::class, [])
         ->assertOk()
         ->assertSee('"globals":[{"handle":"settings","title":"Settings","can_edit":true}]');
+});
+
+it('lists navigations the user may view with their max depth and edit flag', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav('main', maxDepth: 2);
+    Fixtures::nav('footer');
+    Fixtures::nav('secret');
+
+    // 'secret' (no 'view secret nav') is filtered out entirely; single-site
+    // navigations carry no sites list.
+    Server::actingAs(Fixtures::makeUser('view main nav', 'edit main nav', 'view footer nav'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"footer","title":"Footer","max_depth":null,"can_edit":false},{"handle":"main","title":"Main","max_depth":2,"can_edit":true}],"user"');
+});
+
+it('lists the sites each navigation has a tree in under multisite', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::nav('main');
+    Fixtures::nav('footer');
+
+    Nav::find('footer')->in('de')->delete();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"footer","title":"Footer","max_depth":null,"sites":["en"],"can_edit":true},{"handle":"main","title":"Main","max_depth":null,"sites":["en","de"],"can_edit":true}]');
+});
+
+it('omits navigations excluded by the resources allowlist', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav('main');
+    Fixtures::nav('footer');
+
+    config(['statamic.mcp.resources.navigations' => ['main']]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"navigations":[{"handle":"main","title":"Main","max_depth":null,"can_edit":true}]');
 });
 
 it('includes can_delete flags only when deletes are enabled', function () {

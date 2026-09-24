@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
@@ -15,15 +16,17 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
 {
+    use ResolvesNavs;
     use ResolvesSites;
 
     #[\Override]
@@ -42,6 +45,7 @@ class StatamicOverview extends Tool
             'taxonomies' => $this->taxonomies($user),
             'globals' => $this->globals($user),
             'asset_containers' => $this->assetContainers($user),
+            'navigations' => $this->navigations($user),
             'user' => [
                 'email' => $user->email(),
                 'roles' => $user->roles()->map->handle()->values()->all(),
@@ -192,7 +196,37 @@ class StatamicOverview extends Tool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @return array<int, array<string, mixed>>
+     */
+    private function navigations(UserContract $user): array
+    {
+        $navs = Nav::all()->keyBy->handle();
+
+        return $this->sortedExposed('navigations')
+            ->filter(fn (string $handle) => $this->can($user, "view {$handle} nav"))
+            ->map(function (string $handle) use ($navs, $user) {
+                $nav = $navs->get($handle);
+
+                $resource = [
+                    'handle' => $handle,
+                    'title' => $nav->title(),
+                    'max_depth' => $nav->maxDepth(),
+                ];
+
+                if (Site::multiEnabled()) {
+                    $resource['sites'] = $this->navSites($nav)->all();
+                }
+
+                $resource['can_edit'] = $this->can($user, "edit {$handle} nav");
+
+                return $resource;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      * @return SupportCollection<int, string> exposed handles, sorted for deterministic output
      */
     private function sortedExposed(string $type): SupportCollection
