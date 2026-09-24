@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
+use Danielgnh\StatamicMcp\Tools\Concerns\PlacesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
@@ -18,18 +19,20 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
     use AuthorizesEntries;
     use ComparesPatchData;
     use NormalizesEntryInput;
+    use PlacesEntries;
     use ResolvesEntries;
     use ResolvesSites;
     use ValidatesBlueprintData;
@@ -43,6 +46,7 @@ class EntriesUpdate extends Tool
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
+            'parent' => $schema->string()->description('Entry id to move this entry under, or "" for the top level. Omit it, or send null, to leave the entry where it is.'),
         ];
     }
 
@@ -66,6 +70,7 @@ class EntriesUpdate extends Tool
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
                 'site' => 'nullable|string',
+                'parent' => 'nullable|string',
             ],
             ['data.present' => 'Pass data to merge (may be an empty object when only changing slug or date).'],
         );
@@ -93,6 +98,8 @@ class EntriesUpdate extends Tool
         $this->rejectUnknownKeys($blueprint, $data);
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
+
+        $move = $this->resolveMove($validated['parent'] ?? null, $entry, $user);
 
         // Routing is snapshotted from the LIVE entry BEFORE any rebase:
         // fromWorkingCopy() restores the staged published attribute into the
@@ -142,11 +149,26 @@ class EntriesUpdate extends Tool
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
         if (! $dirty) {
+            $placement = $this->applyMove($entry, $move, $workingCopy);
+
+            if ($move !== null && $move['from'] !== $move['to']) {
+                return $this->json([
+                    'id' => $entry->id(),
+                    'slug' => $entry->slug(),
+                    'status' => $entry->status(),
+                    'url' => $entry->url(),
+                    'result' => 'moved — data unchanged, nothing else saved',
+                    ...$placement,
+                    'cp_edit_url' => $entry->editUrl(),
+                ]);
+            }
+
             return $this->json([
                 'id' => $entry->id(),
                 'result' => $amending
                     ? 'no-op — merged result equals the staged working copy; nothing saved, working copy unchanged'
                     : 'no-op — merged result equals the current entry; nothing saved, no revision created',
+                ...$placement,
                 'cp_edit_url' => $entry->editUrl(),
             ]);
         }
@@ -171,11 +193,14 @@ class EntriesUpdate extends Tool
         }
 
         return $workingCopy
-            ? $this->persistWorkingCopy($target, $user, $amending, $collection)
-            : $this->persistLive($entry, $user, $collection);
+            ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move)
+            : $this->persistLive($entry, $user, $collection, $move);
     }
 
-    private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection): Response
+    /**
+     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     */
+    private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move): Response
     {
         // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
         // snapshots the in-memory attributes set above — the live entry is
@@ -190,6 +215,8 @@ class EntriesUpdate extends Tool
             throw new ToolException('the working copy save was cancelled by a listener on this site — nothing was saved');
         }
 
+        $placement = $this->applyMove($target, $move, workingCopy: true);
+
         $payload = [
             'id' => $target->id(),
             'slug' => $target->slug(),
@@ -202,10 +229,13 @@ class EntriesUpdate extends Tool
             $payload['date'] = $target->date()?->toIso8601String();
         }
 
-        return $this->json($payload);
+        return $this->json([...$payload, ...$placement]);
     }
 
-    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection): Response
+    /**
+     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     */
+    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move): Response
     {
         // CP parity: updates refresh updated_by/updated_at. save() returns
         // false when an EntrySaving listener cancels (approval addons do
@@ -213,6 +243,8 @@ class EntriesUpdate extends Tool
         if (! $entry->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — the entry was not updated');
         }
+
+        $placement = $this->applyMove($entry, $move, workingCopy: false);
 
         $payload = [
             'id' => $entry->id(),
@@ -226,7 +258,68 @@ class EntriesUpdate extends Tool
             $payload['date'] = $entry->date()?->toIso8601String();
         }
 
-        return $this->json($payload);
+        return $this->json([...$payload, ...$placement]);
+    }
+
+    /**
+     * The move parent asks for, or null when it asks for none. A null parent
+     * is an omitted one, as for every other top-level parameter, so a client
+     * that sends null for each unset parameter never moves an entry.
+     *
+     * @return array{tree: CollectionTree, from: ?string, to: ?string}|null
+     */
+    private function resolveMove(?string $parent, EntryContract $entry, UserContract $user): ?array
+    {
+        if ($parent === null) {
+            return null;
+        }
+
+        $collection = $entry->collection();
+        $tree = $this->placementTree($collection, $entry->locale()) ?? throw $this->cannotNest($collection);
+
+        // CP parity: the collection tree view saves moves under this
+        // permission (CollectionPolicy::reorder), not under edit.
+        $this->ensurePermission($user, "reorder {$collection->handle()} entries");
+
+        $page = $tree->find($entry->id());
+        $current = $page->parent();
+
+        return [
+            'tree' => $tree,
+            'from' => $current && ! $current->isRoot() ? $current->id() : null,
+            'to' => $this->resolveParent($parent, $tree, $page)?->id(),
+        ];
+    }
+
+    /**
+     * Tree position is not part of an entry's revisions: like the CP's tree
+     * view, a move saves the live tree at once, whatever the data does.
+     *
+     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move
+     * @return array<string, mixed>
+     */
+    private function applyMove(EntryContract $entry, ?array $move, bool $workingCopy): array
+    {
+        if ($move === null) {
+            return [];
+        }
+
+        ['tree' => $tree, 'from' => $from, 'to' => $to] = $move;
+
+        if ($from === $to) {
+            return ['parent' => $to, 'move' => $to === null ? 'no-op — already at the top level' : "no-op — already under '{$to}'"];
+        }
+
+        if (! $this->materializeTree($tree)->move($entry->id(), $to)->save()) {
+            throw new ToolException('the move was cancelled by a listener on this site — the entry was not moved, and any other change in this update was saved');
+        }
+
+        $moved = $to === null ? 'moved to the top level' : "moved under '{$to}'";
+
+        return [
+            'parent' => $to,
+            'move' => $workingCopy ? "{$moved} — in the live tree at once; working copies do not stage tree position" : $moved,
+        ];
     }
 
     private function resolveDate(?string $date, EntryContract $entry): ?Carbon

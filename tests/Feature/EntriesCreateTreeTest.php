@@ -7,20 +7,6 @@ use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
 
-function storedPagesTree(string $site = 'en'): array
-{
-    // tree() would append entries missing from the stored tree; fileData()
-    // is what is actually on disk.
-    Stache::clear();
-
-    return Collection::findByHandle('pages')->structure()->in($site)->fileData()['tree'];
-}
-
-function createdPageId(string $slug): string
-{
-    return Entry::query()->where('collection', 'pages')->where('slug', $slug)->first()->id();
-}
-
 it('places a new entry of a structured collection in its tree right away', function () {
     Fixtures::site();
     Fixtures::pages();
@@ -35,7 +21,7 @@ it('places a new entry of a structured collection in its tree right away', funct
         ->assertOk()
         ->assertSee('"url":"/about"');
 
-    expect(storedPagesTree())->toBe([['entry' => $home], ['entry' => createdPageId('about')]]);
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $home], ['entry' => Fixtures::pageId('about')]]);
 });
 
 it('leaves the tree of an orderable collection alone, as the CP does', function () {
@@ -50,7 +36,7 @@ it('leaves the tree of an orderable collection alone, as the CP does', function 
         ->assertOk()
         ->assertSee('"url":"/about"');
 
-    expect(storedPagesTree())->toBe([]);
+    expect(Fixtures::storedPagesTree())->toBe([]);
 });
 
 it('nests a new entry under its parent', function () {
@@ -69,8 +55,8 @@ it('nests a new entry under its parent', function () {
         ->assertSee('"url":"/about/team"')
         ->assertSee(sprintf('"parent":"%s"', $about));
 
-    expect(storedPagesTree())->toBe([
-        ['entry' => $about, 'children' => [['entry' => createdPageId('team')]]],
+    expect(Fixtures::storedPagesTree())->toBe([
+        ['entry' => $about, 'children' => [['entry' => Fixtures::pageId('team')]]],
         ['entry' => $contact],
     ]);
 });
@@ -106,7 +92,7 @@ it('nests under a parent the stored tree does not list yet', function () {
         ->assertOk()
         ->assertSee('"url":"/about/team"');
 
-    expect(storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => createdPageId('team')]]]]);
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => Fixtures::pageId('team')]]]]);
 });
 
 it('builds nested pages one create after another', function () {
@@ -121,17 +107,17 @@ it('builds nested pages one create after another', function () {
         ->assertOk();
 
     Server::actingAs($user)
-        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => createdPageId('about')])
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => Fixtures::pageId('about')])
         ->assertOk();
 
     Server::actingAs($user)
-        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => createdPageId('team')])
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => Fixtures::pageId('team')])
         ->assertOk()
         ->assertSee('"url":"/about/team/jobs"');
 
     Stache::clear();
 
-    expect(Entry::find(createdPageId('jobs'))->url())->toBe('/about/team/jobs');
+    expect(Entry::find(Fixtures::pageId('jobs'))->url())->toBe('/about/team/jobs');
 });
 
 it('places an entry whose parent is the root page at the top level', function () {
@@ -150,7 +136,23 @@ it('places an entry whose parent is the root page at the top level', function ()
         ->assertSee('"url":"/contact"')
         ->assertSee('"parent":null');
 
-    expect(storedPagesTree())->toBe([['entry' => $home], ['entry' => $about], ['entry' => createdPageId('contact')]]);
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $home], ['entry' => $about], ['entry' => Fixtures::pageId('contact')]]);
+});
+
+it('places an entry at the top level when parent is an empty string', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Contact'], 'parent' => ''])
+        ->assertOk()
+        ->assertSee('"url":"/contact"')
+        ->assertSee('"parent":null');
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about], ['entry' => Fixtures::pageId('contact')]]);
 });
 
 it('rejects a parent that is not an entry of the collection', function () {
@@ -195,7 +197,7 @@ it('rejects a parent that would nest the entry deeper than max_depth', function 
 
     Server::actingAs(Fixtures::makeUser('create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => $team])
-        ->assertHasErrors(["parent '{$team}' is at depth 2 and collection 'pages' allows 2 levels (max_depth) — pick a parent higher up, or omit parent for the top level"]);
+        ->assertHasErrors(["parent '{$team}' is at depth 2, so the entry would be at depth 3, past the 2 levels collection 'pages' allows (max_depth) — pick a parent higher up, or the top level"]);
 
     Server::actingAs(Fixtures::makeUser('create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => $about])
