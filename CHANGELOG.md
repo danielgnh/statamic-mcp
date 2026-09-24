@@ -10,6 +10,13 @@ called out here explicitly.
 
 ### Added
 
+- `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
+  now, the same split Statamic's CP makes with `PublishedEntriesController`.
+  Both need the collection's publish permission. On revision-enabled collections
+  they promote or apply the staged working copy and record an attributed
+  revision, which until now only the CP could do. Because each is a separate
+  tool, MCP clients prompt for it separately: allowing `entries_update` no
+  longer lets an agent go live.
 - **Your own tools.** The new `server` config key names the laravel/mcp server
   class to mount. Extend `Danielgnh\StatamicMcp\Server`, spread `Server::TOOLS`
   into `$tools`, add your classes, and they run behind the addon's auth
@@ -34,6 +41,10 @@ called out here explicitly.
 
 ### Changed
 
+- **Breaking:** `entries_create` and `entries_update` no longer accept
+  `published`. Creates always save a draft and updates never touch publish
+  state. The parameter is rejected with a pointer to `entries_publish`, so a
+  client with a stale tool cache cannot save a draft it believes is live.
 - `mcp:keys` mirrors the runtime precedence exactly (config → database → key
   files), generates into the database when its table exists (key files remain
   the pre-migrate fallback), adopts existing key files into the store, and
