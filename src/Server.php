@@ -14,6 +14,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesList;
+use Danielgnh\StatamicMcp\Tools\EntriesPreview;
 use Danielgnh\StatamicMcp\Tools\EntriesPublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
@@ -46,6 +47,7 @@ class Server extends McpServer
         EntriesGet::class,
         EntriesCreate::class,
         EntriesUpdate::class,
+        EntriesPreview::class,
         EntriesPublish::class,
         EntriesUnpublish::class,
         EntriesDelete::class,
