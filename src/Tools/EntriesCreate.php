@@ -34,7 +34,7 @@ class EntriesCreate extends Tool
             'collection' => $schema->string()->description('Collection handle.')->required(),
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
-            'parent' => $schema->string()->description('Entry id of the page to nest the new entry under, on a structured collection. Omit it for the top level.'),
+            'parent' => $schema->string()->description('Entry id of the page to nest the new entry under, on a structured collection. Omit it, or pass "", for the top level.'),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
             'date' => $schema->string()->description('Entry date (e.g. 2026-07-09 or 2026-07-09 15:30). Required for dated collections; rejected otherwise.'),
         ];

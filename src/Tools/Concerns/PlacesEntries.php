@@ -16,9 +16,13 @@ trait PlacesEntries
      */
     protected function placementTree(CollectionContract $collection, string $site): ?CollectionTree
     {
-        return $collection->hasStructure() && ! $collection->orderable()
-            ? $collection->structure()->in($site)
-            : null;
+        if (! $collection->hasStructure() || $collection->orderable()) {
+            return null;
+        }
+
+        // A tree read earlier in the request lacks the entries saved since,
+        // so flush it first, as Entry::save() does for orderable collections.
+        return $collection->structure()->flushCache($site)->in($site);
     }
 
     protected function cannotNest(CollectionContract $collection): ToolException
@@ -29,13 +33,19 @@ trait PlacesEntries
     }
 
     /**
-     * The page to nest under, or null for the top level, which is also where
-     * the CP places an entry whose parent is the root page. The tree of one
-     * collection and site lists all of its entries, the ones missing from the
-     * stored tree included.
+     * The page an entry goes under, or null for the top level: '' asks for
+     * it, and the root page stands for it, as in the CP. When an existing
+     * entry moves, $moving is its own page: it can't go under itself or its
+     * descendants, and its descendants count toward max_depth. The tree of
+     * one collection and site lists all of its entries, the ones missing from
+     * the stored tree included.
      */
-    protected function resolveParent(string $parent, CollectionTree $tree): ?Page
+    protected function resolveParent(string $parent, CollectionTree $tree, ?Page $moving = null): ?Page
     {
+        if ($parent === '') {
+            return null;
+        }
+
         $handle = $tree->collection()->handle();
         $page = $tree->find($parent);
 
@@ -47,19 +57,54 @@ trait PlacesEntries
             return null;
         }
 
-        $maxDepth = $tree->structure()->maxDepth();
+        $height = 0;
 
-        if ($maxDepth && $page->depth() >= $maxDepth) {
-            throw new ToolException("parent '{$parent}' is at depth {$page->depth()} and collection '{$handle}' allows {$maxDepth} levels (max_depth) — pick a parent higher up, or omit parent for the top level");
+        if ($moving) {
+            $this->ensureMovableUnder($page, $moving, $handle);
+
+            $height = $moving->flattenedPages()->map->depth()->push($moving->depth())->max() - $moving->depth();
+        }
+
+        $maxDepth = $tree->structure()->maxDepth();
+        $depth = $page->depth() + 1 + $height;
+
+        if ($maxDepth && $depth > $maxDepth) {
+            throw new ToolException(sprintf(
+                "parent '%s' is at depth %d, so %s would be at depth %d, past the %d levels collection '%s' allows (max_depth) — pick a parent higher up, or the top level",
+                $parent,
+                $page->depth(),
+                $height > 0 ? "the entry's deepest descendant" : 'the entry',
+                $depth,
+                $maxDepth,
+                $handle,
+            ));
         }
 
         return $page;
     }
 
+    private function ensureMovableUnder(Page $parent, Page $moving, string $handle): void
+    {
+        if ($parent->id() === $moving->id()) {
+            throw new ToolException("entry '{$moving->id()}' can't be its own parent — pass another entry's id, or \"\" for the top level");
+        }
+
+        if ($moving->flattenedPages()->contains(fn (Page $descendant) => $descendant->id() === $parent->id())) {
+            throw new ToolException("parent '{$parent->id()}' is inside entry '{$moving->id()}' — an entry can't move under one of its own descendants");
+        }
+
+        // The first top-level page is the root: moving it would make the
+        // next one the site's root page instead.
+        if ($moving->isRoot()) {
+            throw new ToolException("entry '{$moving->id()}' is the root page of collection '{$handle}' — the root page can't move under another page");
+        }
+    }
+
     /**
-     * appendTo() edits the stored tree, which lacks the entries created
-     * outside the CP until the tree is next saved. Storing the tree the way
-     * it reads first keeps them in their place and lets one be a parent.
+     * appendTo() and move() edit the stored tree, which lacks the entries
+     * created outside the CP until the tree is next saved. Storing the tree
+     * the way it reads first keeps them in their place, and lets one of them
+     * move or be a parent.
      */
     protected function materializeTree(CollectionTree $tree): CollectionTree
     {

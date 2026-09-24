@@ -122,6 +122,22 @@ it('places an entry whose parent is the root page at the top level', function ()
     expect(Fixtures::storedPagesTree())->toBe([['entry' => $home], ['entry' => $about], ['entry' => Fixtures::pageId('contact')]]);
 });
 
+it('places an entry at the top level when parent is an empty string', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Contact'], 'parent' => ''])
+        ->assertOk()
+        ->assertSee('"url":"/contact"')
+        ->assertSee('"parent":null');
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about], ['entry' => Fixtures::pageId('contact')]]);
+});
+
 it('rejects a parent that is not an entry of the collection', function () {
     Fixtures::site();
     Fixtures::tags();
@@ -164,7 +180,7 @@ it('rejects a parent that would nest the entry deeper than max_depth', function 
 
     Server::actingAs(Fixtures::makeUser('create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => $team])
-        ->assertHasErrors(["parent '{$team}' is at depth 2 and collection 'pages' allows 2 levels (max_depth) — pick a parent higher up, or omit parent for the top level"]);
+        ->assertHasErrors(["parent '{$team}' is at depth 2, so the entry would be at depth 3, past the 2 levels collection 'pages' allows (max_depth) — pick a parent higher up, or the top level"]);
 
     Server::actingAs(Fixtures::makeUser('create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Jobs'], 'parent' => $about])
