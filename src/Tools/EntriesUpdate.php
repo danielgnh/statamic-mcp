@@ -20,6 +20,7 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Structures\CollectionTree;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
@@ -234,6 +235,11 @@ class EntriesUpdate extends Tool
 
         $placement = $this->applyMove($target, $move, workingCopy: true);
 
+        // Statamic caches URIs by entry id and the working copy shares the
+        // live entry's id, so forget it for the staged URL, and again after
+        // so the staged URL never sticks to the live entry.
+        Blink::store('entry-uris')->forget($target->id());
+
         $payload = [
             'id' => $target->id(),
             'slug' => $target->slug(),
@@ -241,6 +247,8 @@ class EntriesUpdate extends Tool
             'url' => $target->url(),
             ...$this->liveness($target, $amending ? self::LIVENESS_WORKING_COPY_AMENDED : self::LIVENESS_WORKING_COPY),
         ];
+
+        Blink::store('entry-uris')->forget($target->id());
 
         if ($collection->dated()) {
             $payload['date'] = $target->date()?->toIso8601String();
