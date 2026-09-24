@@ -21,7 +21,8 @@ always Statamic's native permission system. Four gates, in order:
 
 Entry creates and updates **never publish**. Creates save drafts. On revision-enabled
 collections, edits to a live entry become working copies and the live entry is never
-touched. Going live is a separate tool, `entries_publish`, and it needs the publish
+touched. Without revisions, an edit to a live entry saves straight to it, as it would
+in the CP. Going live is a separate tool, `entries_publish`, and it needs the publish
 permission. Two things follow from that split. A role without the publish permission
 cannot publish through MCP at all, whatever the agent sends. And because publishing is
 its own tool, MCP clients ask about it separately: you can allow `entries_update` for
@@ -37,8 +38,13 @@ state, so writes to them are live immediately.
 2. CP → Users → create `claude@your-site.com` with role `content-agent`.
 3. `php please mcp:token claude@your-site.com --name="Blog agent"`.
 
-Every write this agent makes lands as a draft; it cannot publish, delete, or even see
-other collections in `statamic_overview`.
+Entries this agent creates are drafts, and it cannot publish, delete, or even see other
+collections in `statamic_overview`. Its edits to entries that are already live depend on
+the collection. With revisions enabled, an edit becomes a working copy and the live
+entry stays unchanged until someone publishes it. Without revisions, the edit saves
+straight to the live entry, as it would in the CP. Statamic has no permission for
+editing live entries specifically, so if this agent must never change live content,
+enable revisions on the collection. Revisions need Statamic Pro.
 
 **A read-only analyst:** either set `'read_only' => true` server-wide, or give the
 agent's role only `Access MCP` + `View … entries` permissions — both work, use the
