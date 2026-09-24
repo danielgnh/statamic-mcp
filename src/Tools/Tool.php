@@ -18,7 +18,8 @@ use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
 
 /**
- * Base class for every MCP tool.
+ * Base class for every MCP tool, host-app tools included: the protected
+ * helpers are public API.
  *
  * Each tool's execute() re-validates the request and re-checks the write/delete
  * gates itself: laravel/mcp enforces neither the declared JSON schema nor

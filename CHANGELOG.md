@@ -10,6 +10,13 @@ called out here explicitly.
 
 ### Added
 
+- **Your own tools.** The new `server` config key names the laravel/mcp server
+  class to mount. Extend `Danielgnh\StatamicMcp\Server`, spread `Server::TOOLS`
+  into `$tools`, add your classes, and they run behind the addon's auth
+  middleware and `Access MCP` gate. `Danielgnh\StatamicMcp\Tools\Tool` is now
+  the documented base for host-app tools. A `server` value that is not a
+  laravel/mcp server fails closed at boot, and `mcp:doctor` names it with the
+  remedy. See "Your own tools" in the README and `docs/tools.md`.
 - **Database-managed Passport keys** — the signing pair now lives where the
   rest of the OAuth state already does: a new `statamic_mcp_oauth_keys` table
   (private key only — the public half is derived — encrypted at rest with
