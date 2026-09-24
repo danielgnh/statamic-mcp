@@ -227,10 +227,10 @@ it('refuses to cascade into a localization site the user cannot access', functio
 
     [$origin, $localization] = makeDeletableLocalizedPair();
 
-    // 'en' is the default site (never gated); 'de' needs 'access de site'.
-    // CP parity: the Delete action only offers cascade when the user can
-    // access every descendant's site.
-    $user = Fixtures::makeUser('delete blog entries');
+    // The origin's site is accessible, the localization's is not. CP parity:
+    // the Delete action only offers cascade when the user can access every
+    // descendant's site.
+    $user = Fixtures::makeUser('delete blog entries', 'access en site');
 
     Server::actingAs($user)
         ->tool(EntriesDelete::class, ['id' => $origin->id()])
@@ -296,7 +296,7 @@ it('refuses to cascade when a deeper localization site is inaccessible', functio
 
     // Access to the direct child's site is not enough — the gate must sweep
     // every level of the chain before anything is deleted.
-    $user = Fixtures::makeUser('delete blog entries', 'access de site');
+    $user = Fixtures::makeUser('delete blog entries', 'access en site', 'access de site');
 
     Server::actingAs($user)
         ->tool(EntriesDelete::class, ['id' => $origin->id()])

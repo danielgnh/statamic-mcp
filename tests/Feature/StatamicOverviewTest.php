@@ -117,19 +117,22 @@ it('reports the read_only server flag and forces the deletes flag off', function
         ->assertSee('"server":{"read_only":true,"deletes":false}');
 });
 
-it('flags per-site access under multisite, never gating the default site', function () {
+it('flags per-site access under multisite, the default site included', function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser('view blog entries'); // no 'access de site'
-
-    Server::actingAs($user)
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access en site'))
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        // ensureSiteAccess never gates the default site, so en stays accessible
         ->assertSee('"locale":"en_US","can_access":true')
         ->assertSee('"locale":"de_DE","can_access":false');
+
+    // CP parity: Statamic's SitePolicy gates the default site like any other.
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"en_US","can_access":false');
 });
 
 it('reflects a granted site permission in the can_access flag', function () {

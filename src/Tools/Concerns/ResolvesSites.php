@@ -12,8 +12,8 @@ trait ResolvesSites
 {
     /**
      * The requested site (default: Site::default()), validated against the
-     * configured sites, with 'access {site} site' enforced for non-default
-     * sites on multisite installs. Pass $validSites to limit the
+     * configured sites, with 'access {site} site' enforced on multisite
+     * installs. Pass $validSites to limit the
      * check to a resource's own configured sites (taxonomies, global sets);
      * when omitted, every configured site is valid (entries).
      *
@@ -68,11 +68,12 @@ trait ResolvesSites
     /**
      * The single source of truth for site access — statamic_overview's
      * advertised can_access flag and the enforcement above must never drift
-     * apart.
+     * apart. CP parity (SitePolicy::view): every site is gated, the default
+     * site included.
      */
     protected function canAccessSite(UserContract $user, string $site): bool
     {
-        if (! Site::multiEnabled() || $site === Site::default()->handle()) {
+        if (! Site::multiEnabled()) {
             return true;
         }
 
