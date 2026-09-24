@@ -618,7 +618,7 @@ it('rejects an empty date instead of silently ignoring it', function () {
 
     Server::actingAs(Fixtures::makeUser('edit events entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Launch Party'], 'date' => ''])
-        ->assertHasErrors(['date is empty — pass e.g. 2026-07-09 or 2026-07-09 15:30, or omit date']);
+        ->assertHasErrors(['date is empty — pass e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00, or omit date']);
 
     expect(Entry::find($entry->id())->date()->format('Y-m-d'))->toBe('2026-08-01');
 });

@@ -76,6 +76,22 @@ it('filters by status via whereStatus', function () {
         ->assertSee('"total":1');
 });
 
+it('filters expired entries on a collection whose past dates are private', function () {
+    Fixtures::site();
+    Fixtures::news(future: 'public', past: 'private');
+
+    Entry::make()->collection('news')->slug('old-story')->data(['title' => 'Old'])->date(now()->subWeek())->published(true)->save();
+    Entry::make()->collection('news')->slug('next-story')->data(['title' => 'Next'])->date(now()->addWeek())->published(true)->save();
+    Entry::make()->collection('news')->slug('old-draft')->data(['title' => 'Draft'])->date(now()->subWeek())->published(false)->save();
+
+    Server::actingAs(Fixtures::makeUser('view news entries'))
+        ->tool(EntriesList::class, ['collection' => 'news', 'status' => 'expired'])
+        ->assertOk()
+        ->assertSee('old-story')
+        ->assertSee('"status":"expired"')
+        ->assertSee('"total":1');
+});
+
 it('paginates with totals and a next-page hint, capping per_page at 100', function () {
     Fixtures::site();
     Fixtures::tags();

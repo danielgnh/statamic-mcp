@@ -20,7 +20,7 @@ use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and server flags (read_only, deletes). When the site has written guidelines for agents (voice, tone, rules for all content), they come back in guidelines — follow them in everything you write.')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site has written guidelines for agents (voice, tone, rules for all content), they come back in guidelines — follow them in everything you write.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -52,6 +52,7 @@ class StatamicOverview extends Tool
             'server' => [
                 'read_only' => ! $this->writesEnabled(),
                 'deletes' => $this->deletesEnabled(),
+                'timezone' => config('app.timezone'),
             ],
             ...array_filter(['guidelines' => app(GuidelineFiles::class)->site()]),
         ]);
@@ -105,6 +106,13 @@ class StatamicOverview extends Tool
                     'can_edit' => $this->can($user, "edit {$handle} entries"),
                     'can_publish' => $this->can($user, "publish {$handle} entries"),
                 ];
+
+                if ($collection->dated()) {
+                    $resource['date_behavior'] = [
+                        'future' => $collection->futureDateBehavior(),
+                        'past' => $collection->pastDateBehavior(),
+                    ];
+                }
 
                 if ($this->deletesEnabled()) {
                     $resource['can_delete'] = $this->can($user, "delete {$handle} entries");

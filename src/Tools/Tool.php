@@ -34,6 +34,10 @@ abstract class Tool extends BaseTool
 
     public const LIVENESS_PUBLISHED_WORKING_COPY = 'published — working copy is now live';
 
+    public const LIVENESS_SCHEDULED = 'scheduled — published, but not live until its date';
+
+    public const LIVENESS_EXPIRED = 'expired — published, but its date has passed, not live';
+
     public const LIVENESS_UNPUBLISHED = 'unpublished — not live';
 
     public const LIVENESS_UNPUBLISHED_WORKING_COPY = 'unpublished — working copy applied, not live';
@@ -206,6 +210,22 @@ abstract class Tool extends BaseTool
             'result' => $state,
             'cp_edit_url' => $saved->editUrl(),
         ];
+    }
+
+    /**
+     * Liveness for an entry that was just saved live. On dated collections a
+     * published entry is only live when its date allows it, so the result
+     * follows status() and $whenLive applies only when nothing overrides it.
+     *
+     * @return array{result: string, cp_edit_url: mixed}
+     */
+    protected function entryLiveness(EntryContract $entry, string $whenLive): array
+    {
+        return $this->liveness($entry, match ($entry->status()) {
+            'scheduled' => self::LIVENESS_SCHEDULED,
+            'expired' => self::LIVENESS_EXPIRED,
+            default => $whenLive,
+        });
     }
 
     /**

@@ -72,7 +72,7 @@ it('requires date for dated collections', function () {
 
     Server::actingAs(Fixtures::makeUser('create events entries'))
         ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => ['title' => 'Launch Party']])
-        ->assertHasErrors(["collection 'events' is dated — pass date (e.g. 2026-07-09 or 2026-07-09 15:30)"]);
+        ->assertHasErrors(["collection 'events' is dated — pass date (e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00)"]);
 
     Server::actingAs(Fixtures::makeUser('create events entries'))
         ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => ['title' => 'Launch Party'], 'date' => '2026-08-01'])
