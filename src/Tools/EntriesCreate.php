@@ -12,13 +12,14 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
+use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site.')]
 class EntriesCreate extends Tool
 {
     use NormalizesEntryInput;
@@ -32,6 +33,7 @@ class EntriesCreate extends Tool
             'collection' => $schema->string()->description('Collection handle.')->required(),
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
+            'parent' => $schema->string()->description('Entry id of the page to nest the new entry under, on a structured collection. Omit it for the top level.'),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
             'date' => $schema->string()->description('Entry date (e.g. 2026-07-09 or 2026-07-09 15:30). Required for dated collections; rejected otherwise.'),
         ];
@@ -53,6 +55,7 @@ class EntriesCreate extends Tool
                 'collection' => 'required|string',
                 'data' => 'required|array',
                 'slug' => 'nullable|string',
+                'parent' => 'nullable|string',
                 'site' => 'nullable|string',
                 'date' => 'nullable|string',
             ],
@@ -96,6 +99,8 @@ class EntriesCreate extends Tool
         $tree = $collection->hasStructure() && ! $collection->orderable()
             ? $collection->structure()->in($site)
             : null;
+
+        $parent = $this->resolveParent($validated['parent'] ?? null, $collection, $site, $tree);
 
         // Reject the ambiguous slug/date-in-data spelling BEFORE blueprint
         // validation so our targeted error beats the validator's raw
@@ -141,9 +146,10 @@ class EntriesCreate extends Tool
         if ($tree) {
             // appendTo() edits the stored tree, which lacks the entries created
             // outside the CP until the tree is next saved. Storing the tree the
-            // way it reads keeps them in their place; this entry comes out of
-            // it first, since the read may already list it at the top level.
-            $entry->afterSave(fn ($entry) => $tree->tree($tree->tree())->remove($entry)->appendTo(null, $entry)->save());
+            // way it reads keeps them in their place and lets one be a parent;
+            // this entry comes out of it first, since the read may already
+            // list it at the top level.
+            $entry->afterSave(fn ($entry) => $tree->tree($tree->tree())->remove($entry)->appendTo($parent, $entry)->save());
         }
 
         // CP parity: created entries carry updated_by/updated_at. save()
@@ -175,7 +181,50 @@ class EntriesCreate extends Tool
             $payload['date'] = $entry->date()?->toIso8601String();
         }
 
+        if ($tree) {
+            $payload['parent'] = $parent;
+        }
+
         return $this->json($payload);
+    }
+
+    /**
+     * The page the new entry goes under, or null for the top level, which is
+     * also where the CP places an entry whose parent is the root page.
+     */
+    private function resolveParent(?string $parent, CollectionContract $collection, string $site, ?CollectionTree $tree): ?string
+    {
+        if ($parent === null) {
+            return null;
+        }
+
+        $handle = $collection->handle();
+
+        if (! $tree instanceof CollectionTree) {
+            throw new ToolException($collection->hasStructure()
+                ? "collection '{$handle}' is a flat, orderable list (max_depth 1) — omit parent"
+                : "collection '{$handle}' has no tree — omit parent; only structured collections nest entries");
+        }
+
+        // The tree of one collection and site lists all of its entries, the
+        // ones missing from the stored tree included.
+        $page = $tree->find($parent);
+
+        if (! $page) {
+            throw new ToolException("parent '{$parent}' not found in collection '{$handle}' (site '{$site}') — pass the id of one of its entries in that site");
+        }
+
+        if ($page->isRoot()) {
+            return null;
+        }
+
+        $maxDepth = $collection->structure()->maxDepth();
+
+        if ($maxDepth && $page->depth() >= $maxDepth) {
+            throw new ToolException("parent '{$parent}' is at depth {$page->depth()} and collection '{$handle}' allows {$maxDepth} levels (max_depth) — pick a parent higher up, or omit parent for the top level");
+        }
+
+        return $parent;
     }
 
     private function resolveDate(?string $date, CollectionContract $collection): ?Carbon
