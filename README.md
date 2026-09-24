@@ -4,7 +4,7 @@
 [![Tests](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, and assets. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
+Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
 
 It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package. Until 1.0, a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
 
@@ -83,7 +83,7 @@ To restrict an agent, give it its own user and role. A drafting agent for the bl
 
 That agent can create blog drafts and edit blog entries. It can't publish, delete, or see any other collection. If the blog blueprint has an author field, it can only edit entries it's an author of, which includes the ones it creates. That's the same rule the Control Panel applies.
 
-Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, and asset containers MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
+Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, asset containers, and navigations MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
 
 [docs/permissions.md](docs/permissions.md) has more recipes, including read-only, publishing, and multi-site agents.
 
@@ -96,7 +96,7 @@ Three config options restrict every user at once. `read_only` hides all write to
 
 Publishing is its own tool, `entries_publish`, and it needs the collection's publish permission. Because it's a separate tool, your MCP client asks you about it separately. You can let an agent call `entries_update` all session and still approve each publish yourself.
 
-Terms, globals, and assets have no draft state. Writes to them go live immediately.
+Terms, globals, assets, and navigations have no draft state. Writes to them go live immediately.
 
 ## Tools
 
@@ -106,6 +106,7 @@ Terms, globals, and assets have no draft state. Writes to them go live immediate
 | Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_publish`, `entries_unpublish`, `entries_delete` |
 | Taxonomy terms | `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete` |
 | Globals | `globals_get`, `globals_update` |
+| Navigation | `navigations_get`, `navigations_update` |
 | Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
 
 The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The three delete tools only exist when `deletes` is on.
@@ -177,7 +178,7 @@ This creates `config/statamic/mcp.php`.
 | `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. |
 | `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. |
 | `deletes` | `false` | Registers the delete tools. Set with `STATAMIC_MCP_DELETES`. |
-| `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, and `asset_containers`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
+| `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, `asset_containers`, and `navigations`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |

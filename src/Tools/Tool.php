@@ -13,6 +13,7 @@ use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
 use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
@@ -84,7 +85,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      *
      * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
      * by design; the error lists only exposed handles.
@@ -99,7 +100,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
      * @return list<string> handles that exist AND pass config('statamic.mcp.resources.{$type}')
      */
     protected function exposedHandles(string $type): array
@@ -115,6 +116,7 @@ abstract class Tool extends BaseTool
             'taxonomies' => Taxonomy::handles()->all(),
             'globals' => GlobalSet::all()->map->handle()->values()->all(),
             'asset_containers' => AssetContainer::all()->map->handle()->values()->all(),
+            'navigations' => Nav::all()->map->handle()->values()->all(),
         };
 
         return $configured === true

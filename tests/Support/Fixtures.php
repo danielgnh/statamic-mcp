@@ -9,7 +9,9 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
 use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
@@ -120,6 +122,24 @@ class Fixtures
         ])->setHandle('page')->setNamespace('collections.pages')->save();
     }
 
+    // An entry of the pages collection: call pages() first. Returns its id.
+    public static function page(string $slug, string $title, string $site = 'en', bool $published = true): string
+    {
+        return tap(
+            Entry::make()->collection('pages')->locale($site)->slug($slug)->data(['title' => $title])->published($published)
+        )->save()->id();
+    }
+
+    // Gives an existing collection a tree, with URLs that follow its nesting:
+    // call pages() first. max_depth 1 makes it a flat, orderable list.
+    public static function structure(string $collection = 'pages', ?int $maxDepth = null, bool $root = false): void
+    {
+        Collection::findByHandle($collection)
+            ->structureContents(['root' => $root, 'max_depth' => $maxDepth])
+            ->routes('{parent_uri}/{slug}')
+            ->save();
+    }
+
     // Call assetContainer('images') first: the single-file fields point at it.
     public static function landing(): void
     {
@@ -183,6 +203,28 @@ class Fixtures
         $set->makeLocalization(Site::default()->handle())
             ->data(['site_name' => 'Acme'])
             ->save();
+    }
+
+    // Links entries of the pages collection: call pages() first. Every site
+    // gets an empty tree, the way the CP creates one.
+    public static function nav(string $handle = 'main', ?int $maxDepth = null, bool $root = false): void
+    {
+        $nav = Nav::make($handle)
+            ->title(Str::headline($handle))
+            ->collections(['pages'])
+            ->maxDepth($maxDepth)
+            ->expectsRoot($root);
+
+        $nav->save();
+
+        foreach (Site::all()->keys() as $site) {
+            $nav->makeTree($site)->save();
+        }
+
+        Blueprint::makeFromFields([
+            'icon' => ['type' => 'text', 'validate' => 'max:30'],
+            'new_tab' => ['type' => 'toggle'],
+        ])->setHandle($handle)->setNamespace('navigation')->save();
     }
 
     /**
