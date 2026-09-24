@@ -75,7 +75,9 @@ else's.
 it to the role. `navigations_update` can then replace the Main navigation's tree. The
 tools check these per-navigation permissions and ignore `Configure Navigation`. The CP
 treats that one as access to every navigation and hides the per-navigation checkboxes
-while it is ticked, so untick it to grant them.
+while it is ticked, so untick it to grant them. On multi-site installs the role also
+needs `Access {site} site` for each site whose menu the agent reads or changes, the
+default site included, as in the CP.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
 add `Delete blog entries` to the role. Both gates must open. With an `author` field,
