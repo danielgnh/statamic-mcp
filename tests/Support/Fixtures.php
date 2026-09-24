@@ -10,6 +10,7 @@ use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
 use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
@@ -152,6 +153,28 @@ class Fixtures
         $set->makeLocalization(Site::default()->handle())
             ->data(['site_name' => 'Acme'])
             ->save();
+    }
+
+    // Links entries of the pages collection: call pages() first. Every site
+    // gets an empty tree, the way the CP creates one.
+    public static function nav(string $handle = 'main', ?int $maxDepth = null, bool $root = false): void
+    {
+        $nav = Nav::make($handle)
+            ->title(Str::headline($handle))
+            ->collections(['pages'])
+            ->maxDepth($maxDepth)
+            ->expectsRoot($root);
+
+        $nav->save();
+
+        foreach (Site::all()->keys() as $site) {
+            $nav->makeTree($site)->save();
+        }
+
+        Blueprint::makeFromFields([
+            'icon' => ['type' => 'text', 'validate' => 'max:30'],
+            'new_tab' => ['type' => 'toggle'],
+        ])->setHandle($handle)->setNamespace('navigation')->save();
     }
 
     /**

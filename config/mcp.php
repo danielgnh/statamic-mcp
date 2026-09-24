@@ -20,6 +20,7 @@ return [
         'taxonomies' => true,
         'globals' => true,
         'asset_containers' => true,
+        'navigations' => true,
     ],
 
     'per_page' => 25,
