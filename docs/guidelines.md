@@ -34,6 +34,8 @@ The agent receives:
 {
   "handle": "page_builder",
   "type": "replicator",
+  "required": false,
+  "rules": ["array", "nullable"],
   "sets": [
     {
       "handle": "hero",
