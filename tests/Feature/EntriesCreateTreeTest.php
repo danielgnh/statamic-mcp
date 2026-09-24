@@ -61,6 +61,23 @@ it('nests a new entry under its parent', function () {
     ]);
 });
 
+it('makes the acting user the author of an entry it nests under a parent', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+    Fixtures::authors('pages');
+
+    $about = Fixtures::page('about', 'About');
+    $user = Fixtures::makeUser('create pages entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => $about])
+        ->assertOk()
+        ->assertSee('"url":"/about/team"');
+
+    expect(Entry::query()->where('collection', 'pages')->where('slug', 'team')->first()->get('author'))->toBe($user->id());
+});
+
 it('nests under a parent the stored tree does not list yet', function () {
     Fixtures::site();
     Fixtures::pages();

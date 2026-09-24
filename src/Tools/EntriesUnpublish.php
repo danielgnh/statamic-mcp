@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -12,10 +13,11 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('entries_unpublish')]
-#[Description('Take a live entry offline by id. Requires the publish permission for the collection (Statamic has no separate unpublish permission — the Control Panel gates both on publish). On revision-enabled collections this records an unpublish revision attributed to you; a staged working copy is applied to the entry and cleared, exactly like the Control Panel. An entry that is already a draft is a no-op.')]
+#[Description('Take a live entry offline by id. Requires the publish permission for the collection (Statamic has no separate unpublish permission — the Control Panel gates both on publish), or \'publish other authors {collection} entries\' for an entry you are not an author of when the blueprint has an author field. On revision-enabled collections this records an unpublish revision attributed to you; a staged working copy is applied to the entry and cleared, exactly like the Control Panel. An entry that is already a draft is a no-op.')]
 #[IsIdempotent]
 class EntriesUnpublish extends Tool
 {
+    use AuthorizesEntries;
     use ResolvesEntries;
     use ResolvesSites;
 
@@ -42,9 +44,7 @@ class EntriesUnpublish extends Tool
 
         $entry = $this->findExposedEntry($validated['id'], $user);
 
-        $collection = $entry->collection()->handle();
-
-        $this->ensurePermission($user, "publish {$collection} entries");
+        $this->ensureEntryPermission($user, 'publish', $entry);
 
         if (! $entry->published()) {
             return $this->json([

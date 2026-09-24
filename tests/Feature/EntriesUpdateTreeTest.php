@@ -330,7 +330,7 @@ it('rejects a parent that is not an entry of the collection in its site', functi
     $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
 
     foreach (['no-such-entry', $post, $ueber] as $parent) {
-        Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries', 'access en site'))
             ->tool(EntriesUpdate::class, ['id' => $team, 'data' => [], 'parent' => $parent])
             ->assertHasErrors(["parent '{$parent}' not found in collection 'pages' (site 'en') — pass the id of one of its entries in that site"]);
     }

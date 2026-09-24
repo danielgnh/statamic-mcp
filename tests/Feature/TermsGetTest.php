@@ -246,7 +246,7 @@ it('reports updated_at with default-locale fallback and strips it from raw data'
     $term->dataForLocale('de', ['title' => 'PHP (DE)']);
     $term->save();
 
-    $user = Fixtures::makeUser('view tags terms', 'access de site');
+    $user = Fixtures::makeUser('view tags terms', 'access en site', 'access de site');
 
     // de has no local updated_at — value('updated_at') recurses to the default
     // locale (T17 coherence decision), while the raw data/inherited blocks stay

@@ -16,9 +16,13 @@ always Statamic's native permission system. Four gates, in order:
    `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry
    with `parent` on `entries_update` also takes `reorder {handle} entries`. Publish
    state changes only through `entries_publish` and `entries_unpublish`, both gated on
-   `publish {handle} entries`, the same permission the CP checks. Non-default-site
-   writes require `access {site} site` (the default site is never gated by a site
-   permission). Denials name the missing permission and the remedy.
+   `publish {handle} entries`, the same permission the CP checks. When a collection's
+   blueprint has an `author` field, editing, publishing, or deleting an entry the user
+   is not an author of takes `edit other authors {handle} entries`,
+   `publish other authors {handle} entries`, or `delete other authors {handle} entries`
+   instead, as in Statamic's own entry policy. An entry with no author counts as
+   someone else's. On multi-site installs every site needs `access {site} site`, the
+   default site included. Denials name the missing permission and the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
 
 Entry creates and updates **never publish**. Creates save drafts. On revision-enabled
@@ -30,6 +34,12 @@ cannot publish through MCP at all, whatever the agent sends. And because publish
 its own tool, MCP clients ask about it separately: you can allow `entries_update` for
 a session and still approve each publish by hand. Terms and globals have no draft
 state, so writes to them are live immediately.
+
+On a blueprint with an `author` field, `entries_create` makes the acting user the
+author unless `data` names one. Naming anyone else, and changing an entry's author
+with `entries_update`, needs `edit other authors {handle} entries`. `statamic_overview`
+reports the other-authors permissions per collection and the acting user's `id`, so an
+agent can tell which entries are its own.
 
 ## Recipes
 
@@ -48,19 +58,27 @@ straight to the live entry, as it would in the CP. Statamic has no permission fo
 editing live entries specifically, so if this agent must never change live content,
 enable revisions on the collection. Revisions need Statamic Pro.
 
+If the blog blueprint has an `author` field, this agent can only edit entries it is an
+author of, which includes every entry it creates. Add `Edit other authors blog entries`
+to let it edit everyone's.
+
 **A read-only analyst:** either set `'read_only' => true` server-wide, or give the
 agent's role only `Access MCP` + `View … entries` permissions — both work, use the
 role when other agents on the same server still need write access.
 
 **A publishing agent:** add `Publish blog entries` to the role. `entries_publish` and
 `entries_unpublish` now work, on revision-enabled collections too, where they promote
-or apply the working copy the same way the CP does.
+or apply the working copy the same way the CP does. With an `author` field, that
+covers the agent's own entries. Add `Publish other authors blog entries` for everyone
+else's.
 
 **A menu agent:** add `View Main navigation` and the `Edit navigation` permission under
 it to the role. `navigations_update` can then replace the Main navigation's tree. The
 tools check these per-navigation permissions and ignore `Configure Navigation`. The CP
 treats that one as access to every navigation and hides the per-navigation checkboxes
-while it is ticked, so untick it to grant them.
+while it is ticked, so untick it to grant them. On multi-site installs the role also
+needs `Access {site} site` for each site whose menu the agent reads or changes, the
+default site included, as in the CP.
 
 **An agent that restructures pages:** add `Reorder entries` under `View pages entries`
 to the role, next to `Edit entries`. `entries_update` can then move pages with `parent`.
@@ -69,12 +87,10 @@ off the role of an agent whose changes must wait for a person. Creating a page u
 parent needs only `Create entries`, as in the CP.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
-add `Delete blog entries` to the role. Both gates must open.
+add `Delete blog entries` to the role. Both gates must open. With an `author` field,
+deleting other people's entries also needs `Delete other authors blog entries`.
 
 **Scoping to one site of a multi-site install:** grant `Access {site} site` for only
-that site — writes to other non-default sites are denied with the exact missing
-permission named. **Know the exemption:** the default site is never gated by a site
-permission, so granting only `Access fr site` still leaves default-site content open
-to the agent's content permissions. To truly confine an agent, scope its **content**
-permissions instead, or make the agent's target site the default. (Site permissions
-only exist on multi-site installs.)
+that site. Every site is gated, the default site included, so an agent with only
+`Access fr site` can't read or write default-site content, and each denial names the
+missing permission. Site permissions only exist on multi-site installs.

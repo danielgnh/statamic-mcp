@@ -86,6 +86,10 @@ class TermsCreate extends Tool
 
         $blueprint = $taxonomy->termBlueprint();
 
+        if (array_key_exists('slug', $data)) {
+            throw new ToolException('pass slug as a top-level parameter, not inside data');
+        }
+
         $this->rejectUnknownKeys($blueprint, $data);
 
         // Resolve the slug BEFORE blueprint validation: v6 injects a required
