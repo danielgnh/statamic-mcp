@@ -67,7 +67,9 @@ called out here explicitly.
   they promote or apply the staged working copy and record an attributed
   revision, which until now only the CP could do. Because each is a separate
   tool, MCP clients prompt for it separately: allowing `entries_update` no
-  longer lets an agent go live.
+  longer lets an agent publish. On a dated collection without revisions,
+  changing the date of an entry that is already published still decides
+  whether it is live, as in the CP.
 - `entries_preview` returns a short-lived URL that renders an entry through the
   site's templates using Statamic's Live Preview, so an agent can check a draft
   without a human opening the browser. On revision-enabled entries the page
@@ -84,20 +86,6 @@ called out here explicitly.
   the documented base for host-app tools. A `server` value that is not a
   laravel/mcp server fails closed at boot, and `mcp:doctor` names it with the
   remedy. See "Your own tools" in the README and `docs/tools.md`.
-- **Database-managed Passport keys** — the signing pair now lives where the
-  rest of the OAuth state already does: a new `statamic_mcp_oauth_keys` table
-  (private key only — the public half is derived — encrypted at rest with
-  `APP_KEY`), injected into Passport just in time as its servers resolve.
-  Deploys need no key step anymore: once `php artisan migrate` has run, the
-  first OAuth request provisions a pair automatically (race-safe across a
-  fleet), every server reads the same copy, and releases and read-only
-  filesystems are a non-issue. Existing setups keep working untouched —
-  `PASSPORT_*` env keys take precedence, and `storage/oauth-*.key` files are
-  adopted into the database on first use.
-- `mcp:doctor` names the key source (environment config / database / key
-  files / pending provision) and fails with a dedicated remedy when the stored
-  key can't be decrypted after an `APP_KEY` change — deliberately never
-  regenerating over it, which would silently disconnect every client.
 - `statamic_overview` reports the acting user's `id`, and collections whose
   blueprint has an `author` field add `can_edit_other_authors`,
   `can_publish_other_authors`, and `can_delete_other_authors`.
@@ -121,13 +109,6 @@ called out here explicitly.
   `published`. Creates always save a draft and updates never touch publish
   state. The parameter is rejected with a pointer to `entries_publish`, so a
   client with a stale tool cache cannot save a draft it believes is live.
-- `mcp:keys` mirrors the runtime precedence exactly (config → database → key
-  files), generates into the database when its table exists (key files remain
-  the pre-migrate fallback), adopts existing key files into the store, and
-  refuses to touch an undecryptable stored key.
-- `mcp:setup` provisions keys **after** the migrate step so they land in the
-  database, and declining the key step is no longer fatal — the first OAuth
-  request self-provisions.
 - A date without an offset is now parsed in `app.timezone` explicitly, instead
   of relying on PHP's default timezone. Laravel sets the two to the same value,
   so behavior is unchanged. Date examples in tool descriptions and errors now
@@ -138,11 +119,17 @@ called out here explicitly.
   `edit other authors {collection} entries`.
 - `laravel/mcp` 0.9 and 1.x are supported alongside 0.8, and nothing changes
   on 0.8. On 1.x, clients on the 2026-07-28 protocol revision connect through
-  `server/discover`, clients that open with `initialize` keep working, and
-  JSON-RPC errors come back as HTTP 400, 404, or 500 instead of 200.
-  laravel/mcp 0.9.6 and 1.0.1 fix the loopback redirect URI check in OAuth
-  client registration, and 0.8 won't get that fix. Upgrade if you run OAuth
-  mode and have narrowed `mcp.redirect_domains`.
+  `server/discover`, clients that open with `initialize` keep working on
+  protocol 2025-06-18 or newer (1.x answers an older version with 2025-11-25,
+  which such a client may refuse), and JSON-RPC errors come back as HTTP 400,
+  404, or 500 instead of 200. laravel/mcp 0.9.6 and 1.0.1 fix the loopback
+  redirect URI check in OAuth client registration, and 0.8 won't get that fix.
+  Upgrade if you run OAuth mode and have narrowed `mcp.redirect_domains`.
+- `entries_get` names the entry's blueprint at the top level and leaves it out
+  of raw `data`. In a collection with more than one blueprint, Statamic stores
+  the blueprint in each entry's data, so writing back what `entries_get`
+  returned failed with "field blueprint is reserved". `entries_update` ignores
+  the entry's own blueprint in `data` and still refuses another one.
 
 ### Fixed
 
@@ -150,7 +137,9 @@ called out here explicitly.
   collection's tree, as the CP does. Its response used to say `url: null` for
   such an entry, and the entry only appeared at the end of the top level when
   the tree was next read. The tree file also gains any entries it was missing,
-  in the order Statamic already listed them.
+  in the order Statamic already listed them. Tree edits take a lock per
+  collection and site and read the tree afresh inside it, so parallel creates
+  and moves no longer drop each other's placements.
 - Writes store what the Control Panel stores. `entries_create`,
   `entries_update`, `terms_create`, `terms_update`, `globals_update`, and
   `assets_update` now take each value through the fieldtype's `preProcess()`,
@@ -191,6 +180,31 @@ called out here explicitly.
   localizable. The localization inherits its origin's date, the CP shows the
   field read-only there, and publishing a working copy silently dropped the
   staged date.
+- `entries_create` and `entries_update` refuse a URL another entry of the site
+  already has, as the CP does. A page nested under `/blog` could take a blog
+  post's `/blog/hello` and hide it.
+- `entries_update` validates a localization with the values it inherits from
+  its origin, as the CP's form does. A patch that left out an inherited
+  required field, like the title, failed with "The Title field is required."
+- `entries_update` reported the live entry's URL next to the staged slug and
+  date when it staged a working copy. It now reports the staged URL, as
+  `entries_get` does with `working_copy: true`.
+- OAuth mode: a fresh install kept Passport's integer `user_id` columns, and
+  the first consent failed on MySQL and Postgres. The addon's conversion
+  migration was dated 2026-07-14, but `vendor:publish` stamps Passport's
+  migrations with the moment they are published, so the conversion ran before
+  their tables existed and was recorded as run. It is now dated to run after
+  them, and on sites it missed, the next `php artisan migrate` converts the
+  columns, as `mcp:doctor` says.
+- `mcp:keys` prints only the keys on stdout. Its notices, warnings, and errors
+  go to stderr, so `mcp:keys --json | jq` and `mcp:keys >> .env` work on the
+  first run too, when it generates or adopts a pair. With only one
+  `PASSPORT_*` key set, it reads each half from its env key or its key file,
+  as Passport does, and fails with the remedy when a half is missing, instead
+  of exporting the database pair the runtime then ignores.
+- `blueprints_get` says a Bard field without sets takes HTML, as it already
+  did for Bard fields with sets, instead of telling agents to copy a value
+  from existing content.
 
 ### Security
 
@@ -209,6 +223,57 @@ called out here explicitly.
   requires. MCP used to exempt it, so a role with only `access fr site` could
   still read and write default-site content. Grant the default site's
   permission to roles that should keep that access.
+- `mcp:setup` printed the private signing key. Its key step streamed
+  `php please mcp:keys`, whose output is the key pair, also in the unattended
+  runs that end up in CI logs and agent transcripts. It now shows only what
+  `mcp:keys` did.
+
+## [0.4.2] - 2026-07-20
+
+### Fixed
+
+- `mcp:setup --oauth` no longer crashes at the key step after installing
+  Laravel Passport itself. The wizard's own process can't load Passport's
+  classes until it restarts, and the key check used them anyway.
+
+## [0.4.1] - 2026-07-16
+
+### Changed
+
+- The MCP Access utility shows only the active auth mode. Token mode shows
+  tokens and how to connect with one, and OAuth mode shows connections and how
+  to connect a connector. Tokens issued before a site switched to OAuth stay
+  listed under "Leftover tokens" until they're revoked, and issuing a new token
+  in OAuth mode is refused.
+
+## [0.4.0] - 2026-07-15
+
+### Added
+
+- **Database-managed Passport keys** — the signing pair now lives where the
+  rest of the OAuth state already does: a new `statamic_mcp_oauth_keys` table
+  (private key only — the public half is derived — encrypted at rest with
+  `APP_KEY`), injected into Passport just in time as its servers resolve.
+  Deploys need no key step anymore: once `php artisan migrate` has run, the
+  first OAuth request provisions a pair automatically (race-safe across a
+  fleet), every server reads the same copy, and releases and read-only
+  filesystems are a non-issue. Existing setups keep working untouched —
+  `PASSPORT_*` env keys take precedence, and `storage/oauth-*.key` files are
+  adopted into the database on first use.
+- `mcp:doctor` names the key source (environment config / database / key
+  files / pending provision) and fails with a dedicated remedy when the stored
+  key can't be decrypted after an `APP_KEY` change — deliberately never
+  regenerating over it, which would silently disconnect every client.
+
+### Changed
+
+- `mcp:keys` mirrors the runtime precedence exactly (config → database → key
+  files), generates into the database when its table exists (key files remain
+  the pre-migrate fallback), adopts existing key files into the store, and
+  refuses to touch an undecryptable stored key.
+- `mcp:setup` provisions keys **after** the migrate step so they land in the
+  database, and declining the key step is no longer fatal — the first OAuth
+  request self-provisions.
 
 ## [0.3.2] - 2026-07-15
 
@@ -379,7 +444,10 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.1...v0.4.2
+[0.4.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.2.1...v0.3.0
