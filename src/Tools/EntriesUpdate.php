@@ -43,7 +43,7 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug or date.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or parent.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
@@ -66,14 +66,14 @@ class EntriesUpdate extends Tool
             [
                 'id' => 'required|string',
                 // present (not required): Laravel's 'required' fails on [],
-                // and a slug/date-only update sends an empty object.
+                // and a slug, date, or parent-only update sends an empty object.
                 'data' => 'present|array',
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
                 'site' => 'nullable|string',
                 'parent' => 'nullable|string',
             ],
-            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug or date).'],
+            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug, date, or parent).'],
         );
 
         $user = $this->user($request);

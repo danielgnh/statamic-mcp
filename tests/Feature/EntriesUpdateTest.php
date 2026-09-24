@@ -346,7 +346,7 @@ it('still requires the data key to be present', function () {
 
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'slug' => 'hello-again'])
-        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug or date).']);
+        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug, date, or parent).']);
 
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });

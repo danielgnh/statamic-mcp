@@ -86,7 +86,7 @@ class Doctor extends Command
         if ($this->routeIsMounted()) {
             $this->info('[ OK ] MCP route is mounted.');
         } else {
-            $this->problem("MCP is enabled but its route is not mounted — boot failed and the endpoint 404s. Check the log for 'Statamic MCP failed to mount' and fix the reported exception.");
+            $this->problem("MCP is enabled but its route is not mounted — boot failed, so requests to the endpoint reach Statamic's frontend route and get a 404, or a 419 for a POST. Check the log for 'Statamic MCP failed to mount' and fix the reported exception.");
         }
     }
 
