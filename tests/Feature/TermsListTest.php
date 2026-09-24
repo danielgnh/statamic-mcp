@@ -89,7 +89,7 @@ it('lists the requested site\'s view of each term', function () {
     $term->dataForLocale('de', ['title' => 'PHP auf Deutsch']);
     $term->save();
 
-    $user = Fixtures::makeUser('view tags terms', 'access de site');
+    $user = Fixtures::makeUser('view tags terms', 'access en site', 'access de site');
 
     Server::actingAs($user)
         ->tool(TermsList::class, ['taxonomy' => 'tags', 'site' => 'de'])

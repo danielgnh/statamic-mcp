@@ -34,7 +34,6 @@ called out here explicitly.
   overwriting one, and lists the page builder blocks that have no instructions.
 - A `statamic-mcp-guidelines` Boost skill that teaches coding agents to write
   block instructions from each block's template.
-
 - `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
   now, the same split Statamic's CP makes with `PublishedEntriesController`.
   Both need the collection's publish permission. On revision-enabled collections
@@ -63,6 +62,22 @@ called out here explicitly.
   files / pending provision) and fails with a dedicated remedy when the stored
   key can't be decrypted after an `APP_KEY` change — deliberately never
   regenerating over it, which would silently disconnect every client.
+- `statamic_overview` reports the acting user's `id`, and collections whose
+  blueprint has an `author` field add `can_edit_other_authors`,
+  `can_publish_other_authors`, and `can_delete_other_authors`.
+- **Scheduling is visible to agents.** `statamic_overview` reports each dated
+  collection's `date_behavior` (future/past: public, unlisted, private) and the
+  server `timezone` that dates without an offset are read in. With it, an agent
+  can tell before publishing whether a future date schedules the entry or puts it
+  live right away. `blueprints_get` reports `time_enabled` on date fields.
+- `entries_publish` reports what Statamic actually did: "scheduled — published,
+  but not live until its date" or "expired — published, but its date has passed,
+  not live" when the entry's date keeps it hidden, and it returns the date on
+  dated collections. Its no-op result names the state ("already scheduled").
+- `entries_get` takes `working_copy: true` and returns the staged working copy,
+  the version `entries_publish` would promote. An agent can show a person exactly
+  what goes live before they approve the publish.
+- `entries_list` filters by `status: expired`.
 
 ### Changed
 
@@ -77,6 +92,14 @@ called out here explicitly.
 - `mcp:setup` provisions keys **after** the migrate step so they land in the
   database, and declining the key step is no longer fatal — the first OAuth
   request self-provisions.
+- A date without an offset is now parsed in `app.timezone` explicitly, instead
+  of relying on PHP's default timezone. Laravel sets the two to the same value,
+  so behavior is unchanged. Date examples in tool descriptions and errors now
+  show the offset form (`2026-07-09T15:30:00+02:00`).
+- `entries_create` makes the acting user the author when the blueprint has an
+  `author` field and `data` names none, as the Control Panel does. Naming
+  anyone else, and changing an entry's author with `entries_update`, needs
+  `edit other authors {collection} entries`.
 
 ### Fixed
 
@@ -106,6 +129,38 @@ called out here explicitly.
 - `blueprints_get` examples for option fields used the whole first option when
   the options were saved as key/value pairs, the format the CP writes. They
   use its key now, and button group fields get an example too.
+- `blueprints_get` put `slug`, and `date` on dated collections, into the example
+  payload, but the write tools reject both inside `data`, so an agent that
+  copied the example got an error. They stay in `fields` and are left out of
+  the example, with an `example_notes` entry pointing at the top-level
+  parameter. The same applies to `slug` on taxonomy blueprints, and
+  `terms_create` now says to pass `slug` as a top-level parameter instead of
+  calling it an unknown field.
+- `entries_update` reported "published" after re-dating a published entry into
+  Statamic's scheduled or expired state, while its URL returned a 404. The result
+  now follows the entry's status, as `entries_publish` does.
+- `entries_update` refuses a date for a localization whose date field is not
+  localizable. The localization inherits its origin's date, the CP shows the
+  field read-only there, and publishing a working copy silently dropped the
+  staged date.
+
+### Security
+
+- **Breaking:** the entry write tools skipped Statamic's author rules. On a
+  blueprint with an `author` field, a role with `edit blog entries` could edit
+  anyone's entry through MCP, while the Control Panel limits it to entries the
+  user is an author of. `entries_update`, `entries_publish`,
+  `entries_unpublish`, and `entries_delete` now check what Statamic's
+  `EntryPolicy` checks: an entry the user is not an author of, including one
+  with no author, needs `edit other authors {collection} entries`,
+  `publish other authors {collection} entries`, or
+  `delete other authors {collection} entries`. The denial names the
+  permission.
+- **Breaking:** on multi-site installs the default site now needs
+  `access {site} site` like every other site, as Statamic's `SitePolicy`
+  requires. MCP used to exempt it, so a role with only `access fr site` could
+  still read and write default-site content. Grant the default site's
+  permission to roles that should keep that access.
 
 ## [0.3.2] - 2026-07-15
 

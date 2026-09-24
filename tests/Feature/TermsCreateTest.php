@@ -78,6 +78,17 @@ it('rejects unknown field keys with a did-you-mean hint', function () {
         ->assertHasErrors(["unknown field titel — valid handles: title — did you mean 'title' instead of 'titel'?"]);
 });
 
+it('rejects slug inside data, pointing at the top-level parameter', function () {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Server::actingAs(Fixtures::makeUser('create tags terms'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['title' => 'PHP', 'slug' => 'php']])
+        ->assertHasErrors(['pass slug as a top-level parameter, not inside data']);
+
+    expect(Term::find('tags::php'))->toBeNull();
+});
+
 it('rejects reserved handles inside data', function () {
     Fixtures::site();
     Fixtures::tags();

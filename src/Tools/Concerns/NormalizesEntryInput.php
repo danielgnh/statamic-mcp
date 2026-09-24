@@ -12,16 +12,18 @@ use Laravel\Mcp\Request;
 trait NormalizesEntryInput
 {
     /**
-     * Carbon throws InvalidFormatException for malformed input and other
+     * A time without an offset is read in app.timezone, the zone
+     * statamic_overview reports as server.timezone. Carbon throws
+     * InvalidFormatException for malformed input and other
      * \InvalidArgumentException subclasses for out-of-range values — catch the
      * shared root so both surface as one clean tool error.
      */
     protected function parseEntryDate(string $date): Carbon
     {
         try {
-            return Carbon::parse($date);
+            return Carbon::parse($date, config('app.timezone'));
         } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09 15:30", $date));
+            throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00", $date));
         }
     }
 

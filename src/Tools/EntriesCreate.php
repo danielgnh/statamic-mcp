@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
@@ -18,9 +19,10 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'.')]
 class EntriesCreate extends Tool
 {
+    use AuthorizesEntries;
     use NormalizesEntryInput;
     use ResolvesSites;
     use ValidatesBlueprintData;
@@ -33,7 +35,7 @@ class EntriesCreate extends Tool
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
-            'date' => $schema->string()->description('Entry date (e.g. 2026-07-09 or 2026-07-09 15:30). Required for dated collections; rejected otherwise.'),
+            'date' => $schema->string()->description('Entry date: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview. Required for dated collections; rejected otherwise.'),
         ];
     }
 
@@ -98,6 +100,8 @@ class EntriesCreate extends Tool
         $date = $this->resolveDate($validated['date'] ?? null, $collection);
 
         $this->rejectUnknownKeys($blueprint, $data);
+
+        $data = $this->withAuthor($user, $blueprint, $collectionHandle, $data);
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
 
@@ -167,7 +171,7 @@ class EntriesCreate extends Tool
     {
         if ($collection->dated() && ! $date) {
             throw new ToolException(sprintf(
-                "collection '%s' is dated — pass date (e.g. 2026-07-09 or 2026-07-09 15:30)",
+                "collection '%s' is dated — pass date (e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00)",
                 $collection->handle(),
             ));
         }

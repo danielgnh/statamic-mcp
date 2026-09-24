@@ -61,6 +61,26 @@ class Fixtures
         ])->setHandle('article')->setNamespace('collections.blog')->save();
     }
 
+    // A dated collection that schedules: the CP creates dated collections with
+    // future dates private, while a collection made in code defaults to public.
+    public static function news(string $future = 'private', string $past = 'public'): void
+    {
+        tap(
+            Collection::make('news')
+                ->title('News')
+                ->dated(true)
+                ->futureDateBehavior($future)
+                ->pastDateBehavior($past)
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/news/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'date' => ['type' => 'date', 'time_enabled' => true],
+        ])->setHandle('story')->setNamespace('collections.news')->save();
+    }
+
     // Revisions need Statamic Pro; the collection must already exist.
     public static function revisions(string $collection = 'blog'): void
     {
@@ -70,6 +90,17 @@ class Fixtures
         ]);
 
         Collection::findByHandle($collection)->revisionsEnabled(true)->save();
+    }
+
+    // An author field turns on Statamic's author rules: entries by anyone
+    // else need the "other authors" permissions.
+    public static function authors(string $collection = 'blog', ?int $maxItems = 1): void
+    {
+        $handle = Collection::findByHandle($collection)->entryBlueprint()->handle();
+
+        Blueprint::find("collections.{$collection}.{$handle}")
+            ->ensureField('author', array_filter(['type' => 'users', 'max_items' => $maxItems]))
+            ->save();
     }
 
     // The CP's blueprint builder lets editors mark slug required — Statamic's

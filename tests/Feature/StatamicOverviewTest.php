@@ -22,8 +22,8 @@ it('returns sites, resources with capability flags, acting user, and server flag
         ->assertSee('"collections":[{"handle":"blog","title":"Blog","dated":false,"revisions":false,"blueprints":["article"],"can_create":true,"can_edit":true,"can_publish":true}]')
         ->assertSee('"taxonomies":[{"handle":"tags","title":"Tags","blueprints":["tag"],"can_create":true,"can_edit":true}]')
         ->assertSee('"globals":[{"handle":"settings","title":"Settings","can_edit":true}]')
-        ->assertSee(sprintf('"user":{"email":"%s","roles":[],"is_super":true}', $super->email()))
-        ->assertSee('"server":{"read_only":false,"deletes":false}');
+        ->assertSee(sprintf('"user":{"id":"%s","email":"%s","roles":[],"is_super":true}', $super->id(), $super->email()))
+        ->assertSee('"server":{"read_only":false,"deletes":false,"timezone":"UTC"}');
 });
 
 it('omits collections excluded by the resources allowlist', function () {
@@ -114,22 +114,42 @@ it('reports the read_only server flag and forces the deletes flag off', function
     Server::actingAs($super)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertSee('"server":{"read_only":true,"deletes":false}');
+        ->assertSee('"server":{"read_only":true,"deletes":false,"timezone":"UTC"}');
 });
 
-it('flags per-site access under multisite, never gating the default site', function () {
+it('flags per-site access under multisite, the default site included', function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
 
-    $user = Fixtures::makeUser('view blog entries'); // no 'access de site'
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access en site'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"en_US","can_access":true')
+        ->assertSee('"locale":"de_DE","can_access":false');
+
+    // CP parity: Statamic's SitePolicy gates the default site like any other.
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"locale":"en_US","can_access":false');
+});
+
+it('adds other-authors flags to collections with an author field', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    $user = Fixtures::makeUser('view blog entries', 'edit blog entries', 'edit other authors blog entries');
 
     Server::actingAs($user)
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        // ensureSiteAccess never gates the default site, so en stays accessible
-        ->assertSee('"locale":"en_US","can_access":true')
-        ->assertSee('"locale":"de_DE","can_access":false');
+        ->assertSee('"can_create":false,"can_edit":true,"can_publish":false,"can_delete":false,"can_edit_other_authors":true,"can_publish_other_authors":false,"can_delete_other_authors":false}]')
+        ->assertSee(sprintf('"user":{"id":"%s"', $user->id()));
 });
 
 it('reflects a granted site permission in the can_access flag', function () {
@@ -220,4 +240,20 @@ it('omits unexposed asset containers entirely', function () {
         ->tool(StatamicOverview::class, [])
         ->assertOk()
         ->assertSee('"asset_containers":[]');
+});
+
+it('reports date behavior on dated collections and the timezone dates are read in', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::news(past: 'unlisted');
+
+    config(['app.timezone' => 'Europe/Berlin']);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('{"handle":"blog","title":"Blog","dated":false,"revisions":false,"blueprints":["article"],"can_create":true,"can_edit":true,"can_publish":true}')
+        ->assertSee('{"handle":"news","title":"News","dated":true,"revisions":false,"blueprints":["story"],"can_create":true,"can_edit":true,"can_publish":true,"date_behavior":{"future":"private","past":"unlisted"}}')
+        ->assertSee('"server":{"read_only":false,"deletes":false,"timezone":"Europe/Berlin"}');
 });
