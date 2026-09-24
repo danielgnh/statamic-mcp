@@ -12,8 +12,9 @@ always Statamic's native permission system. Four gates, in order:
    on every call in case a client cached the old tool list.
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
-   (and term/global equivalents) via the user's roles. Publish state changes only
-   through `entries_publish` and `entries_unpublish`, both gated on
+   (and term/global equivalents) via the user's roles. Reading a navigation takes
+   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Publish state
+   changes only through `entries_publish` and `entries_unpublish`, both gated on
    `publish {handle} entries`, the same permission the CP checks. Non-default-site
    writes require `access {site} site` (the default site is never gated by a site
    permission). Denials name the missing permission and the remedy.
@@ -53,6 +54,12 @@ role when other agents on the same server still need write access.
 **A publishing agent:** add `Publish blog entries` to the role. `entries_publish` and
 `entries_unpublish` now work, on revision-enabled collections too, where they promote
 or apply the working copy the same way the CP does.
+
+**A menu agent:** add `View Main navigation` and the `Edit navigation` permission under
+it to the role. `navigations_update` can then replace the Main navigation's tree. The
+tools check these per-navigation permissions and ignore `Configure Navigation`. The CP
+treats that one as access to every navigation and hides the per-navigation checkboxes
+while it is ticked, so untick it to grant them.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
 add `Delete blog entries` to the role. Both gates must open.

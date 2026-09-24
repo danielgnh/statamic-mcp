@@ -10,6 +10,21 @@ called out here explicitly.
 
 ### Added
 
+- **Navigation tools.** `navigations_get` reads a navigation's tree for one site
+  in the shape Statamic stores it, and `navigations_update` replaces that tree,
+  as saving the tree in the CP does. An agent that creates pages can now build
+  their menu too. `navigations_update` checks that entry branches link existing
+  entries of the navigation's collections in the same site, enforces
+  `max_depth` and the root page rule, and runs branch `data` through the
+  navigation's blueprint. Reading takes `view {nav} nav` and writing takes
+  `edit {nav} nav`. `statamic_overview` lists the navigations you can view.
+  The new `resources.navigations` config key exposes them and defaults to
+  `true`. A config you published before this release has no such key, so it
+  exposes no navigations until you add `'navigations' => true`.
+- `entries_create` takes `parent` on a structured collection, the id of an entry
+  to nest the new one under. The parent has to be in the same collection and
+  site, and the nesting has to fit the collection's `max_depth`. A root page
+  as parent means the top level, as in the CP.
 - `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
   now, the same split Statamic's CP makes with `PublishedEntriesController`.
   Both need the collection's publish permission. On revision-enabled collections
@@ -55,6 +70,11 @@ called out here explicitly.
 
 ### Fixed
 
+- `entries_create` puts a new entry of a structured collection into the
+  collection's tree, as the CP does. Its response used to say `url: null` for
+  such an entry, and the entry only appeared at the end of the top level when
+  the tree was next read. The tree file also gains any entries it was missing,
+  in the order Statamic already listed them.
 - Writes store what the Control Panel stores. `entries_create`,
   `entries_update`, `terms_create`, `terms_update`, `globals_update`, and
   `assets_update` now take each value through the fieldtype's `preProcess()`,

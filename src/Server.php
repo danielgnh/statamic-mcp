@@ -37,7 +37,7 @@ use Laravel\Mcp\Server\Tool;
  * config('statamic.mcp.server').
  */
 #[Name('Statamic')]
-#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, and asset containers you can work with, plus your own permission flags per resource. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
+#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, and navigations you can work with, plus your own permission flags per resource. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
 class Server extends McpServer
 {
     /** @var array<int, class-string<Tool>> */
