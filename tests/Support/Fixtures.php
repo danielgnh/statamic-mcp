@@ -61,6 +61,26 @@ class Fixtures
         ])->setHandle('article')->setNamespace('collections.blog')->save();
     }
 
+    // A dated collection that schedules: the CP creates dated collections with
+    // future dates private, while a collection made in code defaults to public.
+    public static function news(string $future = 'private', string $past = 'public'): void
+    {
+        tap(
+            Collection::make('news')
+                ->title('News')
+                ->dated(true)
+                ->futureDateBehavior($future)
+                ->pastDateBehavior($past)
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/news/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'date' => ['type' => 'date', 'time_enabled' => true],
+        ])->setHandle('story')->setNamespace('collections.news')->save();
+    }
+
     // Revisions need Statamic Pro; the collection must already exist.
     public static function revisions(string $collection = 'blog'): void
     {

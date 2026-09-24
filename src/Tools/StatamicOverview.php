@@ -19,7 +19,7 @@ use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); the acting user (email, roles, is_super); and server flags (read_only, deletes).')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (email, roles, is_super); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in).')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -50,6 +50,7 @@ class StatamicOverview extends Tool
             'server' => [
                 'read_only' => ! $this->writesEnabled(),
                 'deletes' => $this->deletesEnabled(),
+                'timezone' => config('app.timezone'),
             ],
         ]);
     }
@@ -101,6 +102,13 @@ class StatamicOverview extends Tool
                     'can_edit' => $this->can($user, "edit {$handle} entries"),
                     'can_publish' => $this->can($user, "publish {$handle} entries"),
                 ];
+
+                if ($collection->dated()) {
+                    $resource['date_behavior'] = [
+                        'future' => $collection->futureDateBehavior(),
+                        'past' => $collection->pastDateBehavior(),
+                    ];
+                }
 
                 if ($this->deletesEnabled()) {
                     $resource['can_delete'] = $this->can($user, "delete {$handle} entries");

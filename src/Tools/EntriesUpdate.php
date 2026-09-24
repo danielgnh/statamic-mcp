@@ -39,7 +39,7 @@ class EntriesUpdate extends Tool
             'id' => $schema->string()->description('Entry id.')->required(),
             'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug or date.')->required(),
             'slug' => $schema->string()->description('New slug.'),
-            'date' => $schema->string()->description('New date (e.g. 2026-07-09 or 2026-07-09 15:30) — dated collections only.'),
+            'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
         ];
     }
@@ -234,7 +234,7 @@ class EntriesUpdate extends Tool
         // Symmetry with the slug path: an empty value is an error, never a
         // silent ignore (Carbon::parse('') would quietly mean "now").
         if (trim($date) === '') {
-            throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09 15:30, or omit date');
+            throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00, or omit date');
         }
 
         if (! $entry->collection()->dated()) {

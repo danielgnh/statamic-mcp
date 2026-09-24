@@ -33,7 +33,7 @@ class EntriesCreate extends Tool
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
             'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
-            'date' => $schema->string()->description('Entry date (e.g. 2026-07-09 or 2026-07-09 15:30). Required for dated collections; rejected otherwise.'),
+            'date' => $schema->string()->description('Entry date: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview. Required for dated collections; rejected otherwise.'),
         ];
     }
 
@@ -166,7 +166,7 @@ class EntriesCreate extends Tool
     {
         if ($collection->dated() && ! $date) {
             throw new ToolException(sprintf(
-                "collection '%s' is dated — pass date (e.g. 2026-07-09 or 2026-07-09 15:30)",
+                "collection '%s' is dated — pass date (e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00)",
                 $collection->handle(),
             ));
         }
