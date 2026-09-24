@@ -33,7 +33,7 @@ class Sets
         $sets = [];
 
         foreach ($groups as $groupHandle => $group) {
-            foreach (data_get($group, 'sets', []) as $handle => $set) {
+            foreach (Arr::wrap(data_get($group, 'sets')) as $handle => $set) {
                 $sets[] = [
                     'handle' => (string) $handle,
                     'display' => data_get($set, 'display'),

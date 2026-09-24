@@ -82,6 +82,18 @@ it('never sends html comments, so an untouched stub reads as no guidelines', fun
         ->assertDontSee('ask marketing');
 });
 
+it('treats an unclosed html comment as running to the end of the file', function () {
+    Fixtures::site();
+
+    guideline('site.md', "Friendly, never salesy.\n\n<!-- note to self: the client's budget is small");
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"guidelines":"Friendly, never salesy."')
+        ->assertDontSee('note to self');
+});
+
 it('keeps guidelines behind the same permission as the blueprint', function () {
     Fixtures::site();
     Fixtures::tags();

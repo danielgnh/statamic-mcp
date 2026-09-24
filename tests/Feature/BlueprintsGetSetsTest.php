@@ -121,6 +121,24 @@ it('resolves fieldset imports inside a set and describes nested sets', function 
         ->assertSee('"sets":[{"handle":"text","display":"Text","group":"Main","instructions":"Keep it under 40 words.","fields":[]}]');
 });
 
+it('skips a set group whose sets are empty in yaml', function () {
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => [
+            'type' => 'replicator',
+            'sets' => [
+                'main' => ['sets' => ['hero' => ['display' => 'Hero']]],
+                'later' => ['display' => 'Later', 'sets' => null],
+            ],
+        ],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"sets":[{"handle":"hero","display":"Hero","group":"Main","fields":[]}]');
+});
+
 it('marks hidden sets so agents keep them for existing content only', function () {
     Blueprint::makeFromFields([
         'title' => ['type' => 'text', 'validate' => 'required'],

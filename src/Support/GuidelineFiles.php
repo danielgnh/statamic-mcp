@@ -38,7 +38,8 @@ class GuidelineFiles
 
     /**
      * HTML comments are notes for the developer and never reach an agent,
-     * so an untouched stub reads as no guidelines at all.
+     * so an untouched stub reads as no guidelines at all. An unclosed comment
+     * runs to the end of the file, as it does in any markdown preview.
      */
     public function read(string $file): ?string
     {
@@ -48,7 +49,7 @@ class GuidelineFiles
             return null;
         }
 
-        $markdown = trim((string) preg_replace('/<!--.*?-->/s', '', File::get($path)));
+        $markdown = trim((string) preg_replace('/<!--.*?(?:-->|\z)/s', '', File::get($path)));
 
         return filled($markdown) ? $markdown : null;
     }

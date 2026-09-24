@@ -1,10 +1,13 @@
 <?php
 
+use Danielgnh\StatamicMcp\Support\GuidelineFiles;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Fieldset;
+use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Taxonomy;
 
 function guidelinesPath(string $file = ''): string
 {
@@ -58,7 +61,10 @@ it('creates site.md and a file per exposed collection', function () {
         ->assertExitCode(0);
 
     expect(File::exists(guidelinesPath('collections/secrets.md')))->toBeFalse()
-        ->and(File::get(guidelinesPath('collections/blog.md')))->toContain('Guidelines for AI agents writing blog entries');
+        ->and(File::get(guidelinesPath('collections/blog.md')))->toContain('Guidelines for AI agents writing blog entries')
+        // a stub is all comment, so agents get nothing until someone writes below it
+        ->and(app(GuidelineFiles::class)->site())->toBeNull()
+        ->and(app(GuidelineFiles::class)->for('collections', 'blog', 'article'))->toBeNull();
 });
 
 it('never overwrites a guideline file', function () {
@@ -125,5 +131,38 @@ it('skips blocks in collections that are not exposed', function () {
 
     $this->artisan('statamic:mcp:guidelines')
         ->expectsOutputToContain('No page builder blocks found.')
+        ->assertExitCode(0);
+});
+
+it('scans taxonomy and global blueprints, respecting exposure', function () {
+    Fixtures::site();
+
+    tap(Taxonomy::make('tags')->title('Tags'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'body' => ['type' => 'bard', 'sets' => ['main' => ['sets' => ['quote' => ['display' => 'Quote']]]]],
+    ])->setHandle('tag')->setNamespace('taxonomies.tags')->save();
+
+    Blueprint::makeFromFields([
+        'blocks' => ['type' => 'replicator', 'sets' => ['cta' => ['display' => 'CTA']]],
+    ])->setHandle('settings')->setNamespace('globals')->save();
+
+    GlobalSet::make('settings')->title('Settings')->save();
+    GlobalSet::make('empty')->title('Empty')->save();
+
+    $this->artisan('statamic:mcp:guidelines')
+        ->expectsTable(['Block', 'Field', 'Blueprints'], [
+            ['quote', 'body', 'taxonomies.tags.tag'],
+            ['cta', 'blocks', 'globals.settings'],
+        ])
+        ->assertExitCode(0);
+
+    config(['statamic.mcp.resources.globals' => []]);
+
+    $this->artisan('statamic:mcp:guidelines')
+        ->expectsTable(['Block', 'Field', 'Blueprints'], [
+            ['quote', 'body', 'taxonomies.tags.tag'],
+        ])
         ->assertExitCode(0);
 });
