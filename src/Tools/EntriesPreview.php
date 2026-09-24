@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -17,10 +18,11 @@ use Statamic\Facades\Blink;
 use Statamic\Facades\URL;
 
 #[Name('entries_preview')]
-#[Description('Get a URL that renders an entry through the site\'s own templates, so you can check how your changes look without a human opening the browser. Fetch the URL to see the page. It uses Statamic\'s Live Preview, so unpublished drafts render even though the public site returns 404 for them. On revision-enabled entries with a staged working copy, the page shows the working copy, not the live entry. The URL works for anyone who has it until expires_at, an hour after the call, so share it only with people who may see the draft. Requires the collection\'s edit permission, as Live Preview does in the Control Panel. Entries of a collection without a route have no page to preview. target picks a preview target by label and defaults to the collection\'s first; targets lists them all. Each call creates a new preview token and changes no content.')]
+#[Description('Get a URL that renders an entry through the site\'s own templates, so you can check how your changes look without a human opening the browser. Fetch the URL to see the page. It uses Statamic\'s Live Preview, so unpublished drafts render even though the public site returns 404 for them. On revision-enabled entries with a staged working copy, the page shows the working copy, not the live entry. The URL works for anyone who has it until expires_at, an hour after the call, so share it only with people who may see the draft. Requires the collection\'s edit permission, as Live Preview does in the Control Panel, or \'edit other authors {collection} entries\' for an entry you are not an author of when the blueprint has an author field. Entries of a collection without a route have no page to preview. target picks a preview target by label and defaults to the collection\'s first; targets lists them all. Each call creates a new preview token and changes no content.')]
 #[IsDestructive(false)]
 class EntriesPreview extends Tool
 {
+    use AuthorizesEntries;
     use ResolvesEntries;
     use ResolvesSites;
 
@@ -49,8 +51,8 @@ class EntriesPreview extends Tool
         $collectionHandle = $entry->collection()->handle();
 
         // CP parity (PreviewController@edit, 6.x): live preview authorizes
-        // 'update', which EntryPolicy grants on the edit permission.
-        $this->ensurePermission($user, "edit {$collectionHandle} entries");
+        // 'update', which is EntryPolicy's edit check with its author rule.
+        $this->ensureEntryPermission($user, 'edit', $entry);
 
         if (blank($entry->route())) {
             throw new ToolException(sprintf(

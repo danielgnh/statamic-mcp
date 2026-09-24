@@ -149,6 +149,26 @@ it("requires 'edit blog entries', the permission the CP checks for live preview"
     expect(mintedPreviewTokens())->toBeEmpty();
 });
 
+it("requires 'edit other authors blog entries' to preview someone else's entry, but not one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('edit blog entries');
+    $theirs = tap(makePreviewableDraft()->set('author', Fixtures::makeUser()->id()))->save();
+    $mine = tap(makePreviewableLive()->set('author', $user->id()))->save();
+
+    // CP parity: PreviewController authorizes 'update', EntryPolicy's author rule.
+    Server::actingAs($user)
+        ->tool(EntriesPreview::class, ['id' => $theirs->id()])
+        ->assertHasErrors(["requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(mintedPreviewTokens())->toBeEmpty()
+        ->and(previewPayload($user, ['id' => $mine->id()])['id'])->toBe($mine->id())
+        ->and(previewPayload(Fixtures::makeUser('edit blog entries', 'edit other authors blog entries'), ['id' => $theirs->id()])['id'])->toBe($theirs->id());
+});
+
 it('reports an unexposed entry as not found', function () {
     Fixtures::site();
     Fixtures::tags();
