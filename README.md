@@ -11,7 +11,7 @@ It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package an
 ## Requirements
 
 - PHP 8.3 or newer
-- Statamic 6 on Laravel 12 or 13
+- Statamic 6.31 or newer, on Laravel 12 or 13
 - `laravel/passport` and a database for Passport's tables, for OAuth mode only
 
 ## Installation

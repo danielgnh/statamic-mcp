@@ -125,6 +125,8 @@ called out here explicitly.
   404, or 500 instead of 200. laravel/mcp 0.9.6 and 1.0.1 fix the loopback
   redirect URI check in OAuth client registration, and 0.8 won't get that fix.
   Upgrade if you run OAuth mode and have narrowed `mcp.redirect_domains`.
+- Requires `statamic/cms` 6.31 or newer, the oldest release CI tests. Composer
+  refuses every earlier 6.x release by default, because of a security advisory.
 - `entries_get` names the entry's blueprint at the top level and leaves it out
   of raw `data`. In a collection with more than one blueprint, Statamic stores
   the blueprint in each entry's data, so writing back what `entries_get`
