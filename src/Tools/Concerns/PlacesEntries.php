@@ -109,13 +109,39 @@ trait PlacesEntries
 
     /**
      * appendTo() and move() edit the stored tree, which lacks the entries
-     * created outside the CP until the tree is next saved. Storing the tree
-     * the way it reads first keeps them in their place, and lets one of them
-     * move or be a parent.
+     * created outside the CP until the tree is next saved. Storing the ones
+     * the tree lists first keeps them in their place, and lets one of them
+     * move or be a parent. Every stored branch stays: the tree as it reads
+     * leaves out entries this request's Stache doesn't know, such as the
+     * ones another call just created and placed.
      */
     protected function materializeTree(CollectionTree $tree): CollectionTree
     {
-        return $tree->tree($tree->tree());
+        return $tree->tree($this->withUnstoredEntries(data_get($tree->fileData(), 'tree', []), $tree->tree()));
+    }
+
+    /**
+     * The stored branches as they are, then the entries the tree lists but
+     * doesn't store yet, at the top level where it lists them.
+     *
+     * @param  array<int, array<string, mixed>>  $stored
+     * @param  array<int, array<string, mixed>>  $listed
+     * @return list<array<string, mixed>>
+     */
+    private function withUnstoredEntries(array $stored, array $listed): array
+    {
+        $storedIds = [];
+
+        array_walk_recursive($stored, function (mixed $value, int|string $key) use (&$storedIds) {
+            if ($key === 'entry') {
+                $storedIds[] = $value;
+            }
+        });
+
+        return [
+            ...array_values($stored),
+            ...array_values(array_filter($listed, fn (array $branch) => ! in_array(data_get($branch, 'entry'), $storedIds, true))),
+        ];
     }
 
     /**
