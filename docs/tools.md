@@ -8,7 +8,7 @@ should start with `statamic_overview`.
 | Tool | What it does |
 |---|---|
 | `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
-| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
+| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. On collection and taxonomy blueprints, `slug` (and `date` on dated collections) is listed in the fields but left out of the example, because the entry and term write tools take it as a top-level parameter; `example_notes` says so. |
 
 ## Entries
 

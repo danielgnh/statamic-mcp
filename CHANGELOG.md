@@ -53,6 +53,16 @@ called out here explicitly.
   database, and declining the key step is no longer fatal — the first OAuth
   request self-provisions.
 
+### Fixed
+
+- `blueprints_get` put `slug`, and `date` on dated collections, into the example
+  payload, but the write tools reject both inside `data`, so an agent that
+  copied the example got an error. They stay in `fields` and are left out of
+  the example, with an `example_notes` entry pointing at the top-level
+  parameter. The same applies to `slug` on taxonomy blueprints, and
+  `terms_create` now says to pass `slug` as a top-level parameter instead of
+  calling it an unknown field.
+
 ## [0.3.2] - 2026-07-15
 
 ### Fixed
