@@ -236,3 +236,23 @@ it('exits non-zero when the final doctor run finds problems', function () {
         ->expectsOutputToContain('The doctor found problems')
         ->assertExitCode(1);
 });
+
+it('shows what mcp:keys did, never the key it printed', function () {
+    Process::fake([
+        'php please mcp:keys' => Process::result(
+            output: 'PASSPORT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nMIIsecret\\n-----END PRIVATE KEY-----"',
+            errorOutput: 'No keys found — generated a fresh pair into the database.',
+        ),
+        '*' => Process::result(),
+    ]);
+    fakeEnvWriter();
+    stubOAuthPrereqs();
+
+    // Unattended runs end up in CI logs and agent transcripts.
+    $this->artisan('statamic:mcp:setup', ['--oauth' => true, '--yes' => true])
+        ->expectsOutputToContain('generated a fresh pair into the database')
+        ->doesntExpectOutputToContain('PRIVATE KEY')
+        ->assertExitCode(0);
+
+    Process::assertRan('php please mcp:keys');
+});
