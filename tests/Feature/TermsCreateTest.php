@@ -4,7 +4,9 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Statamic\Events\TermCreating;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
 
@@ -74,6 +76,17 @@ it('rejects unknown field keys with a did-you-mean hint', function () {
     Server::actingAs($user)
         ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['titel' => 'PHP']])
         ->assertHasErrors(["unknown field titel — valid handles: title — did you mean 'title' instead of 'titel'?"]);
+});
+
+it('rejects slug inside data, pointing at the top-level parameter', function () {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Server::actingAs(Fixtures::makeUser('create tags terms'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['title' => 'PHP', 'slug' => 'php']])
+        ->assertHasErrors(['pass slug as a top-level parameter, not inside data']);
+
+    expect(Term::find('tags::php'))->toBeNull();
 });
 
 it('rejects reserved handles inside data', function () {
@@ -182,4 +195,24 @@ it('is hidden when the server is read-only', function () {
         ->assertHasErrors();
 
     expect(Term::query()->where('taxonomy', 'tags')->count())->toBe(0);
+});
+
+it('stores a single-file asset as a plain string', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    Storage::disk('images')->put('php.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'icon' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Server::actingAs(Fixtures::makeUser('create topics terms'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'topics', 'data' => ['title' => 'PHP', 'icon' => ['php.svg']]])
+        ->assertOk();
+
+    expect(Term::find('topics::php')->value('icon'))->toBe('php.svg');
 });

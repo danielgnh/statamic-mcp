@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
@@ -18,9 +19,10 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'.')]
 class EntriesCreate extends Tool
 {
+    use AuthorizesEntries;
     use NormalizesEntryInput;
     use ResolvesSites;
     use ValidatesBlueprintData;
@@ -99,10 +101,12 @@ class EntriesCreate extends Tool
 
         $this->rejectUnknownKeys($blueprint, $data);
 
+        $data = $this->withAuthor($user, $blueprint, $collectionHandle, $data);
+
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
 
         // The injected date field is required — satisfy it with the resolved
-        // Carbon (Statamic\Rules\DateFieldtype accepts Carbon outright). Slug
+        // Carbon, which preProcess() turns into the date picker's shape. Slug
         // likewise: the CP form always submits it into validation, so a
         // blueprint that marks slug required must see the resolved value —
         // without it that field is unsatisfiable (slug is barred from data).
@@ -113,9 +117,10 @@ class EntriesCreate extends Tool
             $values['date'] = $date;
         }
 
-        $this->validateAgainstBlueprint(
+        $data = $this->processAgainstBlueprint(
             $blueprint,
             $values,
+            array_keys($data),
             ['collection' => $collectionHandle, 'site' => $site],
         );
 

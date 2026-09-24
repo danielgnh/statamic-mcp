@@ -3,6 +3,8 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
+use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Laravel\Mcp\Request;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 
@@ -19,8 +21,11 @@ it('returns fields and a bounded example payload for a collection blueprint', fu
         ->assertSee('"type":"collection","handle":"blog","blueprint":"article","available_blueprints":["article"]')
         ->assertSee('"handle":"title","type":"text","required":true')
         ->assertSee('"handle":"topic","type":"terms","required":false')
-        // v6 appends a 'slug' field to entry blueprints of routed collections (Collection::ensureEntryBlueprintFields)
-        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":["REPLACE-WITH-REAL-TERM-ID"],"slug":"example-slug"}');
+        // v6 appends a 'slug' field to entry blueprints (Collection::ensureEntryBlueprintFields),
+        // but the entry tools take slug as a top-level parameter, so it stays out of the example
+        ->assertSee('"handle":"slug","type":"slug"')
+        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":"REPLACE-WITH-REAL-TERM-ID"}')
+        ->assertSee('"slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"');
 });
 
 it('falls back to null plus a type note for a bard field', function () {
@@ -34,7 +39,7 @@ it('falls back to null plus a type note for a bard field', function () {
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertOk()
         ->assertSee('"content":null')
-        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — read a real value from existing content before writing this field"}');
+        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — read a real value from existing content before writing this field","slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"}');
 });
 
 it('returns the blueprint of a taxonomy', function () {
@@ -48,7 +53,9 @@ it('returns the blueprint of a taxonomy', function () {
         ->assertOk()
         ->assertSee('"type":"taxonomy","handle":"tags","blueprint":"tag","available_blueprints":["tag"]')
         // v6 appends a required 'slug' field to term blueprints (Taxonomy::ensureTermBlueprintFields)
-        ->assertSee('"example":{"title":"Example text","slug":"example-slug"}');
+        ->assertSee('"handle":"slug","type":"slug","required":true')
+        ->assertSee('"example":{"title":"Example text"}')
+        ->assertSee('"slug":"pass slug as a top-level parameter of terms_create and terms_update, not inside data"');
 });
 
 it('returns the blueprint of a global set', function () {
@@ -84,21 +91,21 @@ it('generates real examples for select, toggle, integer, and date fields', funct
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
         ->assertSee('"options":{"red":"Red","blue":"Blue"}')
-        // trailing 'slug' is v6's auto-appended entry blueprint field; the default date save
-        // format is 'Y-m-d H:i' (has time), so the valid example is the ISO-Z datetime
-        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15T09:30:00.000Z","slug":"example-slug"}');
+        // dates use the default save format 'Y-m-d H:i', the shape entries_get returns
+        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15 09:30"}');
 });
 
-it('shapes date examples by save format and mode, matching the DateFieldtype rule', function () {
+it('shapes date examples in the field save format and mode', function () {
     Fixtures::site();
 
     Collection::make('events')->title('Events')->save();
 
     Blueprint::makeFromFields([
         'title' => ['type' => 'text', 'validate' => 'required'],
-        'when' => ['type' => 'date'], // default save format 'Y-m-d H:i' → ISO-Z datetime required
+        'when' => ['type' => 'date'], // default save format 'Y-m-d H:i'
         'when_timed' => ['type' => 'date', 'time_enabled' => true],
-        'day_only' => ['type' => 'date', 'format' => 'Y-m-d'], // time-less save format → plain date
+        'with_seconds' => ['type' => 'date', 'time_seconds_enabled' => true],
+        'day_only' => ['type' => 'date', 'format' => 'Y-m-d'],
         'window' => ['type' => 'date', 'mode' => 'range'],
         'stay' => ['type' => 'date', 'mode' => 'range', 'format' => 'Y-m-d'],
     ])->setHandle('event')->setNamespace('collections.events')->save();
@@ -108,11 +115,61 @@ it('shapes date examples by save format and mode, matching the DateFieldtype rul
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'events'])
         ->assertOk()
-        ->assertSee('"when":"2026-01-15T09:30:00.000Z"')
-        ->assertSee('"when_timed":"2026-01-15T09:30:00.000Z"')
+        ->assertSee('"when":"2026-01-15 09:30"')
+        ->assertSee('"when_timed":"2026-01-15 09:30"')
+        ->assertSee('"with_seconds":"2026-01-15 09:30:00"')
         ->assertSee('"day_only":"2026-01-15"')
-        ->assertSee('"window":{"start":"2026-01-15T09:30:00.000Z","end":"2026-01-16T09:30:00.000Z"}')
+        ->assertSee('"window":{"start":"2026-01-15 09:30","end":"2026-01-16 09:30"}')
         ->assertSee('"stay":{"start":"2026-01-15","end":"2026-01-16"}');
+});
+
+it('returns an example that entries_create accepts as data on a dated collection', function () {
+    Fixtures::site();
+
+    tap(Collection::make('events')->title('Events')->dated(true)->routes('/events/{slug}'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'launch_date' => ['type' => 'date'],
+        'featured' => ['type' => 'toggle'],
+    ])->setHandle('event')->setNamespace('collections.events')->save();
+
+    $user = Fixtures::makeUser('view events entries', 'create events entries');
+
+    $this->actingAs($user);
+
+    $blueprint = json_decode((string) (new BlueprintsGet)->handle(new Request(['type' => 'collection', 'handle' => 'events']))->content(), true);
+
+    expect(data_get($blueprint, 'example'))->not->toHaveKeys(['slug', 'date'])
+        ->and(data_get($blueprint, 'example_notes'))->toMatchArray([
+            'slug' => 'pass slug as a top-level parameter of entries_create and entries_update, not inside data',
+            'date' => 'pass date as a top-level parameter of entries_create and entries_update, not inside data',
+        ]);
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => data_get($blueprint, 'example'), 'date' => '2026-07-09'])
+        ->assertOk()
+        ->assertSee('saved as draft — not live');
+});
+
+it('gives single-item relationship fields a plain id example', function () {
+    Fixtures::site();
+
+    Collection::make('posts')->title('Posts')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'author' => ['type' => 'users', 'max_items' => 1],
+        'featured' => ['type' => 'entries', 'collections' => ['posts'], 'max_items' => 1],
+        'related' => ['type' => 'entries', 'collections' => ['posts']],
+    ])->setHandle('post')->setNamespace('collections.posts')->save();
+
+    Server::actingAs(Fixtures::makeUser('view posts entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
+        ->assertOk()
+        ->assertSee('"author":"REPLACE-WITH-REAL-USER-ID"')
+        ->assertSee('"featured":"REPLACE-WITH-REAL-ENTRY-ID"')
+        ->assertSee('"related":["REPLACE-WITH-REAL-ENTRY-ID"]');
 });
 
 it('wraps the first option in an array for a multi-select', function () {
@@ -192,7 +249,7 @@ it('excludes computed fields from the example and marks them not writable', func
         ->assertSee('"handle":"word_count","type":"integer","required":false,"rules":["integer","nullable"],"visibility":"computed"')
         ->assertSee('"word_count":"computed — not writable"')
         // word_count must not appear as a writable example key
-        ->assertSee('"example":{"title":"Example text","slug":"example-slug"}');
+        ->assertSee('"example":{"title":"Example text"}');
 });
 
 it('treats unexposed and missing collections identically, listing only exposed handles', function () {

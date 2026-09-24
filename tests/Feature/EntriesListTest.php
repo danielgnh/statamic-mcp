@@ -174,7 +174,7 @@ it('lists only entries of the requested site', function () {
     Entry::make()->collection('blog')->locale('en')->slug('english-post')->data(['title' => 'English'])->published(true)->save();
     Entry::make()->collection('blog')->locale('de')->slug('deutscher-beitrag')->data(['title' => 'Deutsch'])->published(true)->save();
 
-    $user = Fixtures::makeUser('view blog entries', 'access de site');
+    $user = Fixtures::makeUser('view blog entries', 'access en site', 'access de site');
 
     Server::actingAs($user)
         ->tool(EntriesList::class, ['collection' => 'blog', 'site' => 'de'])
@@ -214,7 +214,7 @@ it('rejects an unknown site naming the available ones', function () {
         ->assertHasErrors(["site 'fr' not found — available: en"]);
 });
 
-it("requires 'access {site} site' for non-default sites", function () {
+it("requires 'access {site} site' on multisite, the default site included", function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
@@ -224,6 +224,11 @@ it("requires 'access {site} site' for non-default sites", function () {
     Server::actingAs($user)
         ->tool(EntriesList::class, ['collection' => 'blog', 'site' => 'de'])
         ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    // CP parity: Statamic's SitePolicy gates the default site like any other.
+    Server::actingAs($user)
+        ->tool(EntriesList::class, ['collection' => 'blog'])
+        ->assertHasErrors(["requires 'access en site' — grant it to a role of {$user->email()} in the Control Panel"]);
 
     Server::actingAs(Fixtures::makeUser('view blog entries', 'access de site'))
         ->tool(EntriesList::class, ['collection' => 'blog', 'site' => 'de'])

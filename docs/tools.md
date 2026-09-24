@@ -7,8 +7,8 @@ should start with `statamic_overview`.
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); `date_behavior` on dated collections (`future` and `past`: `public`, `unlisted`, or `private`, as in the collection settings); the acting user; the server block (`read_only`, `deletes`, and `timezone`, the zone a date without an offset is read in). |
-| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions, and `time_enabled` on date fields) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled; collections whose blueprint has an `author` field add `can_edit_other_authors`, `can_publish_other_authors`, and `can_delete_other_authors`); `date_behavior` on dated collections (`future` and `past`: `public`, `unlisted`, or `private`, as in the collection settings); the acting user, including their `id`; the server block (`read_only`, `deletes`, and `timezone`, the zone a date without an offset is read in); the site's `guidelines` when `site.md` has any. |
+| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions, and `time_enabled` on date fields) plus a valid example payload for writes. Works for collections, taxonomies, and globals. On collection and taxonomy blueprints, `slug` (and `date` on dated collections) is listed in the fields but left out of the example, because the entry and term write tools take it as a top-level parameter; `example_notes` says so. Replicator and Bard fields list their `sets`, the blocks of a page builder, each with its display name, group, instructions, and fields. The collection's or blueprint's guideline files come back as `guidelines`. See [guidelines.md](guidelines.md). |
 
 ## Entries
 
@@ -16,11 +16,16 @@ should start with `statamic_overview`.
 |---|---|
 | `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Filter by `status`: `published`, `draft`, `scheduled`, or `expired`. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
 | `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes. The returned data is the live entry unless you pass `working_copy: true`, which returns the staged working copy, the version `entries_publish` would promote; `source` says which one you got. |
-| `entries_create` | Raw-data create through Statamic's own validation. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
+| `entries_create` | Raw-data create through the same validate-and-process steps as the CP's save, so stored values match what the CP writes. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
 | `entries_update` | Shallow top-level merge of raw data (nested structures replaced wholesale). Never changes publish state. On revision-enabled collections, edits to a published entry become a **working copy** — the live entry is never touched; an existing working copy is amended (created vs amended is stated in the result). Without revisions, edits save straight to the entry, so changes to a published entry are live at once. No-op updates save nothing. |
 | `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An entry dated in the future on a collection whose future dates are private comes back `scheduled`, not live (see [Scheduling](#scheduling)). An already-published entry with nothing staged is a no-op. |
 | `entries_unpublish` | Takes a live entry offline. Same permission as publish, since Statamic has no separate unpublish permission. On revision-enabled collections a staged working copy is applied to the entry and cleared, with an unpublish revision attributed to you. A draft is a no-op. |
 | `entries_delete` | Only registered when `deletes` is enabled. Deleting an origin cascades to all localizations (requires site access to each); revision files stay on disk as orphans, same as the CP. |
+
+On a blueprint with an `author` field, the write tools also apply Statamic's author
+rules: an entry you are not an author of needs the "other authors" permission, and
+`entries_create` makes you the author unless `data` names one. See
+[How authorization works](permissions.md#how-authorization-works).
 
 ## Taxonomy terms
 

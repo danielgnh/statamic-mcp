@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Statamic\Events\AssetSaving;
 use Statamic\Facades\Asset;
+use Statamic\Facades\Blueprint;
 
 beforeEach(function () {
     Fixtures::site();
@@ -115,4 +116,18 @@ it('reports a missing path with a pointer to assets_list', function () {
             'data' => ['alt' => 'x'],
         ])
         ->assertHasErrors(["asset 'nope.png' not found in container 'images' — use assets_list to see available paths"]);
+});
+
+it('stores metadata the way the CP does', function () {
+    Blueprint::makeFromFields([
+        'alt' => ['type' => 'text'],
+        'rating' => ['type' => 'integer'],
+    ])->setHandle('images')->setNamespace('assets')->save();
+
+    Server::actingAs(Fixtures::makeUser('edit images assets'))
+        ->tool(AssetsUpdate::class, ['container' => 'images', 'path' => 'hero.png', 'data' => ['rating' => '4']])
+        ->assertOk()
+        ->assertSee('"rating":4');
+
+    expect(Asset::find('images::hero.png')->data()->get('rating'))->toBe(4);
 });

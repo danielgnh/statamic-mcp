@@ -92,6 +92,17 @@ class Fixtures
         Collection::findByHandle($collection)->revisionsEnabled(true)->save();
     }
 
+    // An author field turns on Statamic's author rules: entries by anyone
+    // else need the "other authors" permissions.
+    public static function authors(string $collection = 'blog', ?int $maxItems = 1): void
+    {
+        $handle = Collection::findByHandle($collection)->entryBlueprint()->handle();
+
+        Blueprint::find("collections.{$collection}.{$handle}")
+            ->ensureField('author', array_filter(['type' => 'users', 'max_items' => $maxItems]))
+            ->save();
+    }
+
     // The CP's blueprint builder lets editors mark slug required — Statamic's
     // own injected slug field is only max:200, so this needs its own fixture.
     public static function pages(): void
@@ -107,6 +118,47 @@ class Fixtures
             'title' => ['type' => 'text', 'validate' => 'required'],
             'slug' => ['type' => 'slug', 'validate' => 'required|max:200'],
         ])->setHandle('page')->setNamespace('collections.pages')->save();
+    }
+
+    // Call assetContainer('images') first: the single-file fields point at it.
+    public static function landing(): void
+    {
+        tap(
+            Collection::make('landing')
+                ->title('Landing')
+                ->sites(Site::all()->map->handle()->values()->all())
+                ->routes('/landing/{slug}')
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required'],
+            'hero' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+            'starts' => ['type' => 'date'],
+            'page_builder' => ['type' => 'replicator', 'sets' => [
+                'website' => ['display' => 'Website', 'sets' => [
+                    'section_hero' => ['display' => 'Section - Hero', 'fields' => [
+                        ['handle' => 'heading', 'field' => ['type' => 'text', 'validate' => 'required']],
+                        ['handle' => 'image', 'field' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1]],
+                    ]],
+                    'section_text_block' => ['display' => 'Section - Text Block', 'fields' => [
+                        ['handle' => 'text', 'field' => ['type' => 'textarea']],
+                    ]],
+                ]],
+            ]],
+            'body' => ['type' => 'bard', 'sets' => [
+                'main' => ['display' => 'Main', 'sets' => [
+                    'callout' => ['display' => 'Callout', 'fields' => [
+                        ['handle' => 'text', 'field' => ['type' => 'text']],
+                    ]],
+                ]],
+            ]],
+            'facts' => ['type' => 'grid', 'fields' => [
+                ['handle' => 'label', 'field' => ['type' => 'text']],
+            ]],
+            'seo' => ['type' => 'group', 'fields' => [
+                ['handle' => 'meta_title', 'field' => ['type' => 'text']],
+            ]],
+        ])->setHandle('landing_page')->setNamespace('collections.landing')->save();
     }
 
     public static function tags(): void

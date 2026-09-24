@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Statamic\Events\EntrySaved;
 use Statamic\Events\EntrySaving;
 use Statamic\Facades\Blueprint;
@@ -620,4 +621,151 @@ it('rejects an empty date instead of silently ignoring it', function () {
         ->assertHasErrors(['date is empty — pass e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00, or omit date']);
 
     expect(Entry::find($entry->id())->date()->format('Y-m-d'))->toBe('2026-08-01');
+});
+
+/**
+ * A landing page exactly as the CP writes it: set and row ids, enabled flags,
+ * single-file assets as strings, dates in the save format.
+ */
+function makeCpSavedLandingPage(): Statamic\Contracts\Entries\Entry
+{
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    return tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'hero' => 'hero.jpg',
+        'starts' => '2026-01-15 09:30',
+        'page_builder' => [['id' => 'abc12345', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'Hi', 'image' => 'hero.jpg']],
+        'body' => [['type' => 'set', 'attrs' => ['id' => 'set12345', 'values' => ['type' => 'callout', 'text' => 'Note']]]],
+        'facts' => [['id' => 'row12345', 'label' => 'Rooms']],
+        'seo' => ['meta_title' => 'Home'],
+    ]))->save();
+}
+
+it('updates a page the CP saved without tripping over its single-file assets', function () {
+    Fixtures::site();
+
+    $entry = makeCpSavedLandingPage();
+    $before = $entry->data()->except('title')->all();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Home v2']])
+        ->assertOk();
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Home v2')
+        ->and($fresh->data()->except(['title', 'updated_at', 'updated_by'])->all())->toBe($before);
+});
+
+it('takes back exactly what entries_get returns as a no-op', function () {
+    Fixtures::site();
+
+    $entry = makeCpSavedLandingPage();
+
+    Event::fake([EntrySaved::class]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => $entry->data()->except(['updated_at', 'updated_by'])->all()])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Event::assertNotDispatched(EntrySaved::class);
+});
+
+it('is a no-op when the patch processes to the stored value', function () {
+    Fixtures::site();
+
+    $entry = makeCpSavedLandingPage();
+
+    Event::fake([EntrySaved::class]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero' => ['hero.jpg'], 'starts' => '2026-01-15T09:30:00.000Z']])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Event::assertNotDispatched(EntrySaved::class);
+});
+
+it('rejects an unknown set type in an update', function () {
+    Fixtures::site();
+
+    $entry = makeCpSavedLandingPage();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [['type' => 'section_probe_unknown']]]])
+        ->assertHasErrors(["unknown set type 'section_probe_unknown' in page_builder.0"]);
+
+    expect(Entry::find($entry->id())->get('page_builder')[0]['type'])->toBe('section_hero');
+});
+
+it("requires 'edit other authors blog entries' for someone else's entry, but not for one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('edit blog entries');
+    $theirs = makeUpdatableBlogEntry(['author' => [Fixtures::makeUser()->id()]]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $theirs->id(), 'data' => ['title' => 'Taken over']])
+        ->assertHasErrors(["requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(Entry::find($theirs->id())->get('title'))->toBe('Hello World');
+
+    $mine = tap(Entry::make()->collection('blog')->slug('mine')->data(['title' => 'Mine', 'author' => [$user->id()]]))->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $mine->id(), 'data' => ['title' => 'Still mine']])
+        ->assertOk();
+
+    expect(Entry::find($mine->id())->get('title'))->toBe('Still mine');
+});
+
+it("treats an entry without an author as someone else's (CP parity)", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $entry = makeUpdatableBlogEntry();
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertHasErrors(["requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'edit other authors blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('Hello Again');
+});
+
+it("refuses to change the author without 'edit other authors blog entries'", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('edit blog entries');
+    $entry = makeUpdatableBlogEntry(['author' => [$user->id()]]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['author' => [Fixtures::makeUser()->id()]]])
+        ->assertHasErrors(["changing the author requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel, or leave author out of data"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed', 'author' => [$user->id()]]])
+        ->assertOk();
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Renamed')
+        ->and($fresh->authors()->all())->toBe([$user->id()]);
 });
