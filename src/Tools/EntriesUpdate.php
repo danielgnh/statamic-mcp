@@ -244,6 +244,15 @@ class EntriesUpdate extends Tool
             ));
         }
 
+        // CP parity: a localization inherits a non-localizable date, and
+        // publishing a working copy would silently drop one staged here.
+        if ($entry->hasOrigin() && ! $entry->blueprint()->field('date')?->isLocalizable()) {
+            throw new ToolException(sprintf(
+                "this localization inherits its date from entry '%s' — change the date there, or omit date",
+                $entry->origin()->id(),
+            ));
+        }
+
         return $this->parseEntryDate($date);
     }
 

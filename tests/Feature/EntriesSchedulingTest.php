@@ -123,3 +123,17 @@ it('reads a time without an offset in app.timezone and honors an explicit offset
         ->assertOk()
         ->assertSee('"date":"2026-10-06T13:00:00+00:00"');
 });
+
+it('refuses a date on a localization that inherits it from its origin', function () {
+    Fixtures::multisite();
+    Fixtures::news();
+
+    $origin = makeNewsStory('2026-09-01T09:00:00+00:00', published: true);
+    $localization = tap($origin->makeLocalization('de')->published(true))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => [], 'date' => '2026-10-06T09:00:00+02:00'])
+        ->assertHasErrors(["this localization inherits its date from entry '{$origin->id()}' — change the date there, or omit date"]);
+
+    expect(Entry::find($localization->id())->date()->toIso8601String())->toBe('2026-09-01T09:00:00+00:00');
+});
