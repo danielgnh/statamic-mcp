@@ -108,9 +108,23 @@ Terms, globals, and assets have no draft state. Writes to them go live immediate
 | Globals | `globals_get`, `globals_update` |
 | Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
 
-The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields and a valid example payload. The three delete tools only exist when `deletes` is on.
+The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The three delete tools only exist when `deletes` is on.
 
 [docs/tools.md](docs/tools.md) documents every tool, the upload limits, and how URL uploads block private network addresses.
+
+## Guidelines for agents
+
+`blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions on your page builder blocks and, if you want, a few markdown files:
+
+- Each set in a Replicator or Bard field has an `instructions` key. `blueprints_get` returns it with the set's fields, and editors see the same text when they add a block.
+- `resources/mcp/guidelines/site.md` holds voice and tone. `statamic_overview` returns it.
+- `resources/mcp/guidelines/collections/pages.md` describes how a page is put together. `blueprints_get` returns it with the collection's blueprints.
+
+```bash
+php please mcp:guidelines
+```
+
+The command creates those files without overwriting any, then lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
 
 ## Adding your own tools
 
@@ -167,6 +181,7 @@ This creates `config/statamic/mcp.php`.
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
+| `guidelines_path` | `resource_path('mcp/guidelines')` | Where the guideline files for agents live. |
 
 ## Troubleshooting
 

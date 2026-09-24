@@ -213,10 +213,10 @@ it('lists the sets of every group in one list, with their instructions, fields, 
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
         ->assertSee('{"handle":"page_builder","type":"replicator","required":false,"rules":["array","nullable"],"sets":['
-            .'{"handle":"section_hero","display":"Section - Hero","instructions":"First section of a page.","fields":['
+            .'{"handle":"section_hero","display":"Section - Hero","group":"Headers","instructions":"First section of a page.","fields":['
             .'{"handle":"heading","type":"text","required":true,"rules":["required"]},'
             .'{"handle":"variant","type":"select","required":false,"rules":["nullable"],"options":{"default":"Default","search":"Search"}}]},'
-            .'{"handle":"section_testimonials","display":"Section - Testimonials","fields":['
+            .'{"handle":"section_testimonials","display":"Section - Testimonials","group":"Content","fields":['
             .'{"handle":"layout","type":"button_group","required":false,"rules":["nullable"],"options":{"slider":"Slider","single":"Single"}}]}]}');
 });
 
@@ -228,7 +228,7 @@ it('lists the sets of a bard field and leaves a bard without sets alone', functi
     Server::actingAs(Fixtures::makeUser('view landing entries'))
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'landing'])
         ->assertOk()
-        ->assertSee('{"handle":"body","type":"bard","required":false,"rules":["nullable"],"sets":[{"handle":"callout","display":"Callout","fields":[{"handle":"text","type":"text","required":false,"rules":["nullable"]}]}]}');
+        ->assertSee('{"handle":"body","type":"bard","required":false,"rules":["nullable"],"sets":[{"handle":"callout","display":"Callout","group":"Main","fields":[{"handle":"text","type":"text","required":false,"rules":["nullable"]}]}]}');
 
     Fixtures::tags();
     Fixtures::blog();
@@ -259,7 +259,7 @@ it('flags sets that editors can no longer add and leaves them out of the example
     Server::actingAs(Fixtures::makeUser('view pages entries'))
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
-        ->assertSee('"sets":[{"handle":"old_banner","display":"Old Banner","hidden":true,"fields":[{"handle":"text","type":"text"')
+        ->assertSee('"sets":[{"handle":"old_banner","display":"Old Banner","group":"Main","hidden":true,"fields":[{"handle":"text","type":"text"')
         ->assertSee('"page_builder":[{"type":"section_text","text":"A longer example paragraph of plain text."}]');
 });
 
@@ -290,7 +290,7 @@ it('describes the fields of grid and group fields, including inside sets', funct
         ->assertOk()
         ->assertSee('{"handle":"facts","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"label","type":"text","required":false,"rules":["nullable"]}]}')
         ->assertSee('{"handle":"seo","type":"group","required":false,"rules":["array","nullable"],"fields":[{"handle":"meta_title","type":"text","required":false,"rules":["nullable"],"instructions":"Under 60 characters."}]}')
-        ->assertSee('"sets":[{"handle":"section_stats","display":"Section - Stats","fields":[{"handle":"stats","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"value","type":"integer","required":false,"rules":["integer","nullable"]}]}]}]');
+        ->assertSee('"sets":[{"handle":"section_stats","display":"Section - Stats","group":"Main","fields":[{"handle":"stats","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"value","type":"integer","required":false,"rules":["integer","nullable"]}]}]}]');
 });
 
 it('resolves fieldsets imported into a set', function () {
@@ -312,7 +312,7 @@ it('resolves fieldsets imported into a set', function () {
     Server::actingAs(Fixtures::makeUser('view pages entries'))
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
-        ->assertSee('"sets":[{"handle":"section_hero","display":"Section - Hero","fields":[{"handle":"heading","type":"text","required":true,"rules":["required"]}]}]');
+        ->assertSee('"sets":[{"handle":"section_hero","display":"Section - Hero","group":"Main","fields":[{"handle":"heading","type":"text","required":true,"rules":["required"]}]}]');
 });
 
 it('gives a replicator one set, a grid one row, and a group one object as examples', function () {
