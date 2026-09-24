@@ -197,7 +197,7 @@ it('rejects a site that does not match the entry id', function () {
         ->assertHasErrors(["entry '{$entry->id()}' belongs to site 'de', not 'en' — pass the matching localization id instead (or omit site). Localizations: de => {$entry->id()}"]);
 });
 
-it("requires 'access de site' to preview a German entry", function () {
+it("requires 'access {site} site' to preview on multisite, the default site included", function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
@@ -208,6 +208,11 @@ it("requires 'access de site' to preview a German entry", function () {
     Server::actingAs($user)
         ->tool(EntriesPreview::class, ['id' => $entry->id()])
         ->assertHasErrors(["requires 'access de site' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    // CP parity: Statamic's SitePolicy gates the default site like any other.
+    Server::actingAs($user)
+        ->tool(EntriesPreview::class, ['id' => makePreviewableDraft()->id()])
+        ->assertHasErrors(["requires 'access en site' — grant it to a role of {$user->email()} in the Control Panel"]);
 
     expect(mintedPreviewTokens())->toBeEmpty();
 });
