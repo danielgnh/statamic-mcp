@@ -14,6 +14,8 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesList;
+use Danielgnh\StatamicMcp\Tools\EntriesPublish;
+use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsGet;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
@@ -44,6 +46,8 @@ class Server extends McpServer
         EntriesGet::class,
         EntriesCreate::class,
         EntriesUpdate::class,
+        EntriesPublish::class,
+        EntriesUnpublish::class,
         EntriesDelete::class,
         TermsList::class,
         TermsGet::class,
@@ -59,9 +63,6 @@ class Server extends McpServer
         AssetsDelete::class,
     ];
 
-    // The full tool set (19 with deletes enabled) exceeds laravel/mcp's
-    // 15-per-page tools/list default, and clients that never send a cursor
-    // would silently miss the overflow — advertise everything in one page.
     public int $defaultPaginationLength = 50;
 
     /** @var array<int, class-string<Tool>> */
