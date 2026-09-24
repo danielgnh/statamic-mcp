@@ -15,10 +15,14 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
+use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Date;
+use Statamic\Fieldtypes\Grid;
+use Statamic\Fieldtypes\Group;
+use Statamic\Fieldtypes\Replicator;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets, and grid and group fields their nested fields, described the same way; never add a set marked hidden.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -194,7 +198,53 @@ class BlueprintsGet extends Tool
             $descriptor['instructions'] = $config['instructions'];
         }
 
+        $fieldtype = $field->fieldtype();
+
+        if ($fieldtype instanceof Replicator && $fieldtype->flattenedSetsConfig()->isNotEmpty()) {
+            $descriptor['sets'] = $fieldtype->flattenedSetsConfig()
+                ->map(fn (array $set, string $handle) => $this->describeSet($fieldtype, $handle, $set))
+                ->values()
+                ->all();
+        }
+
+        if ($fieldtype instanceof Grid || $fieldtype instanceof Group) {
+            $descriptor['fields'] = $this->describeFields($fieldtype->fields());
+        }
+
         return $descriptor;
+    }
+
+    /**
+     * The fields come from the fieldtype, not the raw config, so fieldset
+     * imports are resolved. A hidden set is one the CP no longer offers;
+     * it only stays for existing content.
+     *
+     * @param  array<string, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function describeSet(Replicator $fieldtype, string $handle, array $config): array
+    {
+        $set = ['handle' => $handle, 'display' => data_get($config, 'display', $handle)];
+
+        if (filled($instructions = data_get($config, 'instructions'))) {
+            $set['instructions'] = $instructions;
+        }
+
+        if (data_get($config, 'hide')) {
+            $set['hidden'] = true;
+        }
+
+        $set['fields'] = $this->describeFields($fieldtype->fields($handle));
+
+        return $set;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function describeFields(Fields $fields): array
+    {
+        return $fields->all()->map($this->describe(...))->values()->all();
     }
 
     /**

@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Fieldset;
 
 it('returns fields and a bounded example payload for a collection blueprint', function () {
     Fixtures::site();
@@ -174,6 +175,135 @@ it('uses the first key of options saved as key and value pairs', function () {
         ->assertOk()
         ->assertSee('"variant":"default"')
         ->assertSee('"alignment":"center"');
+});
+
+it('lists the sets of every group in one list, with their instructions, fields, and options', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => ['type' => 'replicator', 'sets' => [
+            'headers' => ['display' => 'Headers', 'sets' => [
+                'section_hero' => [
+                    'display' => 'Section - Hero',
+                    'instructions' => 'First section of a page.',
+                    'icon' => 'home-house',
+                    'fields' => [
+                        ['handle' => 'heading', 'field' => ['type' => 'text', 'validate' => 'required']],
+                        ['handle' => 'variant', 'field' => ['type' => 'select', 'options' => ['default' => 'Default', 'search' => 'Search']]],
+                    ],
+                ],
+            ]],
+            'content' => ['display' => 'Content', 'sets' => [
+                'section_testimonials' => ['display' => 'Section - Testimonials', 'fields' => [
+                    ['handle' => 'layout', 'field' => ['type' => 'button_group', 'options' => ['slider' => 'Slider', 'single' => 'Single']]],
+                ]],
+            ]],
+        ]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('{"handle":"page_builder","type":"replicator","required":false,"rules":["array","nullable"],"sets":['
+            .'{"handle":"section_hero","display":"Section - Hero","instructions":"First section of a page.","fields":['
+            .'{"handle":"heading","type":"text","required":true,"rules":["required"]},'
+            .'{"handle":"variant","type":"select","required":false,"rules":["nullable"],"options":{"default":"Default","search":"Search"}}]},'
+            .'{"handle":"section_testimonials","display":"Section - Testimonials","fields":['
+            .'{"handle":"layout","type":"button_group","required":false,"rules":["nullable"],"options":{"slider":"Slider","single":"Single"}}]}]}');
+});
+
+it('lists the sets of a bard field and leaves a bard without sets alone', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'landing'])
+        ->assertOk()
+        ->assertSee('{"handle":"body","type":"bard","required":false,"rules":["nullable"],"sets":[{"handle":"callout","display":"Callout","fields":[{"handle":"text","type":"text","required":false,"rules":["nullable"]}]}]}');
+
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertSee('{"handle":"content","type":"bard","required":false,"rules":["nullable"]}');
+});
+
+it('flags sets that editors can no longer add', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'old_banner' => ['display' => 'Old Banner', 'hide' => true, 'fields' => [
+                ['handle' => 'text', 'field' => ['type' => 'text']],
+            ]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"sets":[{"handle":"old_banner","display":"Old Banner","hidden":true,"fields":[{"handle":"text","type":"text"');
+});
+
+it('describes the fields of grid and group fields, including inside sets', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'facts' => ['type' => 'grid', 'fields' => [
+            ['handle' => 'label', 'field' => ['type' => 'text']],
+        ]],
+        'seo' => ['type' => 'group', 'fields' => [
+            ['handle' => 'meta_title', 'field' => ['type' => 'text', 'instructions' => 'Under 60 characters.']],
+        ]],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'section_stats' => ['display' => 'Section - Stats', 'fields' => [
+                ['handle' => 'stats', 'field' => ['type' => 'grid', 'fields' => [
+                    ['handle' => 'value', 'field' => ['type' => 'integer']],
+                ]]],
+            ]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('{"handle":"facts","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"label","type":"text","required":false,"rules":["nullable"]}]}')
+        ->assertSee('{"handle":"seo","type":"group","required":false,"rules":["array","nullable"],"fields":[{"handle":"meta_title","type":"text","required":false,"rules":["nullable"],"instructions":"Under 60 characters."}]}')
+        ->assertSee('"sets":[{"handle":"section_stats","display":"Section - Stats","fields":[{"handle":"stats","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"value","type":"integer","required":false,"rules":["integer","nullable"]}]}]}]');
+});
+
+it('resolves fieldsets imported into a set', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Fieldset::make('section_hero')->setContents(['fields' => [
+        ['handle' => 'heading', 'field' => ['type' => 'text', 'validate' => 'required']],
+    ]])->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'section_hero' => ['display' => 'Section - Hero', 'fields' => [['import' => 'section_hero']]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"sets":[{"handle":"section_hero","display":"Section - Hero","fields":[{"handle":"heading","type":"text","required":true,"rules":["required"]}]}]');
 });
 
 it('returns the requested blueprint when a collection has several', function () {
