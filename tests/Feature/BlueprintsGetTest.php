@@ -276,3 +276,24 @@ it('rejects an unknown type via validation', function () {
         ->tool(BlueprintsGet::class, ['type' => 'navigation', 'handle' => 'main'])
         ->assertHasErrors();
 });
+
+it('reports time_enabled on date fields, including the date field injected into dated collections', function () {
+    Fixtures::site();
+    Fixtures::news();
+
+    Collection::make('events')->title('Events')->dated(true)->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('event')->setNamespace('collections.events')->save();
+
+    Server::actingAs(Fixtures::makeUser('view news entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'news'])
+        ->assertOk()
+        ->assertSee('{"handle":"date","type":"date","required":true,"rules":["required"],"time_enabled":true}');
+
+    Server::actingAs(Fixtures::makeUser('view events entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'events'])
+        ->assertOk()
+        ->assertSee('{"handle":"date","type":"date","required":true,"rules":["required"],"time_enabled":false}');
+});

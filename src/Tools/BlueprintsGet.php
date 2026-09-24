@@ -18,7 +18,7 @@ use Statamic\Fields\Field;
 use Statamic\Fieldtypes\Date;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -184,6 +184,10 @@ class BlueprintsGet extends Tool
 
         if (($visibility = $field->visibility()) !== 'visible') {
             $descriptor['visibility'] = $visibility;
+        }
+
+        if ($field->type() === 'date') {
+            $descriptor['time_enabled'] = (bool) data_get($config, 'time_enabled', false);
         }
 
         if (isset($config['options'])) {
