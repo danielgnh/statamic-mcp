@@ -7,18 +7,18 @@ should start with `statamic_overview`.
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
-| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); `date_behavior` on dated collections (`future` and `past`: `public`, `unlisted`, or `private`, as in the collection settings); the acting user; the server block (`read_only`, `deletes`, and `timezone`, the zone a date without an offset is read in). |
+| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions, and `time_enabled` on date fields) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
 
 ## Entries
 
 | Tool | What it does |
 |---|---|
-| `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
-| `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes; the returned data is always the live entry. |
+| `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Filter by `status`: `published`, `draft`, `scheduled`, or `expired`. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
+| `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes. The returned data is the live entry unless you pass `working_copy: true`, which returns the staged working copy, the version `entries_publish` would promote; `source` says which one you got. |
 | `entries_create` | Raw-data create through Statamic's own validation. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
 | `entries_update` | Shallow top-level merge of raw data (nested structures replaced wholesale). Never changes publish state. On revision-enabled collections, edits to a published entry become a **working copy** — the live entry is never touched; an existing working copy is amended (created vs amended is stated in the result). Without revisions, edits save straight to the entry, so changes to a published entry are live at once. No-op updates save nothing. |
-| `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An already-published entry with nothing staged is a no-op. |
+| `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An entry dated in the future on a collection whose future dates are private comes back `scheduled`, not live (see [Scheduling](#scheduling)). An already-published entry with nothing staged is a no-op. |
 | `entries_unpublish` | Takes a live entry offline. Same permission as publish, since Statamic has no separate unpublish permission. On revision-enabled collections a staged working copy is applied to the entry and cleared, with an unpublish revision attributed to you. A draft is a no-op. |
 | `entries_delete` | Only registered when `deletes` is enabled. Deleting an origin cascades to all localizations (requires site access to each); revision files stay on disk as orphans, same as the CP. |
 
@@ -52,14 +52,43 @@ should start with `statamic_overview`.
 ## Write responses
 
 Every write response states the resulting liveness ("saved as draft — not live",
-"published", "published — working copy is now live", "unpublished — not live",
-"working copy created — live entry unchanged", "working copy amended — live entry
-unchanged", "created — live", "updated — live") and includes `cp_edit_url` linking
-the CP edit page (delete responses omit `cp_edit_url` — the page would 404).
+"published", "published — working copy is now live", "scheduled — published, but
+not live until its date", "expired — published, but its date has passed, not live",
+"unpublished — not live", "working copy created — live entry unchanged", "working
+copy amended — live entry unchanged", "created — live", "updated — live") and
+includes `cp_edit_url` linking the CP edit page (delete responses omit
+`cp_edit_url` — the page would 404).
 Collections with revisions enabled get working copies through the same mechanism
 the CP uses, so an edit there never touches the live entry, and `entries_publish`
 promotes the working copy the way the CP's Publish button does. Without revisions,
 an edit to a published entry is live as soon as it saves.
+
+## Scheduling
+
+Scheduling is Statamic's own. On a dated collection whose future date behavior is
+private, a published entry dated in the future is `scheduled`: it returns a 404
+until its date, then goes live with no further call. So an agent schedules a post
+by setting its date with `entries_create` or `entries_update` and calling
+`entries_publish`. The result says `scheduled`, and the CP shows its Scheduled
+badge.
+
+`statamic_overview` reports each dated collection's `date_behavior`. Where
+`future` is `public`, a future-dated entry is live as soon as it is published, and
+the result says so. A collection created in the CP defaults to `future: private`,
+while one defined in YAML without `date_behavior` defaults to public. Where `past`
+is `private`, an entry whose date has passed is `expired` and hidden.
+
+Dates accept an offset (`2026-10-06T09:00:00+02:00`). A time without one is read
+in `server.timezone` from `statamic_overview`, which is `app.timezone`. An entry's
+`date` comes back in UTC with its offset. `blueprints_get` reports `time_enabled`
+on the date field. Without it, the CP shows only the day of a scheduled entry, not
+the time. A localization inherits its origin's date unless the date field is
+localizable, so schedule it on the origin entry.
+
+The entry goes live on time even without cron, because Statamic checks the date
+on every request. Statamic's scheduler (`schedule:run` plus a queue worker) is what
+refreshes the static cache and search index at that minute, the same as for
+entries scheduled in the CP.
 
 ## Asset uploads and the SSRF policy
 
