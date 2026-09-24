@@ -16,13 +16,14 @@ use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
+use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Date;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 use Statamic\Fieldtypes\Replicator;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets, and grid and group fields their nested fields, described the same way; never add a set marked hidden.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets, and grid and group fields their nested fields, described the same way; never add a set marked hidden. The example shows one set or row, and example_notes keys notes on nested values by path, like page_builder.0.image.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -98,13 +99,11 @@ class BlueprintsGet extends Tool
                 continue;
             }
 
-            [$value, $note] = $this->exampleFor($field);
+            [$value, $fieldNotes] = $this->exampleFor($field, $field->handle());
 
             $example[$field->handle()] = $value;
 
-            if ($note !== null) {
-                $notes[$field->handle()] = $note;
-            }
+            $notes = [...$notes, ...$fieldNotes];
         }
 
         $payload = [
@@ -248,15 +247,32 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Bounded example generation: real examples for a fixed
-     * set of fieldtypes, obviously-fake placeholders for relation fields, and
-     * a null + note fallback for everything else (bard, replicator, grid, …).
+     * An example in the stored shape, plus notes keyed by their path in the
+     * example. A replicator gets one set, a grid one row, and a group one
+     * object, each built from the examples of its own fields.
      *
-     * @return array{0: mixed, 1: ?string} [example value, note or null]
+     * @return array{0: mixed, 1: array<string, string>}
      */
-    private function exampleFor(Field $field): array
+    private function exampleFor(Field $field, string $path): array
     {
         return match ($field->type()) {
+            'replicator' => $this->replicatorExample($field, $path),
+            'grid' => $this->gridExample($field, $path),
+            'group' => $this->groupExample($field, $path),
+            default => $this->leafExample($field, $path),
+        };
+    }
+
+    /**
+     * Bounded example generation: real examples for a fixed
+     * set of fieldtypes, obviously-fake placeholders for relation fields, and
+     * a null + note fallback for everything else (bard, link, …).
+     *
+     * @return array{0: mixed, 1: array<string, string>}
+     */
+    private function leafExample(Field $field, string $path): array
+    {
+        [$value, $note] = match ($field->type()) {
             'text' => ['Example text', null],
             'textarea' => ['A longer example paragraph of plain text.', null],
             'markdown' => ["## Example Heading\n\nExample **markdown** body.", null],
@@ -273,11 +289,128 @@ class BlueprintsGet extends Tool
             'terms' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-TERM-ID'),
             'users' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-USER-ID'),
             'assets' => $this->assetsFieldExample($field),
-            default => [null, sprintf(
-                "no example generated for fieldtype '%s' — read a real value from existing content before writing this field",
-                $field->type(),
-            )],
+            'bard' => $this->bardExample($field),
+            default => $this->noExample($field),
         };
+
+        return [$value, $note === null ? [] : [$path => $note]];
+    }
+
+    /**
+     * @return array{0: null, 1: string}
+     */
+    private function noExample(Field $field): array
+    {
+        return [null, sprintf(
+            "no example generated for fieldtype '%s' — read a real value from existing content before writing this field",
+            $field->type(),
+        )];
+    }
+
+    /**
+     * The fields of a set, grid row, or group as one example object, with
+     * their notes keyed by path. Computed fields stay out, like at the top
+     * level.
+     *
+     * @return array{0: array<string, mixed>, 1: array<string, string>}
+     */
+    private function exampleObject(Fields $fields, string $path): array
+    {
+        $example = [];
+        $notes = [];
+
+        foreach ($fields->all() as $field) {
+            $key = "{$path}.{$field->handle()}";
+
+            if ($field->visibility() === 'computed') {
+                $notes[$key] = 'computed — not writable';
+
+                continue;
+            }
+
+            [$value, $fieldNotes] = $this->exampleFor($field, $key);
+
+            $example[$field->handle()] = $value;
+
+            $notes = [...$notes, ...$fieldNotes];
+        }
+
+        return [$example, $notes];
+    }
+
+    /**
+     * One set in the stored shape: its type plus an example of each of its
+     * fields. id and enabled are generated on write.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: array<string, string>}
+     */
+    private function replicatorExample(Field $field, string $path): array
+    {
+        /** @var Replicator $fieldtype */
+        $fieldtype = $field->fieldtype();
+
+        if (($set = $this->firstSet($fieldtype)) === null) {
+            return [[], []];
+        }
+
+        [$values, $notes] = $this->exampleObject($fieldtype->fields($set), "{$path}.0");
+
+        $note = sprintf('shows one %s set — sets lists every set type with its fields. Each set is an object with its type plus its field values; id and enabled are optional.', $set);
+
+        return [[['type' => $set, ...$values]], [$path => $note, ...$notes]];
+    }
+
+    /**
+     * @return array{0: list<array<string, mixed>>, 1: array<string, string>}
+     */
+    private function gridExample(Field $field, string $path): array
+    {
+        /** @var Grid $fieldtype */
+        $fieldtype = $field->fieldtype();
+
+        [$row, $notes] = $this->exampleObject($fieldtype->fields(), "{$path}.0");
+
+        return [[$row], $notes];
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: array<string, string>}
+     */
+    private function groupExample(Field $field, string $path): array
+    {
+        /** @var Group $fieldtype */
+        $fieldtype = $field->fieldtype();
+
+        return $this->exampleObject($fieldtype->fields(), $path);
+    }
+
+    /**
+     * Bard keeps a null example. With sets, the note shows what a set node
+     * looks like, since HTML (which preProcess() converts) cannot hold one.
+     *
+     * @return array{0: null, 1: string}
+     */
+    private function bardExample(Field $field): array
+    {
+        /** @var Bard $fieldtype */
+        $fieldtype = $field->fieldtype();
+
+        if (($set = $this->firstSet($fieldtype)) === null) {
+            return $this->noExample($field);
+        }
+
+        return [null, sprintf(
+            'no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves. A set is a node {"type":"set","attrs":{"values":{"type":"%s", ...its field values}}}, and sets lists every set type; HTML cannot hold sets.',
+            $set,
+        )];
+    }
+
+    /**
+     * The first set the CP offers editors, skipping hidden ones.
+     */
+    private function firstSet(Replicator $fieldtype): ?string
+    {
+        return $fieldtype->flattenedSetsConfig()->reject(fn (array $set) => data_get($set, 'hide'))->keys()->first();
     }
 
     /**
