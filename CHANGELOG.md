@@ -68,13 +68,15 @@ called out here explicitly.
   revision, which until now only the CP could do. Because each is a separate
   tool, MCP clients prompt for it separately: allowing `entries_update` no
   longer lets an agent go live.
-- `entries_preview` returns a short-lived URL that renders an entry through
-  the site's templates using Statamic's Live Preview, so an agent can check
-  a draft without a human opening the browser. On revision-enabled entries
-  the page shows the staged working copy. The tool needs the collection's
-  edit permission, the same check as Live Preview in the CP. Anyone with the
-  URL can open it until it expires an hour after the call. It changes no
-  content, so `read_only` keeps it.
+- `entries_preview` returns a short-lived URL that renders an entry through the
+  site's templates using Statamic's Live Preview, so an agent can check a draft
+  without a human opening the browser. On revision-enabled entries the page
+  shows the staged working copy. The tool needs the collection's edit
+  permission, the same check as Live Preview in the CP, author rule included:
+  previewing someone else's entry on a blueprint with an `author` field needs
+  `edit other authors {collection} entries`. Anyone with the URL can open it
+  until it expires an hour after the call. It changes no content, so `read_only`
+  keeps it.
 - **Your own tools.** The new `server` config key names the laravel/mcp server
   class to mount. Extend `Danielgnh\StatamicMcp\Server`, override `tools()`, and
   add, replace, or remove tools on the `ToolRegistry` it receives; they run
