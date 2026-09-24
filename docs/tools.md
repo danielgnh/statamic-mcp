@@ -68,3 +68,103 @@ downloads abort past `uploads.max_size` — `Content-Length` is never trusted.
 Set `uploads.source_allowlist` to pin uploads to known hosts. Container-level
 validation rules (e.g. `mimes:jpg,png`) and Statamic's global file guards apply
 on top, exactly as in the Control Panel.
+
+## Your own tools
+
+The README shows the shape: a server class that extends `Danielgnh\StatamicMcp\Server`,
+spreads `Server::TOOLS`, adds your tool classes, and is named in the `server` config
+key. This section covers what the base tool class gives you, what `read_only` expects
+from you, and how to test.
+
+### What the base class gives you
+
+Extend `Danielgnh\StatamicMcp\Tools\Tool` and implement `execute(Request $request): Response`.
+Throw `Danielgnh\StatamicMcp\Tools\ToolException` anywhere in it and the message becomes
+a tool error response instead of a 500. The protected helpers:
+
+| Helper | What it does |
+|---|---|
+| `user($request)` | The acting Statamic user, in token and OAuth mode alike. Throws a tool error when no user is authenticated. |
+| `can($user, $permission)` / `ensurePermission($user, $permission)` | Statamic's native permission check, super users pass. The throwing form names the missing permission and the remedy. |
+| `ensureExposed($type, $handle)` / `exposedHandles($type)` | Honors the `resources` allowlist for `collections`, `taxonomies`, `globals`, and `asset_containers`. A handle that exists but is not exposed reads as not found, on purpose. |
+| `writesEnabled()` / `ensureWritesEnabled()` | The `read_only` switch. |
+| `deletesEnabled()` / `ensureDeletesEnabled()` | The `deletes` switch, with `read_only` checked first. |
+| `json($data)` | A compact JSON text response. |
+| `notFound($what, $given, $available)` | The same not-found shape the built-in tools return. |
+
+Declare parameters in `schema()` and validate them in `execute()`. laravel/mcp does not
+enforce the declared schema server-side, so `$request->validate()` is the real guard:
+
+```php
+#[\Override]
+public function schema(JsonSchema $schema): array
+{
+    return [
+        'draft_id' => $schema->string()->description('Entry id of the newsletter draft.')->required(),
+    ];
+}
+
+protected function execute(Request $request): Response
+{
+    $validated = $request->validate(['draft_id' => 'required|string']);
+
+    // ...
+}
+```
+
+A plain `Laravel\Mcp\Server\Tool` works too. It just runs behind the addon's middleware
+without the helpers above.
+
+### Your tools and read_only
+
+`read_only` hides the built-in write tools because each one implements `shouldRegister()`.
+The switch knows nothing about your tools, so a tool that writes needs the same two lines
+the built-in ones have. The first hides it from `tools/list`; the second refuses the call
+when a client still has it cached:
+
+```php
+public function shouldRegister(Request $request): bool
+{
+    return $this->writesEnabled();
+}
+
+protected function execute(Request $request): Response
+{
+    $this->ensureWritesEnabled();
+
+    // ...
+}
+```
+
+Read tools need neither. Mark them `#[IsReadOnly]` so clients can tell.
+
+### Names and paging
+
+Tool names must be unique on the server. `tools/call` dispatches to the first tool whose
+name matches, so a second `entries_list` is dead code with no error anywhere. To replace a
+built-in tool, leave it out of your `$tools` array and add yours under the same name.
+
+The addon serves up to 50 tools on one page because some clients never send a cursor.
+If your server grows past that, raise `$defaultPaginationLength` and
+`$maxPaginationLength` on your class.
+
+### Testing
+
+laravel/mcp's test harness runs against your server class. Act as a Statamic user and
+call the tool by class:
+
+```php
+use App\Mcp\StatamicServer;
+use App\Mcp\Tools\NewsletterSend;
+use Statamic\Facades\User;
+
+$user = User::make()->email('editor@site.com')->makeSuper();
+
+StatamicServer::actingAs($user)
+    ->tool(NewsletterSend::class, ['draft_id' => $draft->id()])
+    ->assertOk()
+    ->assertSee('"sent":true');
+```
+
+The harness honors `shouldRegister()`, so a hidden tool answers "not found". To pin the
+in-handler re-check, call `handle()` on a fresh instance directly.
