@@ -813,3 +813,26 @@ it('ignores the entry\'s own blueprint in the patch and refuses another one', fu
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blueprint' => 'longread']])
         ->assertHasErrors(['field blueprint is reserved — never writable via data']);
 });
+
+it('validates a localization with the values it inherits', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de'))->save();
+
+    // title is required and only inherited: the patch alone never has it.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['hero_image' => 'hallo.jpg']])
+        ->assertOk();
+
+    $fresh = Entry::find($localization->id());
+
+    expect($fresh->data()->has('title'))->toBeFalse()
+        ->and($fresh->get('hero_image'))->toBe('hallo.jpg')
+        ->and($fresh->value('title'))->toBe('Hello');
+});

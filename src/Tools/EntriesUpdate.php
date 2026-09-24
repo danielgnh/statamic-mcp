@@ -129,8 +129,15 @@ class EntriesUpdate extends Tool
         // data, so a blueprint that marks slug required must be fed the
         // effective value (the new slug, or the entry's current one).
         // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself.
-        $values = [...$current, ...$data, 'slug' => $slug ?? $basis->slug()];
+        // excludes this entry itself. A localization validates with the
+        // values it inherits under its own, as in the CP's form, so a partial
+        // patch never false-fails a required field — only its data is stored.
+        $values = [
+            ...($basis->hasOrigin() ? $basis->origin()->values()->all() : []),
+            ...$current,
+            ...$data,
+            'slug' => $slug ?? $basis->slug(),
+        ];
 
         if ($collection->dated()) {
             $values['date'] = $date ?? $basis->date();
