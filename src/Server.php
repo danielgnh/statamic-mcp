@@ -19,6 +19,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Danielgnh\StatamicMcp\Tools\GlobalsGet;
 use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
+use Danielgnh\StatamicMcp\Tools\NavigationsGet;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Danielgnh\StatamicMcp\Tools\TermsDelete;
@@ -56,6 +57,7 @@ class Server extends McpServer
         TermsDelete::class,
         GlobalsGet::class,
         GlobalsUpdate::class,
+        NavigationsGet::class,
         AssetsList::class,
         AssetsGet::class,
         AssetsUpload::class,

@@ -9,6 +9,7 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
@@ -88,6 +89,14 @@ class Fixtures
             'title' => ['type' => 'text', 'validate' => 'required'],
             'slug' => ['type' => 'slug', 'validate' => 'required|max:200'],
         ])->setHandle('page')->setNamespace('collections.pages')->save();
+    }
+
+    // An entry of the pages collection: call pages() first. Returns its id.
+    public static function page(string $slug, string $title, string $site = 'en', bool $published = true): string
+    {
+        return tap(
+            Entry::make()->collection('pages')->locale($site)->slug($slug)->data(['title' => $title])->published($published)
+        )->save()->id();
     }
 
     // Call assetContainer('images') first: the single-file fields point at it.
