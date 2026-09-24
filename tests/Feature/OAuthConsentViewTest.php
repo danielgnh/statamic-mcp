@@ -12,14 +12,12 @@ uses(UsesOAuthMode::class);
 // AuthorizationViewResponse, so /oauth/authorize 500s ("Target [...] is not
 // instantiable") the moment a connector reaches consent. The addon closes that
 // gap by binding its own self-contained view in OAuth mode. These assert the
-// binding exists AND renders — they need the real package, so they skip in the
-// main (Passport-absent) legs and run in the Passport CI leg.
-$requiresPassport = fn () => ! class_exists(Passport::class);
+// binding exists AND renders.
 
 it('binds a default OAuth consent view in oauth mode', function () {
     expect(app()->bound(AuthorizationViewResponse::class))->toBeTrue()
         ->and(app(AuthorizationViewResponse::class))->toBeInstanceOf(SimpleViewResponse::class);
-})->skip($requiresPassport, 'requires laravel/passport — Passport CI leg only');
+});
 
 it('renders the bound consent view without a 500, wired to the approve/deny routes', function () {
     // Passport's own provider (and its passport.authorizations.* routes the view
@@ -48,7 +46,7 @@ it('renders the bound consent view without a 500, wired to the approve/deny rout
         ->and($html)->toContain(route('passport.authorizations.deny'))
         ->and($html)->toContain('_method')                   // DELETE spoof on the deny form
         ->and($html)->not->toContain('@vite');               // self-contained: no compiled-asset dependency
-})->skip($requiresPassport, 'requires laravel/passport — Passport CI leg only');
+});
 
 it('lets a host app override the consent view (addon steps aside when already bound)', function () {
     // The addon guards its default on `! app()->bound(...)`, so a binding the
@@ -64,4 +62,4 @@ it('lets a host app override the consent view (addon steps aside when already bo
     }
 
     expect(app(AuthorizationViewResponse::class))->toBe($sentinel);
-})->skip($requiresPassport, 'requires laravel/passport — Passport CI leg only');
+});

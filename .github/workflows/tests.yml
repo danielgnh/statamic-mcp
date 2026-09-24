@@ -99,6 +99,28 @@ jobs:
       - name: Check for pending refactorings
         run: vendor/bin/rector --dry-run --no-progress-bar
 
-  # No separate Passport leg anymore: laravel/passport lives in require-dev,
-  # so every matrix leg runs the full OAuth coverage — including real signed
-  # bearers and the authorize→consent→exchange flow with file users.
+  # laravel/passport is in require-dev, so every matrix leg runs the full OAuth
+  # coverage. Token-mode sites don't need Passport, and this job tests them
+  # without it.
+  without-passport:
+    runs-on: ubuntu-latest
+    name: Token mode without Passport
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: bcmath, ctype, curl, dom, exif, gd, iconv, intl, libxml, mbstring, openssl, pdo, tokenizer, xml, zip
+          coverage: none
+
+      - name: Install dependencies without Passport
+        run: |
+          composer remove laravel/passport --dev --no-update
+          composer update --prefer-dist --no-interaction
+
+      - name: Run the Passport-free tests
+        run: vendor/bin/pest --ci --group=without-passport
