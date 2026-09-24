@@ -72,6 +72,17 @@ class Fixtures
         Collection::findByHandle($collection)->revisionsEnabled(true)->save();
     }
 
+    // An author field turns on Statamic's author rules: entries by anyone
+    // else need the "other authors" permissions.
+    public static function authors(string $collection = 'blog'): void
+    {
+        $handle = Collection::findByHandle($collection)->entryBlueprint()->handle();
+
+        Blueprint::find("collections.{$collection}.{$handle}")
+            ->ensureField('author', ['type' => 'users', 'max_items' => 1])
+            ->save();
+    }
+
     // The CP's blueprint builder lets editors mark slug required — Statamic's
     // own injected slug field is only max:200, so this needs its own fixture.
     public static function pages(): void

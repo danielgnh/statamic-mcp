@@ -621,3 +621,70 @@ it('rejects an empty date instead of silently ignoring it', function () {
 
     expect(Entry::find($entry->id())->date()->format('Y-m-d'))->toBe('2026-08-01');
 });
+
+it("requires 'edit other authors blog entries' for someone else's entry, but not for one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('edit blog entries');
+    $theirs = makeUpdatableBlogEntry(['author' => [Fixtures::makeUser()->id()]]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $theirs->id(), 'data' => ['title' => 'Taken over']])
+        ->assertHasErrors(["requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    expect(Entry::find($theirs->id())->get('title'))->toBe('Hello World');
+
+    $mine = tap(Entry::make()->collection('blog')->slug('mine')->data(['title' => 'Mine', 'author' => [$user->id()]]))->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $mine->id(), 'data' => ['title' => 'Still mine']])
+        ->assertOk();
+
+    expect(Entry::find($mine->id())->get('title'))->toBe('Still mine');
+});
+
+it("treats an entry without an author as someone else's (CP parity)", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $entry = makeUpdatableBlogEntry();
+    $user = Fixtures::makeUser('edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertHasErrors(["requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'edit other authors blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello Again']])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('Hello Again');
+});
+
+it("refuses to change the author without 'edit other authors blog entries'", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('edit blog entries');
+    $entry = makeUpdatableBlogEntry(['author' => [$user->id()]]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['author' => [Fixtures::makeUser()->id()]]])
+        ->assertHasErrors(["changing the author requires 'edit other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel, or leave author out of data"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed', 'author' => [$user->id()]]])
+        ->assertOk();
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Renamed')
+        ->and($fresh->authors()->all())->toBe([$user->id()]);
+});

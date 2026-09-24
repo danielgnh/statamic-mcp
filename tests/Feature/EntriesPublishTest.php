@@ -253,3 +253,54 @@ it('reports a listener-cancelled unpublish instead of claiming success', functio
         ->tool(EntriesUnpublish::class, ['id' => $entry->id()])
         ->assertHasErrors(['the unpublish was cancelled by a listener on this site — the entry is still live']);
 });
+
+function makeAuthoredBlogPost(string $slug, string $author, bool $published): EntryContract
+{
+    return tap(
+        Entry::make()->collection('blog')->slug($slug)->data(['title' => $slug, 'author' => [$author]])->published($published)
+    )->save();
+}
+
+it("requires 'publish other authors blog entries' to publish someone else's entry, but not one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('publish blog entries');
+    $theirs = makeAuthoredBlogPost('theirs', Fixtures::makeUser()->id(), published: false);
+    $mine = makeAuthoredBlogPost('mine', $user->id(), published: false);
+
+    Server::actingAs($user)
+        ->tool(EntriesPublish::class, ['id' => $theirs->id()])
+        ->assertHasErrors(["requires 'publish other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesPublish::class, ['id' => $mine->id()])
+        ->assertOk();
+
+    expect(Entry::find($theirs->id())->published())->toBeFalse()
+        ->and(Entry::find($mine->id())->published())->toBeTrue();
+});
+
+it("requires 'publish other authors blog entries' to unpublish someone else's entry, but not one's own", function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors();
+
+    $user = Fixtures::makeUser('publish blog entries');
+    $theirs = makeAuthoredBlogPost('theirs', Fixtures::makeUser()->id(), published: true);
+    $mine = makeAuthoredBlogPost('mine', $user->id(), published: true);
+
+    Server::actingAs($user)
+        ->tool(EntriesUnpublish::class, ['id' => $theirs->id()])
+        ->assertHasErrors(["requires 'publish other authors blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUnpublish::class, ['id' => $mine->id()])
+        ->assertOk();
+
+    expect(Entry::find($theirs->id())->published())->toBeTrue()
+        ->and(Entry::find($mine->id())->published())->toBeFalse();
+});

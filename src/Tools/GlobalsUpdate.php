@@ -75,7 +75,7 @@ class GlobalsUpdate extends Tool
         }
 
         // Global sets only exist in their own configured sites; the trait
-        // enforces 'access {site} site' for non-default sites on multisite.
+        // enforces 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $set->sites());
 
         // v6: in() returns the existing localization, or a fresh unsaved one

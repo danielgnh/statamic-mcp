@@ -77,7 +77,7 @@ class TermsUpdate extends Tool
         }
 
         // Terms only exist in the taxonomy's own configured sites; the trait
-        // enforces 'access {site} site' for non-default sites on multisite.
+        // enforces 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $term->taxonomy()->sites());
 
         $localized = $term->in($site);
