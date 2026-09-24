@@ -4,9 +4,11 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 
 it('returns fields and a bounded example payload for a collection blueprint', function () {
     Fixtures::site();
@@ -192,6 +194,176 @@ it('wraps the first option in an array for a multi-select', function () {
         ->assertSee('"material":"wool"');
 });
 
+it('uses the first key of options saved as key and value pairs', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    // The CP saves options as a list of key/value pairs.
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'variant' => ['type' => 'select', 'options' => [['key' => 'default', 'value' => 'Default'], ['key' => 'search', 'value' => 'Search']]],
+        'alignment' => ['type' => 'button_group', 'options' => [['key' => 'center', 'value' => 'Center'], ['key' => 'top', 'value' => 'Top']]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"variant":"default"')
+        ->assertSee('"alignment":"center"');
+});
+
+it('points the replicator note at the first set editors can add', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'old_banner' => ['display' => 'Old Banner', 'hide' => true, 'fields' => [
+                ['handle' => 'text', 'field' => ['type' => 'text']],
+            ]],
+            'section_text' => ['display' => 'Section - Text', 'fields' => [
+                ['handle' => 'text', 'field' => ['type' => 'textarea']],
+            ]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"page_builder":null')
+        ->assertSee('"page_builder":"a list of sets, each an object with its type plus its field values (id and enabled are optional) — call blueprints_get with set: section_text, or another handle from sets, for a set\'s fields and an example"');
+});
+
+it('describes the fields of grid and group fields, also inside a set', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'facts' => ['type' => 'grid', 'fields' => [
+            ['handle' => 'label', 'field' => ['type' => 'text']],
+        ]],
+        'seo' => ['type' => 'group', 'fields' => [
+            ['handle' => 'meta_title', 'field' => ['type' => 'text', 'instructions' => 'Under 60 characters.']],
+        ]],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'section_stats' => ['display' => 'Section - Stats', 'fields' => [
+                ['handle' => 'stats', 'field' => ['type' => 'grid', 'fields' => [
+                    ['handle' => 'value', 'field' => ['type' => 'integer']],
+                ]]],
+            ]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('{"handle":"facts","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"label","type":"text","required":false,"rules":["nullable"]}]}')
+        ->assertSee('{"handle":"seo","type":"group","required":false,"rules":["array","nullable"],"fields":[{"handle":"meta_title","type":"text","required":false,"rules":["nullable"],"instructions":"Under 60 characters."}]}');
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages', 'set' => 'section_stats'])
+        ->assertOk()
+        ->assertSee('"set":{"handle":"section_stats","display":"Section - Stats","group":"Main","fields":[{"handle":"stats","type":"grid","required":false,"rules":["array","nullable"],"fields":[{"handle":"value","type":"integer","required":false,"rules":["integer","nullable"]}]}]}');
+});
+
+it('gives a grid one row and a group one object, and a set its own example row', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'landing'])
+        ->assertOk()
+        ->assertSee('"page_builder":null')
+        ->assertSee('"facts":[{"label":"Example text"}]')
+        ->assertSee('"seo":{"meta_title":"Example text"}')
+        ->assertSee('"page_builder":"a list of sets, each an object with its type plus its field values (id and enabled are optional) — call blueprints_get with set: section_hero, or another handle from sets, for a set\'s fields and an example"');
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'landing', 'set' => 'section_hero'])
+        ->assertOk()
+        ->assertSee('"example":{"type":"section_hero","heading":"Example text","image":"REPLACE-WITH-REAL-ASSET-PATH"}')
+        // notes are keyed by their path in the example row
+        ->assertSee('"example_notes":{"image":"stores asset paths relative to the container root (container \'images\') — max_files is 1, so pass a single string path.');
+});
+
+it('builds a set example from its fields, leaving computed fields out', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'section_stats' => ['display' => 'Section - Stats', 'fields' => [
+                ['handle' => 'total', 'field' => ['type' => 'integer', 'visibility' => 'computed']],
+                ['handle' => 'stats', 'field' => ['type' => 'grid', 'fields' => [
+                    ['handle' => 'value', 'field' => ['type' => 'integer']],
+                ]]],
+                ['handle' => 'actions', 'field' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+                    'link' => ['display' => 'Link', 'fields' => [
+                        ['handle' => 'url', 'field' => ['type' => 'link']],
+                    ]],
+                ]]]]],
+            ]],
+        ]]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages', 'set' => 'section_stats'])
+        ->assertOk()
+        ->assertSee('"example":{"type":"section_stats","stats":[{"value":42}],"actions":null}')
+        ->assertSee('"total":"computed — not writable"')
+        ->assertSee('"actions":"a list of sets, each an object with its type plus its field values (id and enabled are optional) — call blueprints_get with set: link, or another handle from sets');
+});
+
+it('shows how a set node looks in the note of a bard field with sets', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'landing'])
+        ->assertOk()
+        ->assertSee('"body":null')
+        ->assertSee('"body":"no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves. A set is a node {\"type\":\"set\",\"attrs\":{\"values\":{\"type\":\"callout\", ...its field values}}}; call blueprints_get with set: callout, or another handle from sets, for a set\'s fields and an example of its values. HTML cannot hold sets."');
+});
+
+it('returns examples that entries_create stores, a looked-up set row included', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    $user = Fixtures::makeUser('view landing entries', 'create landing entries');
+
+    $this->actingAs($user);
+
+    $example = fn (array $arguments = []) => data_get(json_decode(str_replace(
+        'REPLACE-WITH-REAL-ASSET-PATH',
+        'hero.jpg',
+        (string) (new BlueprintsGet)->handle(new Request(['type' => 'collection', 'handle' => 'landing', ...$arguments]))->content(),
+    ), true), 'example');
+
+    $data = [...$example(), 'page_builder' => [$example(['set' => 'section_hero'])]];
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => $data])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'landing')->first();
+
+    expect($entry->get('page_builder')[0])->toMatchArray(['type' => 'section_hero', 'enabled' => true, 'heading' => 'Example text', 'image' => 'hero.jpg'])
+        ->and($entry->get('facts')[0])->toMatchArray(['label' => 'Example text'])
+        ->and($entry->get('seo'))->toBe(['meta_title' => 'Example text']);
+});
+
 it('returns the requested blueprint when a collection has several', function () {
     Fixtures::site();
     Fixtures::tags();
@@ -308,6 +480,30 @@ it('gives assets fields an actionable example pointing at the assets tools', fun
         ->assertSee("container 'images'")
         ->assertSee('assets_list')
         ->assertSee('assets_upload');
+});
+
+it('says where asset, entry, term, and user fields point when that is configured', function () {
+    Fixtures::site();
+
+    Collection::make('posts')->title('Posts')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'hero' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+        'gallery' => ['type' => 'assets'],
+        'related' => ['type' => 'entries', 'collections' => ['posts'], 'max_items' => 3],
+        'topics' => ['type' => 'terms', 'taxonomies' => ['tags']],
+        'author' => ['type' => 'users', 'max_items' => 1],
+    ])->setHandle('post')->setNamespace('collections.posts')->save();
+
+    Server::actingAs(Fixtures::makeUser('view posts entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
+        ->assertOk()
+        ->assertSee('{"handle":"hero","type":"assets","required":false,"rules":["array","max:1","nullable"],"container":"images","max_files":1}')
+        ->assertSee('{"handle":"gallery","type":"assets","required":false,"rules":["array","nullable"]}')
+        ->assertSee('{"handle":"related","type":"entries","required":false,"rules":["array","max:3","nullable"],"collections":["posts"],"max_items":3}')
+        ->assertSee('{"handle":"topics","type":"terms","required":false,"rules":["array","nullable"],"taxonomies":["tags"]}')
+        ->assertSee('{"handle":"author","type":"users","required":false,"rules":["array","max:1","nullable"],"max_items":1}');
 });
 
 it('denies reading a blueprint the user has no permission to view', function () {

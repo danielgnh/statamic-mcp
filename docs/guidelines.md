@@ -7,8 +7,8 @@ formal the copy is. You write them in two places.
 ## Block instructions
 
 Every set in a Replicator or Bard field already has an `instructions` key.
-`blueprints_get` returns it along with the set's display name, group, and
-fields, so a page builder block documents itself:
+`blueprints_get` lists it with the set's display name and group, so an agent
+can pick the right block:
 
 ```yaml
 page_builder:
@@ -41,12 +41,30 @@ The agent receives:
       "handle": "hero",
       "display": "Hero",
       "group": "Headers",
-      "instructions": "First block on landing and service pages, never twice on one page. Follow it with Features or Text.",
-      "fields": [
-        { "handle": "heading", "type": "text", "required": false, "rules": ["nullable"], "instructions": "The page promise, under 8 words." }
-      ]
+      "instructions": "First block on landing and service pages, never twice on one page. Follow it with Features or Text."
     }
   ]
+}
+```
+
+To fill a block, the agent calls `blueprints_get` again with `"set": "hero"`
+and gets the set's fields and an example row:
+
+```json
+{
+  "type": "collection",
+  "handle": "pages",
+  "blueprint": "page",
+  "set": {
+    "handle": "hero",
+    "display": "Hero",
+    "group": "Headers",
+    "instructions": "First block on landing and service pages, never twice on one page. Follow it with Features or Text.",
+    "fields": [
+      { "handle": "heading", "type": "text", "required": false, "rules": ["nullable"], "instructions": "The page promise, under 8 words." }
+    ]
+  },
+  "example": { "type": "hero", "heading": "Example text" }
 }
 ```
 
@@ -55,10 +73,11 @@ blueprint or fieldset YAML. Editors see the same text when they add a block, so
 write it for both: a sentence or two on when to use the block and what goes in
 it. A rule about one field belongs in that field's instructions.
 
-A block without instructions still reaches the agent with its name, group, and
-fields. Fieldset imports inside a set are resolved, and sets nested inside
-other sets are listed under their field. A set marked hidden comes back with
-`"hidden": true`. Agents leave it in existing content and never add a new one.
+A block without instructions still reaches the agent, but only by its name and
+group until the agent looks it up. The lookup resolves fieldset imports inside
+the set and lists the sets nested in it by name, which the agent looks up the
+same way. A set marked hidden comes back with `"hidden": true`. Agents leave it
+in existing content and never add a new one.
 
 Don't give a set a custom key for agents. When someone saves a Replicator's
 settings in the Control Panel, Statamic rebuilds every set from a fixed list of
@@ -88,8 +107,8 @@ holds nothing but a comment, like a fresh stub, sends nothing.
 
 The files follow the same permissions as the content. An agent only gets a
 collection's guidelines if it may read that collection's blueprint. `site.md`
-goes to every agent. Keep the files short, because agents receive them on every
-call.
+goes to every agent. Keep the files short, because agents receive them each
+time they read the overview or a whole blueprint.
 
 To keep the files somewhere else, set `guidelines_path` in
 `config/statamic/mcp.php`.
@@ -108,7 +127,7 @@ lists the blocks that have no instructions:
   Created  resources/mcp/guidelines/site.md
   Created  resources/mcp/guidelines/collections/pages.md
 
-  11 of 14 blocks have instructions. Agents only see the fields of these, so add instructions to each set in its blueprint or fieldset:
+  11 of 14 blocks have instructions. Agents see only the name of these until they look one up, so add instructions to each set in its blueprint or fieldset:
 +--------------+----------------------------+-----------------------------------------------------+
 | Block        | Field                      | Blueprints                                          |
 +--------------+----------------------------+-----------------------------------------------------+

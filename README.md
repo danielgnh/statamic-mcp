@@ -116,7 +116,7 @@ The server tells agents to call `statamic_overview` first. It lists the sites an
 
 `blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions on your page builder blocks and, if you want, a few markdown files:
 
-- Each set in a Replicator or Bard field has an `instructions` key. `blueprints_get` returns it with the set's fields, and editors see the same text when they add a block.
+- Each set in a Replicator or Bard field has an `instructions` key. `blueprints_get` lists it with the set's name, and editors see the same text when they add a block.
 - `resources/mcp/guidelines/site.md` holds voice and tone. `statamic_overview` returns it.
 - `resources/mcp/guidelines/collections/pages.md` describes how a page is put together. `blueprints_get` returns it with the collection's blueprints.
 

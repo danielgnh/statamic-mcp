@@ -11,12 +11,19 @@ called out here explicitly.
 ### Added
 
 - `blueprints_get` lists the sets of Replicator and Bard fields, the blocks of a
-  page builder, with each set's display name, group, instructions, and fields.
-  Fieldset imports inside a set are resolved, nested sets are listed under
-  their field, and sets hidden from the CP's set picker come back with
-  `"hidden": true`. Until now these fields had no description beyond their
-  type. A set's `instructions` is now where you tell agents when to use a
-  block; editors already see the same text in the CP.
+  page builder, with each set's display name, group, and instructions. Sets
+  hidden from the CP's set picker come back with `"hidden": true`. Pass a
+  set's handle as the new `set` parameter to get that set's fields and an
+  example row, with fieldset imports resolved, nested sets listed by name, and
+  `example_notes` keyed by their path in the row. A handle is found anywhere in
+  the blueprint, sets inside other sets included. When it has different fields
+  in different places, the error lists their paths to pass instead. Grid and
+  group fields list their fields. Until now these fields had no description
+  beyond their type. A set's `instructions` is now where you tell agents when
+  to use a block; editors already see the same text in the CP.
+- `blueprints_get` reports where asset, entry, term, and user fields point
+  (`container`, `collections`, `taxonomies`) and how many items they take
+  (`max_files`, `max_items`), when the field configures it.
 - **Guidelines for agents.** Markdown files under `resources/mcp/guidelines`
   (the new `guidelines_path` config key). `statamic_overview` returns
   `site.md`, and `blueprints_get` returns `collections/{handle}.md` plus
@@ -119,6 +126,9 @@ called out here explicitly.
   URL, or another container's id used to be saved and render as nothing.
 - `blueprints_get` examples use the stored shape: a plain id for single-item
   relationship fields, and each date field's save format.
+- `blueprints_get` examples for option fields used the whole first option when
+  the options were saved as key/value pairs, the format the CP writes. They
+  use its key now, and button group fields get an example too.
 - `blueprints_get` put `slug`, and `date` on dated collections, into the example
   payload, but the write tools reject both inside `data`, so an agent that
   copied the example got an error. They stay in `fields` and are left out of

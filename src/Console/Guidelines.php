@@ -17,8 +17,9 @@ use Statamic\Fields\Field;
 
 /**
  * Creates the guideline files agents read (never overwriting one) and lists
- * page builder blocks without instructions, which agents only know by their
- * fields. Only resources exposed in statamic.mcp.resources count.
+ * page builder blocks without instructions, which agents only know by name
+ * until they look one up. Only resources exposed in statamic.mcp.resources
+ * count.
  */
 class Guidelines extends Command
 {
@@ -92,7 +93,7 @@ class Guidelines extends Command
         }
 
         $this->line(sprintf(
-            '  %d of %d blocks have instructions. Agents only see the fields of these, so add instructions to each set in its blueprint or fieldset:',
+            '  %d of %d blocks have instructions. Agents see only the name of these until they look one up, so add instructions to each set in its blueprint or fieldset:',
             $total - $missing->count(),
             $total,
         ));
