@@ -24,6 +24,8 @@ return [
 
     'per_page' => 25,
 
+    'guidelines_path' => resource_path('mcp/guidelines'),
+
     'uploads' => [
         'max_size' => 10240,
         'source_allowlist' => null,
