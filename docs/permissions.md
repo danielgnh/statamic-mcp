@@ -13,16 +13,18 @@ always Statamic's native permission system. Four gates, in order:
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Reading a navigation takes
-   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry
-   with `parent` on `entries_update` also takes `reorder {handle} entries`. Publish
-   state changes only through `entries_publish` and `entries_unpublish`, both gated on
+   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry with
+   `parent` on `entries_update` also takes `reorder {handle} entries`. Publish state
+   changes only through `entries_publish` and `entries_unpublish`, both gated on
    `publish {handle} entries`, the same permission the CP checks. When a collection's
    blueprint has an `author` field, editing, publishing, or deleting an entry the user
    is not an author of takes `edit other authors {handle} entries`,
    `publish other authors {handle} entries`, or `delete other authors {handle} entries`
-   instead, as in Statamic's own entry policy. An entry with no author counts as
-   someone else's. On multi-site installs every site needs `access {site} site`, the
-   default site included. Denials name the missing permission and the remedy.
+   instead, as in Statamic's own entry policy. Moving someone else's entry takes
+   `edit other authors {handle} entries` too, next to `reorder {handle} entries`, which
+   has no other-authors variant. An entry with no author counts as someone else's. On
+   multi-site installs every site needs `access {site} site`, the default site included.
+   Denials name the missing permission and the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
 
 Entry creates and updates **never publish**. Creates save drafts. On revision-enabled
@@ -84,7 +86,9 @@ default site included, as in the CP.
 to the role, next to `Edit entries`. `entries_update` can then move pages with `parent`.
 A move is live at once, even on revision-enabled collections, so leave `Reorder entries`
 off the role of an agent whose changes must wait for a person. Creating a page under a
-parent needs only `Create entries`, as in the CP.
+parent needs only `Create entries`, as in the CP. If the pages blueprint has an `author`
+field, the agent can only move pages it is an author of. `Reorder entries` covers the
+whole collection, so add `Edit other authors pages entries` to let it move everyone's.
 
 **A cleanup agent that may delete:** set `'deletes' => true` in the config **and**
 add `Delete blog entries` to the role. Both gates must open. With an `author` field,
