@@ -2,7 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Support\GuidelineFiles;
+use Danielgnh\StatamicMcp\Support\GuidelinesSet;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -22,7 +22,7 @@ use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site has written guidelines for agents (voice, tone, rules for all content), they come back in guidelines — follow them in everything you write.')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site\'s guidelines global set has a site text (voice, tone, rules for all content), it comes back in guidelines — follow it in everything you write.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -58,7 +58,7 @@ class StatamicOverview extends Tool
                 'deletes' => $this->deletesEnabled(),
                 'timezone' => config('app.timezone'),
             ],
-            ...array_filter(['guidelines' => app(GuidelineFiles::class)->site()]),
+            ...array_filter(['guidelines' => app(GuidelinesSet::class)->site()]),
         ]);
     }
 

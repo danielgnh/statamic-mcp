@@ -3,23 +3,38 @@
 declare(strict_types=1);
 
 use Danielgnh\StatamicMcp\Server;
+use Danielgnh\StatamicMcp\Support\GuidelinesSet;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
-use Illuminate\Support\Facades\File;
+use Statamic\Facades\GlobalSet;
 
-function guideline(string $file, string $markdown): void
+/**
+ * @param  array<string, mixed>  $data
+ */
+function guidelines(array $data): void
 {
-    $path = config('statamic.mcp.guidelines_path').'/'.$file;
+    $set = app(GuidelinesSet::class);
 
-    File::ensureDirectoryExists(dirname($path));
-    File::put($path, $markdown);
+    $set->create();
+
+    GlobalSet::find($set->handle())->makeLocalization('en')->data($data)->save();
+}
+
+/**
+ * @param  list<string>  $collections
+ * @param  list<string>  $taxonomies
+ * @return array<string, mixed>
+ */
+function row(array $collections, string $guidelines, array $taxonomies = []): array
+{
+    return ['type' => 'resource', 'collections' => $collections, 'taxonomies' => $taxonomies, 'guidelines' => $guidelines];
 }
 
 it('returns the site guidelines from statamic_overview', function () {
     Fixtures::site();
 
-    guideline('site.md', "# Voice\n\nFriendly, never salesy.\n");
+    guidelines(['site' => "# Voice\n\nFriendly, never salesy.\n"]);
 
     Server::actingAs(Fixtures::makeSuper())
         ->tool(StatamicOverview::class, [])
@@ -33,28 +48,44 @@ it('leaves guidelines out of statamic_overview when the site has none', function
     Server::actingAs(Fixtures::makeSuper())
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertDontSee('"guidelines"');
+        ->assertDontSee('"guidelines":');
+
+    guidelines(['site' => "  \n"]);
+
+    // the set itself is listed under globals; only the guidelines key must be missing
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"handle":"guidelines"')
+        ->assertDontSee('"guidelines":');
 });
 
-it('returns the collection and blueprint guidelines from blueprints_get, collection first', function () {
+it('returns the rows naming the collection from blueprints_get, in their order', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
 
-    guideline('collections/blog.md', 'Every post ends with a question.');
-    guideline('collections/blog/article.md', 'Articles open with the hero image.');
+    guidelines(['resources' => [
+        row(['blog'], 'Every post ends with a question.'),
+        row(['pages'], 'Pages open with a hero.'),
+        row(['pages', 'blog'], "Short paragraphs.\n"),
+    ]]);
 
     Server::actingAs(Fixtures::makeUser('view blog entries'))
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertOk()
-        ->assertSee('"available_blueprints":["article"],"guidelines":"Every post ends with a question.\n\nArticles open with the hero image.","fields"');
+        ->assertSee('"available_blueprints":["article"],"guidelines":"Every post ends with a question.\n\nShort paragraphs.","fields"')
+        ->assertDontSee('Pages open with a hero.');
 });
 
-it('returns taxonomy guidelines from blueprints_get', function () {
+it('returns the rows naming the taxonomy from blueprints_get', function () {
     Fixtures::site();
     Fixtures::tags();
 
-    guideline('taxonomies/tags.md', 'Tags are lowercase nouns.');
+    guidelines(['resources' => [
+        row(['tags'], 'A collection called tags, not the taxonomy.'),
+        row([], 'Tags are lowercase nouns.', ['tags']),
+    ]]);
 
     Server::actingAs(Fixtures::makeUser('view tags terms'))
         ->tool(BlueprintsGet::class, ['type' => 'taxonomy', 'handle' => 'tags'])
@@ -62,36 +93,19 @@ it('returns taxonomy guidelines from blueprints_get', function () {
         ->assertSee('"guidelines":"Tags are lowercase nouns."');
 });
 
-it('never sends html comments, so an untouched stub reads as no guidelines', function () {
+it('reads the global set named in config', function () {
     Fixtures::site();
-    Fixtures::tags();
-    Fixtures::blog();
 
-    guideline('site.md', "<!--\nNotes for the developer.\n-->\n");
-    guideline('collections/blog.md', "<!-- TODO: ask marketing -->\nShort paragraphs.");
+    config(['statamic.mcp.guidelines' => 'agent_rules']);
+
+    guidelines(['site' => 'Friendly, never salesy.']);
+
+    expect(GlobalSet::find('agent_rules'))->not->toBeNull();
 
     Server::actingAs(Fixtures::makeSuper())
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertDontSee('"guidelines"');
-
-    Server::actingAs(Fixtures::makeSuper())
-        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
-        ->assertOk()
-        ->assertSee('"guidelines":"Short paragraphs."')
-        ->assertDontSee('ask marketing');
-});
-
-it('treats an unclosed html comment as running to the end of the file', function () {
-    Fixtures::site();
-
-    guideline('site.md', "Friendly, never salesy.\n\n<!-- note to self: the client's budget is small");
-
-    Server::actingAs(Fixtures::makeSuper())
-        ->tool(StatamicOverview::class, [])
-        ->assertOk()
-        ->assertSee('"guidelines":"Friendly, never salesy."')
-        ->assertDontSee('note to self');
+        ->assertSee('"guidelines":"Friendly, never salesy."');
 });
 
 it('keeps guidelines behind the same permission as the blueprint', function () {
@@ -99,7 +113,7 @@ it('keeps guidelines behind the same permission as the blueprint', function () {
     Fixtures::tags();
     Fixtures::blog();
 
-    guideline('collections/blog.md', 'Secret editorial plan.');
+    guidelines(['resources' => [row(['blog'], 'Secret editorial plan.')]]);
 
     Server::actingAs(Fixtures::makeUser())
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])

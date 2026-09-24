@@ -2,7 +2,8 @@
 
 `blueprints_get` tells an agent which fields a blueprint has. Guidelines tell it
 how your site uses them: which block opens a page, which never repeats, how
-formal the copy is. You write them in two places.
+formal the copy is. Each rule lives in one place: on the block, field, or
+section it is about, or in a global set for everything wider than a blueprint.
 
 ## Block instructions
 
@@ -122,34 +123,34 @@ existing entry to follow, what its page builder usually holds. The Control
 Panel keeps section instructions when someone saves the blueprint there; a
 tab's only survive in a blueprint you edit as YAML.
 
-## Guideline files
+## The guidelines global set
 
-Anything that isn't about one block goes in markdown files under
-`resources/mcp/guidelines`:
+Anything that isn't about one field, block, or blueprint goes in a global set
+called `guidelines`, which `mcp:guidelines` creates. The people who run the
+site edit it in the Control Panel under Globals, with no deploy, and an agent
+whose user may edit the set can change it through `globals_update`: an admin
+can ask an agent to rewrite the voice after a week of use. It has two fields:
 
-```
-resources/mcp/guidelines/
-  site.md                        statamic_overview returns this
-  collections/pages.md           blueprints_get returns this for every pages blueprint
-  collections/pages/landing.md   and this only for the landing blueprint
-  taxonomies/tags.md
-  globals/settings.md
-```
+- `site`: voice and tone, words to use or avoid, how formal to be, rules that
+  hold for every collection. `statamic_overview` returns it, so every agent
+  reads it first.
+- `resources`: rows that name collections and taxonomies and say how their
+  entries are put together: which blocks come first, which never repeat, how
+  many a page usually has, page shapes to copy with a named entry for each.
+  `blueprints_get` returns the rows naming the requested collection or
+  taxonomy, in their order, with every blueprint of it.
 
-`site.md` is for voice and tone. A collection's file is for how an entry is put
-together: which blocks come first, how many a page usually has, which existing
-entry is a good example. When a collection file and a blueprint file both
-exist, the agent gets both, collection first.
+Never restate a field, block, or section there. A rule about one field belongs
+in that field's `instructions`, which agents already get and editors already
+see, and a copy in the global set goes stale the first time the blueprint
+changes.
 
-HTML comments never reach an agent. Use them for notes to yourself. A file that
-holds nothing but a comment, like a fresh stub, sends nothing.
+The set is read from its first site. Agents get the rows for a collection only
+when they may read that collection's blueprint; `site` goes to every agent.
+Keep both short, because agents receive them each time they read the overview
+or a whole blueprint.
 
-The files follow the same permissions as the content. An agent only gets a
-collection's guidelines if it may read that collection's blueprint. `site.md`
-goes to every agent. Keep the files short, because agents receive them each
-time they read the overview or a whole blueprint.
-
-To keep the files somewhere else, set `guidelines_path` in
+To keep the guidelines in a set with another handle, set `guidelines` in
 `config/statamic/mcp.php`.
 
 ## `mcp:guidelines`
@@ -158,13 +159,13 @@ To keep the files somewhere else, set `guidelines_path` in
 php please mcp:guidelines
 ```
 
-The command creates `site.md` and a file for each collection MCP exposes. It
-never overwrites a file, so run it again whenever you add a collection. Then it
-lists the blocks that have no instructions:
+The command creates the `guidelines` global set with its blueprint, never a
+second time, then lists the blocks that have no instructions:
 
 ```
-  Created  resources/mcp/guidelines/site.md
-  Created  resources/mcp/guidelines/collections/pages.md
+  Created  the guidelines global set.
+  Open it in the Control Panel under Globals to write the site's voice and how
+  its entries are put together.
 
   11 of 14 blocks have instructions. Agents see only the name of the rest
   until they look one up, so add instructions to each set in its blueprint or
@@ -178,10 +179,4 @@ lists the blocks that have no instructions:
 ```
 
 A block that several blueprints share through a fieldset is listed once. Hidden
-sets don't count.
-
-With Laravel Boost, select `danielgnh/statamic-mcp` when `boost:install` lists
-third-party packages. It isn't selected by default, and a non-interactive run
-needs the package under `packages` in `boost.json`. That installs a
-`statamic-mcp-guidelines` skill: ask your coding agent to fill in the missing
-instructions, and it reads each block's template to write them.
+sets don't count, and neither do the rows of the guidelines set itself.
