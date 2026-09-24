@@ -3,6 +3,8 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
+use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Laravel\Mcp\Request;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 
@@ -19,8 +21,11 @@ it('returns fields and a bounded example payload for a collection blueprint', fu
         ->assertSee('"type":"collection","handle":"blog","blueprint":"article","available_blueprints":["article"]')
         ->assertSee('"handle":"title","type":"text","required":true')
         ->assertSee('"handle":"topic","type":"terms","required":false')
-        // v6 appends a 'slug' field to entry blueprints of routed collections (Collection::ensureEntryBlueprintFields)
-        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":"REPLACE-WITH-REAL-TERM-ID","slug":"example-slug"}');
+        // v6 appends a 'slug' field to entry blueprints (Collection::ensureEntryBlueprintFields),
+        // but the entry tools take slug as a top-level parameter, so it stays out of the example
+        ->assertSee('"handle":"slug","type":"slug"')
+        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":"REPLACE-WITH-REAL-TERM-ID"}')
+        ->assertSee('"slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"');
 });
 
 it('falls back to null plus a type note for a bard field', function () {
@@ -34,7 +39,7 @@ it('falls back to null plus a type note for a bard field', function () {
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertOk()
         ->assertSee('"content":null')
-        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — read a real value from existing content before writing this field"}');
+        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — read a real value from existing content before writing this field","slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"}');
 });
 
 it('returns the blueprint of a taxonomy', function () {
@@ -48,7 +53,9 @@ it('returns the blueprint of a taxonomy', function () {
         ->assertOk()
         ->assertSee('"type":"taxonomy","handle":"tags","blueprint":"tag","available_blueprints":["tag"]')
         // v6 appends a required 'slug' field to term blueprints (Taxonomy::ensureTermBlueprintFields)
-        ->assertSee('"example":{"title":"Example text","slug":"example-slug"}');
+        ->assertSee('"handle":"slug","type":"slug","required":true')
+        ->assertSee('"example":{"title":"Example text"}')
+        ->assertSee('"slug":"pass slug as a top-level parameter of terms_create and terms_update, not inside data"');
 });
 
 it('returns the blueprint of a global set', function () {
@@ -84,9 +91,8 @@ it('generates real examples for select, toggle, integer, and date fields', funct
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
         ->assertSee('"options":{"red":"Red","blue":"Blue"}')
-        // trailing 'slug' is v6's auto-appended entry blueprint field; dates use the
-        // default save format 'Y-m-d H:i', the shape entries_get returns
-        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15 09:30","slug":"example-slug"}');
+        // dates use the default save format 'Y-m-d H:i', the shape entries_get returns
+        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15 09:30"}');
 });
 
 it('shapes date examples in the field save format and mode', function () {
@@ -115,6 +121,35 @@ it('shapes date examples in the field save format and mode', function () {
         ->assertSee('"day_only":"2026-01-15"')
         ->assertSee('"window":{"start":"2026-01-15 09:30","end":"2026-01-16 09:30"}')
         ->assertSee('"stay":{"start":"2026-01-15","end":"2026-01-16"}');
+});
+
+it('returns an example that entries_create accepts as data on a dated collection', function () {
+    Fixtures::site();
+
+    tap(Collection::make('events')->title('Events')->dated(true)->routes('/events/{slug}'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'launch_date' => ['type' => 'date'],
+        'featured' => ['type' => 'toggle'],
+    ])->setHandle('event')->setNamespace('collections.events')->save();
+
+    $user = Fixtures::makeUser('view events entries', 'create events entries');
+
+    $this->actingAs($user);
+
+    $blueprint = json_decode((string) (new BlueprintsGet)->handle(new Request(['type' => 'collection', 'handle' => 'events']))->content(), true);
+
+    expect(data_get($blueprint, 'example'))->not->toHaveKeys(['slug', 'date'])
+        ->and(data_get($blueprint, 'example_notes'))->toMatchArray([
+            'slug' => 'pass slug as a top-level parameter of entries_create and entries_update, not inside data',
+            'date' => 'pass date as a top-level parameter of entries_create and entries_update, not inside data',
+        ]);
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => data_get($blueprint, 'example'), 'date' => '2026-07-09'])
+        ->assertOk()
+        ->assertSee('saved as draft — not live');
 });
 
 it('gives single-item relationship fields a plain id example', function () {
@@ -214,7 +249,7 @@ it('excludes computed fields from the example and marks them not writable', func
         ->assertSee('"handle":"word_count","type":"integer","required":false,"rules":["integer","nullable"],"visibility":"computed"')
         ->assertSee('"word_count":"computed — not writable"')
         // word_count must not appear as a writable example key
-        ->assertSee('"example":{"title":"Example text","slug":"example-slug"}');
+        ->assertSee('"example":{"title":"Example text"}');
 });
 
 it('treats unexposed and missing collections identically, listing only exposed handles', function () {

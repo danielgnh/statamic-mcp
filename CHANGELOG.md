@@ -102,6 +102,13 @@ called out here explicitly.
   URL, or another container's id used to be saved and render as nothing.
 - `blueprints_get` examples use the stored shape: a plain id for single-item
   relationship fields, and each date field's save format.
+- `blueprints_get` put `slug`, and `date` on dated collections, into the example
+  payload, but the write tools reject both inside `data`, so an agent that
+  copied the example got an error. They stay in `fields` and are left out of
+  the example, with an `example_notes` entry pointing at the top-level
+  parameter. The same applies to `slug` on taxonomy blueprints, and
+  `terms_create` now says to pass `slug` as a top-level parameter instead of
+  calling it an unknown field.
 
 ### Security
 
