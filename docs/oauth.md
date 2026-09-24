@@ -20,8 +20,9 @@ What OAuth mode does need:
 3. **Passport's encryption keys** — managed for you. The addon stores the pair
    in the database (private key only, encrypted with `APP_KEY`) and provisions
    one automatically on first use — nothing to generate, nothing to paste.
-   Explicit `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars and the
-   classic key files still work and take precedence.
+   Explicit `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars still work
+   and take precedence. Classic `storage/oauth-*.key` files are adopted into the
+   database on first use, and from then on the database copy is the one used.
 4. **String `user_id` columns on Passport's tables** — Statamic ids are UUID
    strings, Passport's stock columns are bigint. The addon ships a migration that
    converts them (loaded automatically in OAuth mode; safe for integer ids too).
@@ -82,8 +83,10 @@ Want explicit env-var keys instead (say, one pair shared across apps)?
 `php please mcp:keys` prints the pair as paste-ready `PASSPORT_PRIVATE_KEY` /
 `PASSPORT_PUBLIC_KEY` lines (`--json` pipes into secret-store CLIs; `--write`
 fills a local `.env`) — configured keys always override the database copy.
-Never run `passport:keys` per release: regenerating silently disconnects every
-client.
+`passport:keys` doesn't rotate these keys: once the database holds a pair, key
+files are ignored. To rotate, delete the row in `statamic_mcp_oauth_keys` and any
+`storage/oauth-*.key` files. The next request provisions a fresh pair, and every
+connected client reconnects through the OAuth flow.
 
 One caveat to know: the stored key is encrypted with `APP_KEY`, so rotating
 `APP_KEY` makes it undecryptable. `mcp:doctor` (and the endpoint's 503) name

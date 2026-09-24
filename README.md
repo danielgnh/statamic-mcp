@@ -57,7 +57,7 @@ Your users stay where they are. File-based users work, and the wizard never touc
 
 To deploy, set `STATAMIC_MCP_AUTH=oauth` in each environment and run `php artisan migrate --force` as usual. The keys live in the database, so there is no key step. [docs/oauth.md](docs/oauth.md) covers manual setup, the consent screen, and disconnecting clients.
 
-`mcp:setup` handles token mode too, and `--yes` runs it unattended. Laravel Boost users get guidelines on `boost:install` that teach coding agents to run it that way.
+`mcp:setup` handles token mode too, and `--yes` runs it unattended. Laravel Boost users get guidelines that teach coding agents to run it that way, once they select this package in `boost:install`.
 
 ### Managing tokens
 
