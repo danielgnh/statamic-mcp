@@ -76,9 +76,9 @@ on top, exactly as in the Control Panel.
 ## Your own tools
 
 The README shows the shape: a server class that extends `Danielgnh\StatamicMcp\Server`,
-spreads `Server::TOOLS`, adds your tool classes, and is named in the `server` config
-key. This section covers what the base tool class gives you, what `read_only` expects
-from you, and how to test.
+overrides `tools()` to add, replace, or remove tool classes, and is named in the
+`server` config key. This section covers what the base tool class gives you, how to
+replace one of ours, what `read_only` expects from you, and how to test.
 
 ### What the base class gives you
 
@@ -142,11 +142,19 @@ protected function execute(Request $request): Response
 
 Read tools need neither. Mark them `#[IsReadOnly]` so clients can tell.
 
-### Names and paging
+### Replacing and removing tools
 
-Tool names must be unique on the server. `tools/call` dispatches to the first tool whose
-name matches, so a second `entries_list` is dead code with no error anywhere. To replace a
-built-in tool, leave it out of your `$tools` array and add yours under the same name.
+`replace()` swaps one class for another in place. The usual replacement is a subclass of
+our tool: override `execute()` or `schema()`, redeclare `#[Description]` if the wording
+changes, and keep the name, which laravel/mcp reads from the parent class. Our tools keep
+their internals private, so a change deeper than `execute()` means copying the class, and
+owning a copy beats overriding a private helper. `remove()` drops a tool for good.
+Removing a class that is not registered is a no-op; replacing one that is not registered
+throws.
+
+Tool names must be unique on the server. `add()` dedupes by class, not by name, so if two
+classes carry the same `#[Name]`, `tools/call` reaches the first one and `tools/list`
+shows both. That is what `replace()` is for.
 
 The addon serves up to 50 tools on one page because some clients never send a cursor.
 If your server grows past that, raise `$defaultPaginationLength` and

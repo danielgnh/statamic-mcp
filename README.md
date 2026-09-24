@@ -76,9 +76,9 @@ upload limits and the SSRF policy for URL-based asset uploads.
 
 ## Your own tools
 
-The endpoint is a [laravel/mcp](https://laravel.com/docs/mcp) server class, and the
-class is the tool list. To add a tool, extend the addon's server and point the
-config at yours:
+The endpoint is a [laravel/mcp](https://laravel.com/docs/mcp) server class. To change
+what it serves, extend the addon's server, override `tools()`, and point the config
+at yours:
 
 ```php
 // config/statamic/mcp.php
@@ -88,15 +88,21 @@ config at yours:
 ```php
 namespace App\Mcp;
 
+use App\Mcp\Tools\EntriesList as SlimEntriesList;
 use App\Mcp\Tools\NewsletterSend;
 use Danielgnh\StatamicMcp\Server;
+use Danielgnh\StatamicMcp\ToolRegistry;
+use Danielgnh\StatamicMcp\Tools\AssetsUpload;
+use Danielgnh\StatamicMcp\Tools\EntriesList;
 
 class StatamicServer extends Server
 {
-    protected array $tools = [
-        ...Server::TOOLS,
-        NewsletterSend::class,
-    ];
+    protected function tools(ToolRegistry $tools): void
+    {
+        $tools->add(NewsletterSend::class);
+        $tools->replace(EntriesList::class, SlimEntriesList::class);
+        $tools->remove(AssetsUpload::class);
+    }
 }
 ```
 
@@ -130,9 +136,10 @@ class NewsletterSend extends Tool
 }
 ```
 
-Leave a built-in tool out of the array to drop it. The server name, instructions,
-and page size are inherited, and your class can override any of them. The helpers,
-how `read_only` applies to your tools, and how to test them are in
+`replace()` swaps a built-in tool for yours, usually a subclass that overrides
+`execute()` or `schema()` and keeps the name. `remove()` drops one. The server name,
+instructions, and page size are inherited, and your class can override any of them.
+The helpers, how `read_only` applies to your tools, and how to test them are in
 **[docs/tools.md](docs/tools.md#your-own-tools)**.
 
 ## Authentication
@@ -195,7 +202,7 @@ php artisan vendor:publish --tag=statamic-mcp-config   # → config/statamic/mcp
 | `enabled`                  | `true` (`STATAMIC_MCP_ENABLED`)    | Kill switch. When `false` the MCP route is never registered.                                                            |
 | `route`                    | `mcp/statamic`                     | Where the streamable-HTTP endpoint mounts.                                                                              |
 | `auth`                     | `token` (`STATAMIC_MCP_AUTH`)      | `token` or `oauth`.                                                                                                     |
-| `server`                   | `Danielgnh\StatamicMcp\Server::class` | The laravel/mcp server class to mount. Extend it to add your own tools, see [Your own tools](#your-own-tools).       |
+| `server`                   | `Danielgnh\StatamicMcp\Server::class` | The laravel/mcp server class to mount. Extend it to add, replace, or remove tools, see [Your own tools](#your-own-tools).       |
 | `middleware`               | `['throttle:60,1']`                | Prepended to the auth middleware on the MCP route. Plain Laravel.                                                       |
 | `read_only`                | `false` (`STATAMIC_MCP_READ_ONLY`) | Hides every write/delete tool from the server entirely.                                                                 |
 | `deletes`                  | `false` (`STATAMIC_MCP_DELETES`)   | Delete tools are not even registered unless `true`.                                                                     |

@@ -18,9 +18,9 @@ called out here explicitly.
   tool, MCP clients prompt for it separately: allowing `entries_update` no
   longer lets an agent go live.
 - **Your own tools.** The new `server` config key names the laravel/mcp server
-  class to mount. Extend `Danielgnh\StatamicMcp\Server`, spread `Server::TOOLS`
-  into `$tools`, add your classes, and they run behind the addon's auth
-  middleware and `Access MCP` gate. `Danielgnh\StatamicMcp\Tools\Tool` is now
+  class to mount. Extend `Danielgnh\StatamicMcp\Server`, override `tools()`, and
+  add, replace, or remove tools on the `ToolRegistry` it receives; they run
+  behind the addon's auth middleware and `Access MCP` gate. `Danielgnh\StatamicMcp\Tools\Tool` is now
   the documented base for host-app tools. A `server` value that is not a
   laravel/mcp server fails closed at boot, and `mcp:doctor` names it with the
   remedy. See "Your own tools" in the README and `docs/tools.md`.
