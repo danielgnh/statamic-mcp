@@ -358,6 +358,40 @@ it('requires the reorder permission to move an entry, as the CP tree does', func
         ->and(Entry::find($contact)->get('title'))->toBe('Contact');
 });
 
+it("requires 'edit other authors pages entries' to move someone else's entry, on top of reorder", function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+    Fixtures::authors('pages');
+
+    $about = Fixtures::page('about', 'About');
+    $contact = tap(Entry::find(Fixtures::page('contact', 'Contact'))->set('author', Fixtures::makeUser()->id()))->save()->id();
+
+    storePagesTree([['entry' => $about], ['entry' => $contact]]);
+
+    $user = Fixtures::makeUser('edit pages entries', 'reorder pages entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $contact, 'data' => [], 'parent' => $about])
+        ->assertHasErrors(["requires 'edit other authors pages entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+
+    // reorder is collection-wide (CollectionPolicy::reorder): it has no other-authors variant.
+    $editor = Fixtures::makeUser('edit pages entries', 'edit other authors pages entries');
+
+    Server::actingAs($editor)
+        ->tool(EntriesUpdate::class, ['id' => $contact, 'data' => [], 'parent' => $about])
+        ->assertHasErrors(["requires 'reorder pages entries' — grant it to a role of {$editor->email()} in the Control Panel"]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about], ['entry' => $contact]]);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'edit other authors pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $contact, 'data' => [], 'parent' => $about])
+        ->assertOk()
+        ->assertSee(sprintf('"move":"moved under \'%s\'"', $about));
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => $contact]]]]);
+});
+
 it('moves entries the stored tree does not list yet', function () {
     Fixtures::site();
     Fixtures::pages();
