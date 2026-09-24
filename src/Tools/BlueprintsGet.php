@@ -197,6 +197,20 @@ class BlueprintsGet extends Tool
             $descriptor['instructions'] = $config['instructions'];
         }
 
+        $targets = match ($field->type()) {
+            'assets' => ['container', 'max_files'],
+            'entries' => ['collections', 'max_items'],
+            'terms' => ['taxonomies', 'max_items'],
+            'users' => ['max_items'],
+            default => [],
+        };
+
+        foreach ($targets as $key) {
+            if (filled($value = data_get($config, $key))) {
+                $descriptor[$key] = $value;
+            }
+        }
+
         $fieldtype = $field->fieldtype();
 
         if ($fieldtype instanceof Replicator && $fieldtype->flattenedSetsConfig()->isNotEmpty()) {

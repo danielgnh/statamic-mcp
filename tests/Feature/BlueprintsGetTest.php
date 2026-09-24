@@ -518,6 +518,30 @@ it('gives assets fields an actionable example pointing at the assets tools', fun
         ->assertSee('assets_upload');
 });
 
+it('says where asset, entry, term, and user fields point when that is configured', function () {
+    Fixtures::site();
+
+    Collection::make('posts')->title('Posts')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'hero' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+        'gallery' => ['type' => 'assets'],
+        'related' => ['type' => 'entries', 'collections' => ['posts'], 'max_items' => 3],
+        'topics' => ['type' => 'terms', 'taxonomies' => ['tags']],
+        'author' => ['type' => 'users', 'max_items' => 1],
+    ])->setHandle('post')->setNamespace('collections.posts')->save();
+
+    Server::actingAs(Fixtures::makeUser('view posts entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
+        ->assertOk()
+        ->assertSee('{"handle":"hero","type":"assets","required":false,"rules":["array","max:1","nullable"],"container":"images","max_files":1}')
+        ->assertSee('{"handle":"gallery","type":"assets","required":false,"rules":["array","nullable"]}')
+        ->assertSee('{"handle":"related","type":"entries","required":false,"rules":["array","max:3","nullable"],"collections":["posts"],"max_items":3}')
+        ->assertSee('{"handle":"topics","type":"terms","required":false,"rules":["array","nullable"],"taxonomies":["tags"]}')
+        ->assertSee('{"handle":"author","type":"users","required":false,"rules":["array","max:1","nullable"],"max_items":1}');
+});
+
 it('denies reading a blueprint the user has no permission to view', function () {
     Fixtures::site();
     Fixtures::tags();
