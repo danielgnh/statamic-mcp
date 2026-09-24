@@ -82,7 +82,7 @@ class IssueToken extends Command
         $this->line('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header.');
         $this->line('Individual claude.ai and Claude Desktop connectors cannot send static headers (that is an');
         $this->line("org-admin beta for Team/Enterprise plans) — for those clients use OAuth mode ('auth' => 'oauth').");
-        $this->line('See the README client-compatibility matrix.');
+        $this->line('See the section on connecting a client in the README.');
         $this->line('');
         $this->line('Note: pasting the Claude Code one-liner puts the token in your shell history — consider a leading space (HIST_IGNORE_SPACE) or `history -d`.');
 

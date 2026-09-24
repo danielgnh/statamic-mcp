@@ -4,16 +4,15 @@
 [![Tests](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-This package presents a remote  **MCP server for Statamic v6**, which makes it possible to manage your content (entries,
-taxonomy terms, globals, and assets) via any AI provider. Statamic's permission system is deciding
-who may do what. Built on the first-party [`laravel/mcp`](https://laravel.com/docs/mcp) package.
+Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, and assets. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
+
+It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package. Until 1.0, a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
 
 ## Requirements
 
-- PHP ^8.3
-- Statamic ^6.0 (Laravel 12 or 13)
-- For OAuth mode only: `laravel/passport` + a database for Passport's own tables
-  (your users stay wherever they are — file users work)
+- PHP 8.3 or newer
+- Statamic 6 on Laravel 12 or 13
+- `laravel/passport` and a database for Passport's tables, for OAuth mode only
 
 ## Installation
 
@@ -21,69 +20,101 @@ who may do what. Built on the first-party [`laravel/mcp`](https://laravel.com/do
 composer require danielgnh/statamic-mcp
 ```
 
-That's it — no config publishing required.
+The endpoint is now live at `/mcp/statamic`. It rejects any request without a valid token, so nothing is reachable until you issue one.
 
-The connected user needs the **Access MCP** permission (or super). Grant it in the
-Control Panel under the role's permissions — `mcp:token` warns you at issuance if
-the user doesn't have it yet.
+## Connecting a client
 
-Prefer a guided setup? One interactive command handles either auth mode — including
-every OAuth prerequisite — and finishes by running `mcp:doctor` as proof:
+Clients that let you set an `Authorization` header use token mode, the default. That includes Claude Code, Cursor, and the MCP Inspector. Connector clients that only take a URL, like claude.ai, Claude Desktop, and ChatGPT, need OAuth mode.
+
+### Token mode
+
+Issue a token for the Statamic user the agent will act as:
 
 ```bash
-php please mcp:setup
+php please mcp:token you@example.com --name="Claude Code"
 ```
 
-It's scriptable too — `--oauth --yes` (or `--token --user=you@site.com --yes`) runs
-unattended, which is what the bundled [Laravel Boost](https://laravel.com/docs/boost)
-guidelines teach AI coding agents to use. Boost users get them automatically on
-`boost:install`.
+The command prints the token once, then a ready-to-paste command for Claude Code and a config block for Cursor:
 
-## Token vs. OAuth mode
-
-| Client                                                  | Token mode                           | OAuth mode |
-|---------------------------------------------------------|--------------------------------------|------------|
-| Claude Code / Cursor                                    | ✅                                    | ✅          |
-| claude.ai / Claude Desktop connectors (individual plan) | ❌ no static headers                  | ✅          |
-| Claude Team/Enterprise connectors                       | ⚠️ org-admin-configured headers only | ✅          |
-| ChatGPT connectors                                      | ❌ OAuth or no-auth only              | ✅          |
-
-## What Statamic MCP can do?
-
-21 tools across five areas — every agent session is starting with `statamic_overview`,
-which reports the sites, resources, and capabilities visible to the acting user:
-
-- **Discovery** — `statamic_overview`, `blueprints_get` (fields + a valid example payload for writes)
-- **Entries** — `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_publish`, `entries_unpublish`, `entries_delete`
-- **Taxonomy terms** — `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete`
-- **Globals** — `globals_get`, `globals_update`
-- **Assets** — `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete`
-
-The write semantics are deliberately conservative:
-
-- Entry creates and updates **never publish**. Creates save drafts, updates leave
-  publish state alone, and going live is its own tool, `entries_publish`. Because it
-  is a separate tool, your MCP client asks about it separately: allow `entries_update`
-  for a session and still approve every publish by hand.
-- On revision-enabled collections, edits become **working copies** through the same
-  mechanism the CP uses; the live entry is never touched.
-- Delete tools aren't even registered unless you opt in (`deletes` config).
-- Every write response states the resulting liveness ("saved as draft — not live",
-  "working copy created — live entry unchanged", …) and links the CP edit page.
-
-See **[docs/tools.md](docs/tools.md)** for the full per-tool reference, including
-upload limits and the SSRF policy for URL-based asset uploads.
-
-## Your own tools
-
-The endpoint is a [laravel/mcp](https://laravel.com/docs/mcp) server class. To change
-what it serves, extend the addon's server, override `tools()`, and point the config
-at yours:
-
-```php
-// config/statamic/mcp.php
-'server' => App\Mcp\StatamicServer::class,
+```bash
+claude mcp add --transport http statamic https://example.com/mcp/statamic \
+  --header "Authorization: Bearer mcp_..."
 ```
+
+The user also needs the Access MCP permission. Grant it on their role in the Control Panel. Super admins already have it, and `mcp:token` warns you when it's missing.
+
+Start Claude Code and ask which collections your site has.
+
+### OAuth mode
+
+```bash
+php please mcp:setup --oauth
+```
+
+The wizard installs Laravel Passport, sets `STATAMIC_MCP_AUTH=oauth`, runs the migrations, and creates Passport's keys. It asks before each step and finishes by running `mcp:doctor`. Then add `https://example.com/mcp/statamic` as a connector in your client. The client registers itself and sends you through a Statamic login and a consent screen.
+
+Your users stay where they are. File-based users work, and the wizard never touches your user model or `config/auth.php`. Passport only needs a database for its own tables, and SQLite is fine. Connector clients reach your site from the internet, so it needs a public HTTPS URL.
+
+To deploy, set `STATAMIC_MCP_AUTH=oauth` in each environment and run `php artisan migrate --force` as usual. The keys live in the database, so there is no key step. [docs/oauth.md](docs/oauth.md) covers manual setup, the consent screen, and disconnecting clients.
+
+`mcp:setup` handles token mode too, and `--yes` runs it unattended. Laravel Boost users get guidelines on `boost:install` that teach coding agents to run it that way.
+
+### Managing tokens
+
+```bash
+php please mcp:token you@example.com --expires-days=90   # issue
+php please mcp:tokens                                     # list
+php please mcp:token:revoke {id}                          # revoke
+```
+
+The package stores only a SHA-256 hash of each token, in `storage/statamic/mcp/tokens.yaml`, so token mode needs no database. A deleted user's tokens stop working.
+
+Users can manage their own tokens in the Control Panel under Tools → Utilities → MCP Access. Their role needs the MCP Access permission from the Utilities group.
+
+## Permissions
+
+The token is the user. There are no API scopes and no second access list. Every tool call checks the acting user's Statamic permissions.
+
+To restrict an agent, give it its own user and role. A drafting agent for the blog looks like this:
+
+1. Create a role with Access MCP, View blog entries, Edit blog entries, and Create blog entries.
+2. Create the user `claude@example.com` with that role.
+3. Run `php please mcp:token claude@example.com --name="Blog agent"`.
+
+That agent can create blog drafts and edit blog entries. It can't publish, delete, or see any other collection.
+
+Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, and asset containers MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
+
+[docs/permissions.md](docs/permissions.md) has more recipes, including read-only, publishing, and multi-site agents.
+
+## Drafts and publishing
+
+`entries_create` always saves a draft, and `entries_update` never changes an entry's published status. What an edit does to a live entry depends on the collection:
+
+- With revisions enabled, the edit becomes a working copy, the same one the Control Panel creates. Visitors keep seeing the live version until someone publishes it.
+- Without revisions, the edit saves straight to the entry. If the entry is live, visitors see the change right away, same as saving it in the Control Panel.
+
+Publishing is its own tool, `entries_publish`, and it needs the collection's publish permission. Because it's a separate tool, your MCP client asks you about it separately. You can let an agent call `entries_update` all session and still approve each publish yourself.
+
+Terms, globals, and assets have no draft state. Writes to them go live immediately.
+
+## Tools
+
+| Area | Tools |
+|---|---|
+| Discovery | `statamic_overview`, `blueprints_get` |
+| Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_publish`, `entries_unpublish`, `entries_delete` |
+| Taxonomy terms | `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete` |
+| Globals | `globals_get`, `globals_update` |
+| Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
+
+The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields and a valid example payload. The three delete tools only exist when `deletes` is on.
+
+[docs/tools.md](docs/tools.md) documents every tool, the upload limits, and how URL uploads block private network addresses.
+
+## Adding your own tools
+
+The server is a `laravel/mcp` server class. Extend it, override `tools()`, and add, replace, or remove tools on the registry it receives:
 
 ```php
 namespace App\Mcp;
@@ -106,131 +137,36 @@ class StatamicServer extends Server
 }
 ```
 
-Your tool runs behind the same token or OAuth middleware and the same **Access MCP**
-gate as the built-in ones. Extend `Danielgnh\StatamicMcp\Tools\Tool`, implement
-`execute()`, and you get the acting Statamic user and the permission helpers the
-built-in tools use:
+Then point the config at it:
 
 ```php
-namespace App\Mcp\Tools;
-
-use Danielgnh\StatamicMcp\Tools\Tool;
-use Laravel\Mcp\Request;
-use Laravel\Mcp\Response;
-use Laravel\Mcp\Server\Attributes\Description;
-use Laravel\Mcp\Server\Attributes\Name;
-
-#[Name('newsletter_send')]
-#[Description('Send the newsletter draft to every subscriber.')]
-class NewsletterSend extends Tool
-{
-    protected function execute(Request $request): Response
-    {
-        $this->ensureWritesEnabled();
-        $this->ensurePermission($this->user($request), 'edit newsletter entries');
-
-        // ...
-
-        return $this->json(['sent' => true]);
-    }
-}
+// config/statamic/mcp.php
+'server' => App\Mcp\StatamicServer::class,
 ```
 
-`replace()` swaps a built-in tool for yours, usually a subclass that overrides
-`execute()` or `schema()` and keeps the name. `remove()` drops one. The server name,
-instructions, and page size are inherited, and your class can override any of them.
-The helpers, how `read_only` applies to your tools, and how to test them are in
-**[docs/tools.md](docs/tools.md#your-own-tools)**.
-
-## Authentication
-
-### Token mode (default)
-
-Works on **every** install, including file-based users. Tokens are stored
-SHA-256-hashed in `storage/statamic/mcp/tokens.yaml` — no database, no migrations —
-and shown exactly once at issuance. A token authenticates as the Statamic user it
-was issued for; delete the user and the token dies with them.
-
-```bash
-php please mcp:token you@site.com --name="Claude" --expires-days=90   # issue
-php please mcp:tokens                                                 # list
-php please mcp:token:revoke {tokenId}                                 # revoke
-```
-
-Users can also issue and revoke their own tokens in the Control Panel at
-**Tools → Utilities → MCP Access** — grant the **Access MCP Tokens utility**
-permission to enable it. Super admins see (and can revoke) everyone's tokens.
-
-### OAuth mode
-
-For claude.ai, Claude Desktop, and ChatGPT connectors. Client registration, PKCE,
-discovery, and consent are delegated to `laravel/mcp` + Laravel Passport — and
-**your users stay exactly where they are, file users included**. The addon brings
-its own guard: bearers are validated by Passport's ResourceServer, and the token's
-user resolves through the Statamic repository. No user migration, no `HasApiTokens`
-trait, no `config/auth.php` edit. Passport just needs a database for its *own*
-tables (sqlite is fine) and its encryption keys.
-
-The easy path is the wizard:
-
-```bash
-php please mcp:setup
-```
-
-It installs Passport, flips `STATAMIC_MCP_AUTH=oauth`, runs the migrations
-(including the addon's user_id conversion — Statamic ids are UUIDs, Passport's
-stock columns are bigint), and provisions the Passport keys — never editing a
-file without showing the change first. Keys are managed in the database
-(encrypted with `APP_KEY`, shared across servers, provisioned automatically),
-so deploying is just `php artisan migrate --force` — no PEM blobs to paste
-anywhere. Explicit `PASSPORT_*` env vars still override for those who want
-them (`php please mcp:keys` exports the pair). The manual steps, the deploy
-recipe, and the CP panel for viewing and disconnecting OAuth connections are
-in **[docs/oauth.md](docs/oauth.md)**.
-
-If any prerequisite is missing, the MCP endpoint answers **503 with the exact
-remedy** — the rest of your site is untouched.
+Your tools run behind the same authentication and Access MCP check as the built-in ones. `replace()` swaps a built-in tool for yours, usually a subclass that overrides `execute()` or `schema()` and keeps the name. `remove()` drops one. Extend `Danielgnh\StatamicMcp\Tools\Tool` to get the acting user and the permission helpers. [docs/tools.md](docs/tools.md#your-own-tools) has a complete tool, the helper reference, and a test.
 
 ## Configuration
 
 ```bash
-php artisan vendor:publish --tag=statamic-mcp-config   # → config/statamic/mcp.php
+php artisan vendor:publish --tag=statamic-mcp-config
 ```
 
-| Key                        | Default                            | What it does                                                                                                            |
-|----------------------------|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `enabled`                  | `true` (`STATAMIC_MCP_ENABLED`)    | Kill switch. When `false` the MCP route is never registered.                                                            |
-| `route`                    | `mcp/statamic`                     | Where the streamable-HTTP endpoint mounts.                                                                              |
-| `auth`                     | `token` (`STATAMIC_MCP_AUTH`)      | `token` or `oauth`.                                                                                                     |
-| `server`                   | `Danielgnh\StatamicMcp\Server::class` | The laravel/mcp server class to mount. Extend it to add, replace, or remove tools, see [Your own tools](#your-own-tools).       |
-| `middleware`               | `['throttle:60,1']`                | Prepended to the auth middleware on the MCP route. Plain Laravel.                                                       |
-| `read_only`                | `false` (`STATAMIC_MCP_READ_ONLY`) | Hides every write/delete tool from the server entirely.                                                                 |
-| `deletes`                  | `false` (`STATAMIC_MCP_DELETES`)   | Delete tools are not even registered unless `true`.                                                                     |
-| `resources`                | all `true`                         | Exposure allowlist per type: `true` = all handles, or an array like `'collections' => ['blog', 'pages']`.               |
-| `per_page`                 | `25`                               | Default page size for list tools (hard-capped at 100).                                                                  |
-| `uploads.max_size`         | `10240`                            | Per-upload cap in **kilobytes** for `assets_upload`.                                                                    |
-| `uploads.source_allowlist` | `null`                             | Exact-host allowlist for `assets_upload` URLs. `null` = any public host; private/reserved addresses are always blocked. |
+This creates `config/statamic/mcp.php`.
 
-> Upgrading from v1.0? Re-publish the config or add `'asset_containers' => true`
-> to `resources` — a published config **without** the key exposes no containers
-> (safe by default).
-
-## Security model: the token is the user
-
-There are no API scopes and no parallel ACL. Every MCP request authenticates as a
-real Statamic user, and authorization is always Statamic's native permission
-system — the same roles UI you already use:
-
-1. **Read-only switch** — `read_only` hides all write/delete tools.
-2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
-3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
-   (and term/global equivalents), publish permissions for publish-state changes,
-   site permissions on multi-site. Denials name the missing permission and the remedy.
-4. **Deletes off by default** — both the config flag and the role permission must open.
-
-A restricted agent is just a dedicated Statamic user with a restricted role.
-Ready-made recipes — drafting agent, read-only analyst, publishing agent, site
-scoping — are in **[docs/permissions.md](docs/permissions.md)**.
+| Key | Default | What it does |
+|---|---|---|
+| `enabled` | `true` | Kill switch. When `false`, the route is never registered. Set with `STATAMIC_MCP_ENABLED`. |
+| `route` | `mcp/statamic` | The endpoint path. |
+| `auth` | `token` | `token` or `oauth`. Set with `STATAMIC_MCP_AUTH`. |
+| `server` | `Danielgnh\StatamicMcp\Server` | The server class to mount. |
+| `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. |
+| `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. |
+| `deletes` | `false` | Registers the delete tools. Set with `STATAMIC_MCP_DELETES`. |
+| `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, and `asset_containers`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
+| `per_page` | `25` | Default page size for list tools, capped at 100. |
+| `uploads.max_size` | `10240` | Upload size limit in KB. |
+| `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
 
 ## Troubleshooting
 
@@ -238,26 +174,15 @@ scoping — are in **[docs/permissions.md](docs/permissions.md)**.
 php please mcp:doctor
 ```
 
-One command answers "why doesn't my MCP endpoint work?" — it runs every check
-without short-circuiting and names each problem with the exact remedy.
+The doctor runs every check, even after one fails, and prints the fix for each problem. It exits non-zero on failure, so it also works as a deploy step. [docs/troubleshooting.md](docs/troubleshooting.md) explains each check and what a 401, 403, 404, or 503 from the endpoint means.
 
-| Response                       | Meaning                                                                               |
-|--------------------------------|---------------------------------------------------------------------------------------|
-| `401`                          | Missing, malformed, expired, or revoked token — deliberately identical in every case. |
-| `403` "requires 'access mcp'…" | Authenticated fine, but the user lacks the `Access MCP` permission.                   |
-| `503` + `remedy` (OAuth mode)  | An OAuth prerequisite is missing; the body names the exact fix.                       |
-| `404` on the endpoint          | MCP is disabled, or failed to mount — run `mcp:doctor`.                               |
-
-Details on every doctor check, and the MCP Inspector, are in
-**[docs/troubleshooting.md](docs/troubleshooting.md)**.
-
-## Testing
+## Development
 
 ```bash
-composer test     # Pest
+composer test     # Rector, Pint, PHPStan, and Pest
 composer format   # Pint
 ```
 
 ## License
 
-MIT — see [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE.md](LICENSE.md).
