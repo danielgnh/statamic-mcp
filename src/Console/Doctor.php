@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Console;
 
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
+use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
@@ -10,6 +11,7 @@ use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
+use Laravel\Mcp\Server as McpServer;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
 use Throwable;
@@ -45,6 +47,7 @@ class Doctor extends Command
         $this->line('');
 
         $this->checkEnabled();
+        $this->checkServer();
         $this->checkMiddleware();
         $this->checkAppUrl();
         $this->checkAuthMigrations();
@@ -98,6 +101,19 @@ class Doctor extends Command
         }
 
         return false;
+    }
+
+    protected function checkServer(): void
+    {
+        $server = config('statamic.mcp.server', Server::class);
+
+        if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+            return;
+        }
+
+        $given = is_string($server) ? $server : get_debug_type($server);
+
+        $this->problem("Configured server '{$given}' is not a subclass of ".McpServer::class." — the MCP route cannot mount. Point 'server' in the statamic.mcp config at a class extending Danielgnh\\StatamicMcp\\Server, or remove the key.");
     }
 
     protected function checkMiddleware(): void
