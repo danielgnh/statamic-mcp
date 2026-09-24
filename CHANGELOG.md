@@ -11,12 +11,19 @@ called out here explicitly.
 ### Added
 
 - `blueprints_get` lists the sets of Replicator and Bard fields, the blocks of a
-  page builder, with each set's display name, group, instructions, and fields.
-  Fieldset imports inside a set are resolved, nested sets are listed under
-  their field, and sets hidden from the CP's set picker come back with
-  `"hidden": true`. Until now these fields had no description beyond their
-  type. A set's `instructions` is now where you tell agents when to use a
-  block; editors already see the same text in the CP.
+  page builder, with each set's display name, group, and instructions. Sets
+  hidden from the CP's set picker come back with `"hidden": true`. Pass a
+  set's handle as the new `set` parameter to get that set's fields and an
+  example row, with fieldset imports resolved, nested sets listed by name, and
+  `example_notes` keyed by their path in the row. A handle is found anywhere in
+  the blueprint, sets inside other sets included. When it has different fields
+  in different places, the error lists their paths to pass instead. Grid and
+  group fields list their fields. Until now these fields had no description
+  beyond their type. A set's `instructions` is now where you tell agents when
+  to use a block; editors already see the same text in the CP.
+- `blueprints_get` reports where asset, entry, term, and user fields point
+  (`container`, `collections`, `taxonomies`) and how many items they take
+  (`max_files`, `max_items`), when the field configures it.
 - **Guidelines for agents.** Markdown files under `resources/mcp/guidelines`
   (the new `guidelines_path` config key). `statamic_overview` returns
   `site.md`, and `blueprints_get` returns `collections/{handle}.md` plus
@@ -56,16 +63,6 @@ called out here explicitly.
   files / pending provision) and fails with a dedicated remedy when the stored
   key can't be decrypted after an `APP_KEY` change — deliberately never
   regenerating over it, which would silently disconnect every client.
-- `blueprints_get` describes page builders. Replicator and Bard fields list
-  their sets with handle, display name, instructions, and fields, and grid and
-  group fields list their fields, as deep as the blueprint nests. Set fields
-  are read through Statamic, so fieldset imports are resolved, and sets the CP
-  no longer offers are marked `hidden`. The example holds one set of each
-  replicator, one row of each grid, and one object for each group, and
-  `example_notes` keys notes on nested values by their path, such as
-  `page_builder.0.image`. Before, a replicator came back without its sets and
-  with a null example, so an agent had to work out the set types from
-  existing entries.
 
 ### Changed
 
