@@ -88,7 +88,11 @@ class EntriesUpdate extends Tool
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
         // context) — silently ignored, never merged or treated as a change.
-        $data = collect((array) $validated['data'])->except(['updated_at', 'updated_by'])->all();
+        // So is the entry's own blueprint; naming another one stays an error.
+        $data = collect((array) $validated['data'])
+            ->except(['updated_at', 'updated_by'])
+            ->reject(fn (mixed $value, int|string $key) => $key === 'blueprint' && $value === $entry->blueprint()->handle())
+            ->all();
 
         $this->rejectPreviewObjects($data, 'entries_get');
 

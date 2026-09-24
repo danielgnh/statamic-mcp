@@ -26,6 +26,8 @@ class EntriesGet extends Tool
     use ResolvesEntries;
     use ResolvesSites;
 
+    private const METADATA = ['updated_at', 'updated_by', 'blueprint'];
+
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
@@ -91,10 +93,11 @@ class EntriesGet extends Tool
                 ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
                 ->all();
         } else {
-            // raw: the round-trippable write shape. updated_at/updated_by are
-            // Statamic-managed metadata (its own toArray excludes updated_at) —
-            // stripped so agents can't round-trip stale values into updates.
-            $data = $entry->data()->except(['updated_at', 'updated_by'])->all();
+            // raw: the round-trippable write shape. updated_at/updated_by and
+            // blueprint are Statamic-managed metadata (its own toArray excludes
+            // updated_at) — stripped so agents can't round-trip stale values
+            // into updates. The blueprint comes back at the top level instead.
+            $data = $entry->data()->except(self::METADATA)->all();
 
             if ($entry->hasOrigin()) {
                 // Walk the whole origin chain: each origin's data() is its OWN
@@ -105,7 +108,7 @@ class EntriesGet extends Tool
                 $inherited = [];
 
                 for ($origin = $entry->origin(); $origin !== null; $origin = $origin->origin()) {
-                    $inherited += $origin->data()->except(['updated_at', 'updated_by'])->all();
+                    $inherited += $origin->data()->except(self::METADATA)->all();
                 }
 
                 $inherited = array_diff_key($inherited, $data);
@@ -131,6 +134,7 @@ class EntriesGet extends Tool
         $response = [
             'id' => $entry->id(),
             'collection' => $collection,
+            'blueprint' => $blueprint->handle(),
             'slug' => $entry->slug(),
             'site' => $entry->locale(),
             'status' => $entry->status(),

@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Mcp\Request;
 use Statamic\Events\EntrySaved;
 use Statamic\Events\EntrySaving;
 use Statamic\Facades\Blueprint;
@@ -768,4 +769,47 @@ it("refuses to change the author without 'edit other authors blog entries'", fun
 
     expect($fresh->get('title'))->toBe('Renamed')
         ->and($fresh->authors()->all())->toBe([$user->id()]);
+});
+
+it('takes back what entries_get returned in a collection with several blueprints', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text', 'validate' => 'required']])
+        ->setHandle('longread')->setNamespace('collections.blog')->save();
+
+    $entry = tap(Entry::make()->collection('blog')->blueprint('article')->slug('hello')->data(['title' => 'Hello']))->save();
+
+    $this->actingAs(Fixtures::makeUser('view blog entries'));
+
+    $got = json_decode((string) (new EntriesGet)->handle(new Request(['id' => $entry->id()]))->content(), true);
+
+    expect($got['blueprint'])->toBe('article')
+        ->and($got['data'])->toBe(['title' => 'Hello']);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => $got['data']])
+        ->assertOk()
+        ->assertSee('no-op');
+});
+
+it('ignores the entry\'s own blueprint in the patch and refuses another one', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text', 'validate' => 'required']])
+        ->setHandle('longread')->setNamespace('collections.blog')->save();
+
+    $entry = tap(Entry::make()->collection('blog')->blueprint('article')->slug('hello')->data(['title' => 'Hello']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blueprint' => 'article', 'title' => 'Hello']])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blueprint' => 'longread']])
+        ->assertHasErrors(['field blueprint is reserved — never writable via data']);
 });
