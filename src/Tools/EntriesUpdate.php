@@ -22,7 +22,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
@@ -215,7 +215,7 @@ class EntriesUpdate extends Tool
             'slug' => $entry->slug(),
             'status' => $entry->status(),
             'url' => $entry->url(),
-            ...$this->liveness($entry, $entry->published() ? self::LIVENESS_PUBLISHED : self::LIVENESS_DRAFT),
+            ...$this->entryLiveness($entry, $entry->published() ? self::LIVENESS_PUBLISHED : self::LIVENESS_DRAFT),
         ];
 
         if ($collection->dated()) {
