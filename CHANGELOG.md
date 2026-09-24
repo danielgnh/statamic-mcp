@@ -38,6 +38,16 @@ called out here explicitly.
   files / pending provision) and fails with a dedicated remedy when the stored
   key can't be decrypted after an `APP_KEY` change — deliberately never
   regenerating over it, which would silently disconnect every client.
+- `blueprints_get` describes page builders. Replicator and Bard fields list
+  their sets with handle, display name, instructions, and fields, and grid and
+  group fields list their fields, as deep as the blueprint nests. Set fields
+  are read through Statamic, so fieldset imports are resolved, and sets the CP
+  no longer offers are marked `hidden`. The example holds one set of each
+  replicator, one row of each grid, and one object for each group, and
+  `example_notes` keys notes on nested values by their path, such as
+  `page_builder.0.image`. Before, a replicator came back without its sets and
+  with a null example, so an agent had to work out the set types from
+  existing entries.
 
 ### Changed
 
@@ -78,6 +88,9 @@ called out here explicitly.
   URL, or another container's id used to be saved and render as nothing.
 - `blueprints_get` examples use the stored shape: a plain id for single-item
   relationship fields, and each date field's save format.
+- `blueprints_get` examples for option fields used the whole first option when
+  the options were saved as key/value pairs, the format the CP writes. They
+  use its key now, and button group fields get an example too.
 
 ## [0.3.2] - 2026-07-15
 
