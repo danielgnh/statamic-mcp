@@ -7,6 +7,7 @@ namespace Danielgnh\StatamicMcp\Tools\Concerns;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
+use Laravel\Mcp\Request;
 
 trait NormalizesEntryInput
 {
@@ -21,6 +22,21 @@ trait NormalizesEntryInput
             return Carbon::parse($date);
         } catch (InvalidArgumentException) {
             throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09 15:30", $date));
+        }
+    }
+
+    /**
+     * Publish state moved to entries_publish / entries_unpublish. A client
+     * with a stale tool cache may still send published — refuse it loudly
+     * rather than save a draft the agent believes is live.
+     */
+    protected function rejectPublishedArgument(Request $request, string $tool): void
+    {
+        if ($request->get('published') !== null) {
+            throw new ToolException(sprintf(
+                'published is not accepted by %s — publish state changes only through entries_publish and entries_unpublish',
+                $tool,
+            ));
         }
     }
 

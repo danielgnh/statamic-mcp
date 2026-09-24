@@ -159,74 +159,52 @@ it('is a no-op when merged data equals current data', function () {
     Event::assertNotDispatched(EntrySaved::class); // nothing was saved
 });
 
-it('changes publish state only when published is sent explicitly', function () {
+it('never changes publish state', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
 
-    $entry = makeUpdatableBlogEntry();
-
-    // CP parity: the unpublish route authorizes 'publish' too
-    // (PublishedEntriesController::destroy) — the gate is on any transition.
-    Server::actingAs(Fixtures::makeUser('edit blog entries', 'publish blog entries'))
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => false])
-        ->assertOk()
-        ->assertSee('saved as draft — not live');
-
-    expect(Entry::find($entry->id())->published())->toBeFalse();
-});
-
-it("requires 'publish blog entries' to set published: true", function () {
-    Fixtures::site();
-    Fixtures::tags();
-    Fixtures::blog();
-
-    $entry = tap(
+    $live = makeUpdatableBlogEntry();
+    $draft = tap(
         Entry::make()->collection('blog')->slug('a-draft')->data(['title' => 'Draft'])->published(false)
     )->save();
 
     $user = Fixtures::makeUser('edit blog entries');
 
     Server::actingAs($user)
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Draft'], 'published' => true])
-        ->assertHasErrors(["requires 'publish blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
-
-    Server::actingAs(Fixtures::makeUser('edit blog entries', 'publish blog entries'))
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Draft'], 'published' => true])
+        ->tool(EntriesUpdate::class, ['id' => $live->id(), 'data' => ['title' => 'Still Live']])
         ->assertOk()
         ->assertSee('"result":"published"');
-});
 
-it("requires 'publish blog entries' to unpublish (CP parity)", function () {
-    Fixtures::site();
-    Fixtures::tags();
-    Fixtures::blog();
-
-    $entry = makeUpdatableBlogEntry();
-    $user = Fixtures::makeUser('edit blog entries');
-
-    // The CP's unpublish action authorizes 'publish' (there is no separate
-    // unpublish permission in v6) — same gate here, on the transition to false.
     Server::actingAs($user)
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => false])
-        ->assertHasErrors(["requires 'publish blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+        ->tool(EntriesUpdate::class, ['id' => $draft->id(), 'data' => ['title' => 'Still Draft']])
+        ->assertOk()
+        ->assertSee('saved as draft — not live');
 
-    expect(Entry::find($entry->id())->published())->toBeTrue();
+    expect(Entry::find($live->id())->published())->toBeTrue()
+        ->and(Entry::find($draft->id())->published())->toBeFalse();
 });
 
-it('needs no publish permission when published matches the current state', function () {
+it('rejects published even for a user who could publish', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
 
     $entry = makeUpdatableBlogEntry();
 
-    // No transition — sending the current state is harmless, and here nothing
-    // else changed either, so it resolves as a no-op.
-    Server::actingAs(Fixtures::makeUser('edit blog entries'))
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'published' => true])
-        ->assertOk()
-        ->assertSee('no-op');
+    // A client with a stale tool cache may still send the old parameter.
+    // Refusing beats silently ignoring it: the agent would otherwise believe
+    // the publish state changed.
+    foreach ([true, false] as $published) {
+        Server::actingAs(Fixtures::makeSuper())
+            ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Changed'], 'published' => $published])
+            ->assertHasErrors(['published is not accepted by entries_update — publish state changes only through entries_publish and entries_unpublish']);
+    }
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->published())->toBeTrue()
+        ->and($fresh->get('title'))->toBe('Hello World');
 });
 
 it('rejects a mismatched site selector, listing localization ids', function () {
@@ -366,7 +344,7 @@ it('still requires the data key to be present', function () {
 
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'slug' => 'hello-again'])
-        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug, date, or published).']);
+        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug or date).']);
 
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });

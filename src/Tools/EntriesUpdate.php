@@ -22,7 +22,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is untouched unless published is sent; changing it in either direction requires the publish permission. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — publish the working copy from the Control Panel); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), unpublished drafts are saved directly, and any explicit published value is rejected. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
@@ -37,10 +37,9 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or published.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug or date.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date (e.g. 2026-07-09 or 2026-07-09 15:30) — dated collections only.'),
-            'published' => $schema->boolean()->description('Omit to leave publish state untouched. Changing it requires the publish permission for the collection. Rejected entirely on revision-enabled collections.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
         ];
     }
@@ -54,18 +53,19 @@ class EntriesUpdate extends Tool
     {
         $this->ensureWritesEnabled();
 
+        $this->rejectPublishedArgument($request, 'entries_update');
+
         $validated = $request->validate(
             [
                 'id' => 'required|string',
                 // present (not required): Laravel's 'required' fails on [],
-                // and a slug/date/published-only update sends an empty object.
+                // and a slug/date-only update sends an empty object.
                 'data' => 'present|array',
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
-                'published' => 'nullable|boolean',
                 'site' => 'nullable|string',
             ],
-            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug, date, or published).'],
+            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug or date).'],
         );
 
         $user = $this->user($request);
@@ -92,26 +92,6 @@ class EntriesUpdate extends Tool
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
 
-        $published = $this->resolvePublished($validated['published'] ?? null);
-
-        // On revision collections publish state is CP-owned: ANY explicit
-        // published value — true or false, even same-state — is rejected;
-        // publishing goes through the CP's revision flow. Sits
-        // above the publish gate so the rejection wins over a denial.
-        if ($published !== null && $entry->revisionsEnabled()) {
-            throw new ToolException(sprintf(
-                "collection '%s' uses revisions — publish/unpublish from the Control Panel, not via entries_update",
-                $collectionHandle,
-            ));
-        }
-
-        if ($published !== null && $published !== $entry->published()) {
-            // Any publish-state transition is gated on 'publish' — the CP's
-            // unpublish route authorizes the same ability
-            // (v6 has no separate unpublish permission).
-            $this->ensurePermission($user, "publish {$collectionHandle} entries");
-        }
-
         // Routing is snapshotted from the LIVE entry BEFORE any rebase:
         // fromWorkingCopy() restores the staged published attribute into the
         // basis, and publish state must stay keyed to what is actually live.
@@ -136,8 +116,7 @@ class EntriesUpdate extends Tool
         // silently dropped.
         $dirty = $this->normalize($merged) !== $this->normalize($current)
             || ($slug !== null && $slug !== $basis->slug())
-            || ($date instanceof Carbon && ! $date->equalTo($basis->date()))
-            || ($published !== null && $published !== $entry->published());
+            || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
         if (! $dirty) {
             return $this->json([
@@ -189,7 +168,7 @@ class EntriesUpdate extends Tool
 
         return $workingCopy
             ? $this->persistWorkingCopy($target, $user, $amending, $collection)
-            : $this->persistLive($entry, $published, $user, $collection);
+            : $this->persistLive($entry, $user, $collection);
     }
 
     private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection): Response
@@ -222,12 +201,8 @@ class EntriesUpdate extends Tool
         return $this->json($payload);
     }
 
-    private function persistLive(EntryContract $entry, ?bool $published, UserContract $user, CollectionContract $collection): Response
+    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection): Response
     {
-        if ($published !== null) {
-            $entry->published($published);
-        }
-
         // CP parity: updates refresh updated_by/updated_at. save() returns
         // false when an EntrySaving listener cancels (approval addons do
         // this) — never report success for it.
@@ -248,15 +223,6 @@ class EntriesUpdate extends Tool
         }
 
         return $this->json($payload);
-    }
-
-    /**
-     * An omitted param and an explicit published: null both arrive here as
-     * null — both mean "leave publish state untouched".
-     */
-    private function resolvePublished(mixed $published): ?bool
-    {
-        return $published === null ? null : (bool) $published;
     }
 
     private function resolveDate(?string $date, EntryContract $entry): ?Carbon
