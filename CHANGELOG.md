@@ -10,6 +10,23 @@ called out here explicitly.
 
 ### Added
 
+- `blueprints_get` lists the sets of Replicator and Bard fields, the blocks of a
+  page builder, with each set's display name, group, instructions, and fields.
+  Fieldset imports inside a set are resolved, nested sets are listed under
+  their field, and sets hidden from the CP's set picker come back with
+  `"hidden": true`. Until now these fields had no description beyond their
+  type. A set's `instructions` is now where you tell agents when to use a
+  block; editors already see the same text in the CP.
+- **Guidelines for agents.** Markdown files under `resources/mcp/guidelines`
+  (the new `guidelines_path` config key). `statamic_overview` returns
+  `site.md`, and `blueprints_get` returns `collections/{handle}.md` plus
+  `collections/{handle}/{blueprint}.md`, with taxonomies and globals laid out
+  the same way. HTML comments are stripped, so notes to yourself and untouched
+  stubs never reach an agent. See `docs/guidelines.md`.
+- `mcp:guidelines` creates `site.md` and a file per exposed collection, never
+  overwriting one, and lists the page builder blocks that have no instructions.
+- A `statamic-mcp-guidelines` Boost skill that teaches coding agents to write
+  block instructions from each block's template.
 - `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
   now, the same split Statamic's CP makes with `PublishedEntriesController`.
   Both need the collection's publish permission. On revision-enabled collections
@@ -38,6 +55,9 @@ called out here explicitly.
   files / pending provision) and fails with a dedicated remedy when the stored
   key can't be decrypted after an `APP_KEY` change — deliberately never
   regenerating over it, which would silently disconnect every client.
+- `statamic_overview` reports the acting user's `id`, and collections whose
+  blueprint has an `author` field add `can_edit_other_authors`,
+  `can_publish_other_authors`, and `can_delete_other_authors`.
 
 ### Changed
 
@@ -52,9 +72,36 @@ called out here explicitly.
 - `mcp:setup` provisions keys **after** the migrate step so they land in the
   database, and declining the key step is no longer fatal — the first OAuth
   request self-provisions.
+- `entries_create` makes the acting user the author when the blueprint has an
+  `author` field and `data` names none, as the Control Panel does. Naming
+  anyone else, and changing an entry's author with `entries_update`, needs
+  `edit other authors {collection} entries`.
 
 ### Fixed
 
+- Writes store what the Control Panel stores. `entries_create`,
+  `entries_update`, `terms_create`, `terms_update`, `globals_update`, and
+  `assets_update` now take each value through the fieldtype's `preProcess()`,
+  validate it, and save the result of `process()`, the same steps as a CP save.
+  A single-file asset or single-item relationship is saved as a plain string,
+  sets and grid rows get ids, dates use the field's save format, and HTML sent
+  to a Bard field becomes ProseMirror. Values are accepted in the shape the get
+  tools return, so what `entries_get` or `globals_get` returned can be written
+  back unchanged. Before, a single-file asset had to be sent as a list and was
+  saved as one, which themes reading the raw value do not expect.
+- Updating an entry, term, or global set no longer fails because the CP saved
+  a single-file asset, a single-item relationship, or a date on it. Validation
+  used to run against the stored value, so even an unrelated title change was
+  refused.
+- Replicator and Bard sets are checked like top-level fields. A set type the
+  field does not define is rejected with the valid types and a did-you-mean
+  hint, and so are unknown keys inside sets, grid rows, and groups. A set
+  without a type returns an error naming its path instead of "An internal
+  server error occurred."
+- An asset reference has to exist in the field's container. A missing path, a
+  URL, or another container's id used to be saved and render as nothing.
+- `blueprints_get` examples use the stored shape: a plain id for single-item
+  relationship fields, and each date field's save format.
 - `blueprints_get` put `slug`, and `date` on dated collections, into the example
   payload, but the write tools reject both inside `data`, so an agent that
   copied the example got an error. They stay in `fields` and are left out of
@@ -62,6 +109,24 @@ called out here explicitly.
   parameter. The same applies to `slug` on taxonomy blueprints, and
   `terms_create` now says to pass `slug` as a top-level parameter instead of
   calling it an unknown field.
+
+### Security
+
+- **Breaking:** the entry write tools skipped Statamic's author rules. On a
+  blueprint with an `author` field, a role with `edit blog entries` could edit
+  anyone's entry through MCP, while the Control Panel limits it to entries the
+  user is an author of. `entries_update`, `entries_publish`,
+  `entries_unpublish`, and `entries_delete` now check what Statamic's
+  `EntryPolicy` checks: an entry the user is not an author of, including one
+  with no author, needs `edit other authors {collection} entries`,
+  `publish other authors {collection} entries`, or
+  `delete other authors {collection} entries`. The denial names the
+  permission.
+- **Breaking:** on multi-site installs the default site now needs
+  `access {site} site` like every other site, as Statamic's `SitePolicy`
+  requires. MCP used to exempt it, so a role with only `access fr site` could
+  still read and write default-site content. Grant the default site's
+  permission to roles that should keep that access.
 
 ## [0.3.2] - 2026-07-15
 

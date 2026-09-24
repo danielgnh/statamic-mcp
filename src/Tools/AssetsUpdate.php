@@ -77,7 +77,9 @@ class AssetsUpdate extends Tool
         $this->rejectUnknownKeys($blueprint, Arr::except($patch, ['focus']));
 
         $existing = $asset->data()->all();
-        $merged = array_merge($existing, $patch);
+
+        // 'focus' is not a blueprint field, so it passes through unprocessed.
+        $merged = array_merge($existing, $this->processAgainstBlueprint($blueprint, [...$existing, ...$patch], array_keys($patch)));
 
         // Strict compare over normalized values: assoc key
         // order is irrelevant, but types matter — loose == would turn an
@@ -90,8 +92,6 @@ class AssetsUpdate extends Tool
                 'cp_edit_url' => $asset->editUrl(),
             ]);
         }
-
-        $this->validateAgainstBlueprint($blueprint, $merged);
 
         // save() returns false when an AssetSaving listener cancels
         // (approval addons do this) — never report success for it.

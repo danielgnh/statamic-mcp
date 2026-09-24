@@ -24,7 +24,7 @@ it('returns fields and a bounded example payload for a collection blueprint', fu
         // v6 appends a 'slug' field to entry blueprints (Collection::ensureEntryBlueprintFields),
         // but the entry tools take slug as a top-level parameter, so it stays out of the example
         ->assertSee('"handle":"slug","type":"slug"')
-        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":["REPLACE-WITH-REAL-TERM-ID"]}')
+        ->assertSee('"example":{"title":"Example text","content":null,"hero_image":"Example text","topic":"REPLACE-WITH-REAL-TERM-ID"}')
         ->assertSee('"slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"');
 });
 
@@ -91,20 +91,21 @@ it('generates real examples for select, toggle, integer, and date fields', funct
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
         ->assertOk()
         ->assertSee('"options":{"red":"Red","blue":"Blue"}')
-        // the default date save format is 'Y-m-d H:i' (has time), so the valid example is the ISO-Z datetime
-        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15T09:30:00.000Z"}');
+        // dates use the default save format 'Y-m-d H:i', the shape entries_get returns
+        ->assertSee('"example":{"title":"Example text","color":"red","featured":true,"priority":42,"launch_date":"2026-01-15 09:30"}');
 });
 
-it('shapes date examples by save format and mode, matching the DateFieldtype rule', function () {
+it('shapes date examples in the field save format and mode', function () {
     Fixtures::site();
 
     Collection::make('events')->title('Events')->save();
 
     Blueprint::makeFromFields([
         'title' => ['type' => 'text', 'validate' => 'required'],
-        'when' => ['type' => 'date'], // default save format 'Y-m-d H:i' → ISO-Z datetime required
+        'when' => ['type' => 'date'], // default save format 'Y-m-d H:i'
         'when_timed' => ['type' => 'date', 'time_enabled' => true],
-        'day_only' => ['type' => 'date', 'format' => 'Y-m-d'], // time-less save format → plain date
+        'with_seconds' => ['type' => 'date', 'time_seconds_enabled' => true],
+        'day_only' => ['type' => 'date', 'format' => 'Y-m-d'],
         'window' => ['type' => 'date', 'mode' => 'range'],
         'stay' => ['type' => 'date', 'mode' => 'range', 'format' => 'Y-m-d'],
     ])->setHandle('event')->setNamespace('collections.events')->save();
@@ -114,10 +115,11 @@ it('shapes date examples by save format and mode, matching the DateFieldtype rul
     Server::actingAs($user)
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'events'])
         ->assertOk()
-        ->assertSee('"when":"2026-01-15T09:30:00.000Z"')
-        ->assertSee('"when_timed":"2026-01-15T09:30:00.000Z"')
+        ->assertSee('"when":"2026-01-15 09:30"')
+        ->assertSee('"when_timed":"2026-01-15 09:30"')
+        ->assertSee('"with_seconds":"2026-01-15 09:30:00"')
         ->assertSee('"day_only":"2026-01-15"')
-        ->assertSee('"window":{"start":"2026-01-15T09:30:00.000Z","end":"2026-01-16T09:30:00.000Z"}')
+        ->assertSee('"window":{"start":"2026-01-15 09:30","end":"2026-01-16 09:30"}')
         ->assertSee('"stay":{"start":"2026-01-15","end":"2026-01-16"}');
 });
 
@@ -148,6 +150,26 @@ it('returns an example that entries_create accepts as data on a dated collection
         ->tool(EntriesCreate::class, ['collection' => 'events', 'data' => data_get($blueprint, 'example'), 'date' => '2026-07-09'])
         ->assertOk()
         ->assertSee('saved as draft — not live');
+});
+
+it('gives single-item relationship fields a plain id example', function () {
+    Fixtures::site();
+
+    Collection::make('posts')->title('Posts')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'author' => ['type' => 'users', 'max_items' => 1],
+        'featured' => ['type' => 'entries', 'collections' => ['posts'], 'max_items' => 1],
+        'related' => ['type' => 'entries', 'collections' => ['posts']],
+    ])->setHandle('post')->setNamespace('collections.posts')->save();
+
+    Server::actingAs(Fixtures::makeUser('view posts entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'posts'])
+        ->assertOk()
+        ->assertSee('"author":"REPLACE-WITH-REAL-USER-ID"')
+        ->assertSee('"featured":"REPLACE-WITH-REAL-ENTRY-ID"')
+        ->assertSee('"related":["REPLACE-WITH-REAL-ENTRY-ID"]');
 });
 
 it('wraps the first option in an array for a multi-select', function () {

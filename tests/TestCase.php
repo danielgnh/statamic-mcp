@@ -42,6 +42,8 @@ abstract class TestCase extends AddonTestCase
         // fixture saves leak into the shared testbench skeleton in vendor/.
         $fixtures = __DIR__.'/__fixtures__/dev-null';
         $app['config']->set('statamic.system.blueprints_path', $fixtures.'/blueprints');
+        $app['config']->set('statamic.system.fieldsets_path', $fixtures.'/fieldsets');
+        $app['config']->set('statamic.mcp.guidelines_path', $fixtures.'/guidelines');
         $app['config']->set('statamic.users.repositories.file.paths.roles', $fixtures.'/users/roles.yaml');
         $app['config']->set('statamic.users.repositories.file.paths.groups', $fixtures.'/users/groups.yaml');
     }
