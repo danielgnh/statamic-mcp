@@ -117,17 +117,16 @@ The server tells agents to call `statamic_overview` first. It lists the sites an
 
 ## Guidelines for agents
 
-`blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions on your page builder blocks and, if you want, a few markdown files:
+`blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions in the blueprint and, for everything that isn't about one field, in a global set:
 
-- Each set in a Replicator or Bard field has an `instructions` key. `blueprints_get` lists it with the set's name, and editors see the same text when they add a block.
-- `resources/mcp/guidelines/site.md` holds voice and tone. `statamic_overview` returns it.
-- `resources/mcp/guidelines/collections/pages.md` describes how a page is put together. `blueprints_get` returns it with the collection's blueprints.
+- Each field, section, and page builder set has an `instructions` key. `blueprints_get` returns it, and editors see the same text in the Control Panel.
+- A `guidelines` global set holds the site's voice and tone, which `statamic_overview` returns, and rows on how a collection's entries are put together, which `blueprints_get` returns with the collection's blueprints. Admins edit it in the Control Panel, and an agent may through `globals_update`.
 
 ```bash
 php please mcp:guidelines
 ```
 
-The command creates those files without overwriting any, then lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
+The command creates the global set once, then lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
 
 ## Adding your own tools
 
@@ -184,7 +183,7 @@ This creates `config/statamic/mcp.php`.
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
-| `guidelines_path` | `resource_path('mcp/guidelines')` | Where the guideline files for agents live. |
+| `guidelines` | `guidelines` | The handle of the global set that holds guidelines for agents. |
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Support\GuidelineFiles;
+use Danielgnh\StatamicMcp\Support\GuidelinesSet;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
@@ -18,12 +18,14 @@ use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
+use Statamic\Fields\Section;
+use Statamic\Fields\Tab;
 use Statamic\Fieldtypes\Date;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. When the site has written guidelines for this collection or blueprint, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines global set has rows for this collection or taxonomy, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -130,7 +132,8 @@ class BlueprintsGet extends Tool
             'handle' => $handle,
             'blueprint' => $blueprint->handle(),
             'available_blueprints' => $blueprints->keys()->values()->all(),
-            ...array_filter(['guidelines' => app(GuidelineFiles::class)->for($this->configKey($type), $handle, (string) $blueprint->handle())]),
+            ...array_filter(['guidelines' => app(GuidelinesSet::class)->for($this->configKey($type), $handle)]),
+            ...array_filter(['tabs' => $this->describeTabs($blueprint)]),
             'fields' => $fields,
             'example' => $example,
         ];
@@ -264,6 +267,36 @@ class BlueprintsGet extends Tool
         }
 
         return $descriptor;
+    }
+
+    /**
+     * The tabs whose own or whose sections' instructions say how their fields
+     * go together, with the handles of those fields. Sections without
+     * instructions stay out, so a blueprint without any sends nothing.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function describeTabs(Blueprint $blueprint): array
+    {
+        return $blueprint->tabs()
+            ->map(fn (Tab $tab) => array_filter([
+                'handle' => $tab->handle(),
+                'display' => $tab->display(),
+                'instructions' => $tab->instructions(),
+                'fields' => $tab->fields()->all()->keys()->all(),
+                'sections' => $tab->sections()
+                    ->filter(fn (Section $section) => filled($section->instructions()))
+                    ->map(fn (Section $section) => array_filter([
+                        'display' => $section->display(),
+                        'instructions' => $section->instructions(),
+                        'fields' => $section->fields()->all()->keys()->all(),
+                    ], filled(...)))
+                    ->values()
+                    ->all(),
+            ], filled(...)))
+            ->filter(fn (array $tab) => isset($tab['instructions']) || isset($tab['sections']))
+            ->values()
+            ->all();
     }
 
     /**

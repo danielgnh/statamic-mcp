@@ -8,6 +8,37 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** guidelines for agents moved from markdown files under
+  `resources/mcp/guidelines` into a global set, so the people who run the site
+  edit them in the Control Panel and an agent whose user may edit the set can
+  through `globals_update`. `mcp:guidelines` creates the set, handle
+  `guidelines`, with a `site` field that `statamic_overview` returns and a
+  `resources` replicator whose rows name collections and taxonomies and say
+  how their entries are put together; `blueprints_get` returns the rows naming
+  the requested resource, in their order. The `guidelines_path` config key is
+  gone, and the new `guidelines` key names the set. Guidelines for one
+  blueprint or for a global set have no home in the set; a section's
+  instructions carry them now (see below). To migrate, run
+  `php please mcp:guidelines`, paste `site.md` into the set's Site field,
+  paste each collection file into a row naming its collection, and delete
+  `resources/mcp/guidelines`. Move anything that describes one field into
+  that field's `instructions` instead.
+- `mcp:guidelines` lists the blocks without instructions as text that fits the
+  terminal instead of a table: one heading per set of blueprints that share
+  them, then one line per field with the names of its sets. A page builder
+  fieldset that six blueprints import used to repeat all six on every row,
+  which made the table wider than any terminal.
+
+### Added
+
+- `blueprints_get` returns `tabs`: the tabs whose own or whose sections'
+  `instructions` say how their fields go together, with the handles of the
+  fields under them. That is where a note about one blueprint goes, such as
+  which existing entry to follow; the Control Panel shows the same text above
+  the fields.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added

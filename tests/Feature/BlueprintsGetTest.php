@@ -550,3 +550,43 @@ it('reports time_enabled on date fields, including the date field injected into 
         ->assertOk()
         ->assertSee('{"handle":"date","type":"date","required":true,"rules":["required"],"time_enabled":false}');
 });
+
+it('returns the tabs and sections that carry instructions, with the fields under them', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::make('page')->setNamespace('collections.pages')->setContents(['tabs' => [
+        'main' => ['display' => 'Page', 'sections' => [
+            ['display' => 'Basics', 'instructions' => 'One page per service. Follow bike-rental.', 'fields' => [
+                ['handle' => 'title', 'field' => ['type' => 'text']],
+                ['handle' => 'intro', 'field' => ['type' => 'textarea']],
+            ]],
+            ['display' => 'Body', 'fields' => [
+                ['handle' => 'body', 'field' => ['type' => 'markdown']],
+            ]],
+        ]],
+        'seo' => ['display' => 'SEO', 'instructions' => 'Fill in after the copy is final.', 'sections' => [
+            ['fields' => [['handle' => 'meta_title', 'field' => ['type' => 'text']]]],
+        ]],
+        'sidebar' => ['display' => 'Sidebar', 'sections' => [
+            ['fields' => [['handle' => 'slug', 'field' => ['type' => 'slug']]]],
+        ]],
+    ]])->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"tabs":[{"handle":"main","display":"Page","fields":["title","intro","body"],"sections":[{"display":"Basics","instructions":"One page per service. Follow bike-rental.","fields":["title","intro"]}]},{"handle":"seo","display":"SEO","instructions":"Fill in after the copy is final.","fields":["meta_title"]}],"fields":[');
+});
+
+it('sends no tabs when no tab or section has instructions', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertDontSee('"tabs"');
+});
