@@ -119,6 +119,21 @@ it('renders the draft at the preview url for anyone who has it', function () {
         ->assertHeader('X-Statamic-Live-Preview');
 });
 
+it('opens only the previewed entry, not other drafts', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = makePreviewableDraft();
+
+    tap(Entry::make()->collection('blog')->slug('other-draft')->data(['title' => 'Other'])->published(false))->save();
+
+    $token = previewToken(previewPayload(Fixtures::makeUser('edit blog entries'), ['id' => $entry->id()])['url']);
+
+    $this->get("/blog/draft-post?token={$token}")->assertOk();
+    $this->get("/blog/other-draft?token={$token}")->assertNotFound();
+});
+
 it("requires 'edit blog entries', the permission the CP checks for live preview", function () {
     Fixtures::site();
     Fixtures::tags();
