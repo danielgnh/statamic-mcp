@@ -60,7 +60,6 @@
     "config": {
         "allow-plugins": {
             "pestphp/pest-plugin": true,
-            "php-http/discovery": true,
             "pixelfear/composer-dist-plugin": true
         },
         "sort-packages": true
@@ -74,8 +73,7 @@
             "providers": [
                 "Danielgnh\\StatamicMcp\\ServiceProvider"
             ]
-        },
-        "soak-time-whitelist": ["laravel/ai"]
+        }
     },
     "minimum-stability": "stable",
     "prefer-stable": true
