@@ -11,7 +11,7 @@ the CHANGELOG. `v1.0.0` marks the first stable release.
 ## 0. Preflight
 
 - All local gates green: `composer test` (Rector dry-run, Pint, PHPStan, Pest —
-  the full suite, currently ~520 tests, must pass with zero failures).
+  the full suite, currently ~780 tests, must pass with zero failures).
 - CHANGELOG updated: move the `[Unreleased]` entries under a new
   `## [X.Y.Z] - YYYY-MM-DD` heading and add the compare link in the footer.
 - For OAuth-affecting changes, `php please mcp:doctor` on a host site is green.

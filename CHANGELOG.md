@@ -8,6 +8,8 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-24
+
 ### Added
 
 - `blueprints_get` lists the sets of Replicator and Bard fields, the blocks of a
@@ -85,7 +87,7 @@ called out here explicitly.
   behind the addon's auth middleware and `Access MCP` gate. `Danielgnh\StatamicMcp\Tools\Tool` is now
   the documented base for host-app tools. A `server` value that is not a
   laravel/mcp server fails closed at boot, and `mcp:doctor` names it with the
-  remedy. See "Your own tools" in the README and `docs/tools.md`.
+  remedy. See "Adding your own tools" in the README and `docs/tools.md`.
 - `statamic_overview` reports the acting user's `id`, and collections whose
   blueprint has an `author` field add `can_edit_other_authors`,
   `can_publish_other_authors`, and `can_delete_other_authors`.
@@ -113,10 +115,10 @@ called out here explicitly.
   of relying on PHP's default timezone. Laravel sets the two to the same value,
   so behavior is unchanged. Date examples in tool descriptions and errors now
   show the offset form (`2026-07-09T15:30:00+02:00`).
-- `entries_create` makes the acting user the author when the blueprint has an
-  `author` field and `data` names none, as the Control Panel does. Naming
-  anyone else, and changing an entry's author with `entries_update`, needs
-  `edit other authors {collection} entries`.
+- **Breaking:** `entries_create` makes the acting user the author when the
+  blueprint has an `author` field and `data` names none, as the Control Panel
+  does. Naming anyone else, and changing an entry's author with
+  `entries_update`, needs `edit other authors {collection} entries`.
 - `laravel/mcp` 0.9 and 1.x are supported alongside 0.8, and nothing changes
   on 0.8. On 1.x, clients on the 2026-07-28 protocol revision connect through
   `server/discover`, clients that open with `initialize` keep working on
@@ -125,8 +127,9 @@ called out here explicitly.
   404, or 500 instead of 200. laravel/mcp 0.9.6 and 1.0.1 fix the loopback
   redirect URI check in OAuth client registration, and 0.8 won't get that fix.
   Upgrade if you run OAuth mode and have narrowed `mcp.redirect_domains`.
-- Requires `statamic/cms` 6.31 or newer, the oldest release CI tests. Composer
-  refuses every earlier 6.x release by default, because of a security advisory.
+- **Breaking:** requires `statamic/cms` 6.31 or newer, the oldest release CI
+  tests. Composer refuses every earlier 6.x release by default, because of a
+  security advisory.
 - `entries_get` names the entry's blueprint at the top level and leaves it out
   of raw `data`. In a collection with more than one blueprint, Statamic stores
   the blueprint in each entry's data, so writing back what `entries_get`
@@ -229,6 +232,17 @@ called out here explicitly.
   `php please mcp:keys`, whose output is the key pair, also in the unattended
   runs that end up in CI logs and agent transcripts. It now shows only what
   `mcp:keys` did.
+
+### Known caveats
+
+- `entries_create` always uses the collection's default blueprint. The tool has
+  no `blueprint` parameter, one sent anyway is ignored, and `blueprint` inside
+  `data` is refused as reserved. In a collection with several blueprints, an
+  entry of another blueprint has to be created in the CP.
+- `blueprints_get` reports the name of a set's group, but not the group's
+  `instructions`. Put the instructions agents need on the sets themselves.
+- Writes accept a set that is hidden from the CP's set picker. `blueprints_get`
+  marks such a set `"hidden": true`, so an agent can leave it alone.
 
 ## [0.4.2] - 2026-07-20
 
@@ -446,7 +460,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.3.2...v0.4.0
