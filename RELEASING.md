@@ -21,7 +21,7 @@ the CHANGELOG. `v1.0.0` marks the first stable release.
 The MCP Inspector is an interactive browser UI (`npx @modelcontextprotocol/inspector`),
 so it cannot run in this package repo headlessly. What is already verified by the
 suite: the full protocol path over real HTTP — `initialize`, `tools/list`
-(**9** tools in `read_only`, **16** by default, **19** with deletes enabled), and
+(**9** tools in `read_only`, **18** by default, **21** with deletes enabled), and
 `tools/call` through the complete auth middleware pipeline — is pinned by
 `tests/Feature/ReadOnlyModeTest.php` and `tests/Feature/TokenModeUnaffectedTest.php`.
 
@@ -35,7 +35,7 @@ php artisan mcp:inspector mcp/statamic
 
 In the Inspector UI: transport **Streamable HTTP**, URL `http://<host>/mcp/statamic`,
 add header `Authorization: Bearer <token>`. Expected: `initialize` completes with
-serverInfo name `Statamic`; `tools/list` returns 16 tools (default config — the
+serverInfo name `Statamic`; `tools/list` returns 18 tools (default config — the
 three delete tools are hidden under `'deletes' => false`; only 9 read tools under
 `read_only`); one `statamic_overview` call returns sites, resources, capability
 flags, and server flags. Do not tag until this passes.
