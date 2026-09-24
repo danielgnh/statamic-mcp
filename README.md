@@ -81,7 +81,7 @@ To restrict an agent, give it its own user and role. A drafting agent for the bl
 2. Create the user `claude@example.com` with that role.
 3. Run `php please mcp:token claude@example.com --name="Blog agent"`.
 
-That agent can create blog drafts and edit blog entries. It can't publish, delete, or see any other collection.
+That agent can create blog drafts and edit blog entries. It can't publish, delete, or see any other collection. If the blog blueprint has an author field, it can only edit entries it's an author of, which includes the ones it creates. That's the same rule the Control Panel applies.
 
 Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, and asset containers MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
 

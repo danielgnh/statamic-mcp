@@ -4,7 +4,9 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Statamic\Events\TermCreating;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
 
@@ -182,4 +184,24 @@ it('is hidden when the server is read-only', function () {
         ->assertHasErrors();
 
     expect(Term::query()->where('taxonomy', 'tags')->count())->toBe(0);
+});
+
+it('stores a single-file asset as a plain string', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    Storage::disk('images')->put('php.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'icon' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Server::actingAs(Fixtures::makeUser('create topics terms'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'topics', 'data' => ['title' => 'PHP', 'icon' => ['php.svg']]])
+        ->assertOk();
+
+    expect(Term::find('topics::php')->value('icon'))->toBe('php.svg');
 });

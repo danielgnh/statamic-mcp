@@ -7,7 +7,7 @@ should start with `statamic_overview`.
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`); the site's `guidelines` when `site.md` has any. |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled; collections whose blueprint has an `author` field add `can_edit_other_authors`, `can_publish_other_authors`, and `can_delete_other_authors`); the acting user, including their `id`; server flags (`read_only`, `deletes`); the site's `guidelines` when `site.md` has any. |
 | `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. Replicator and Bard fields list their `sets`, the blocks of a page builder, each with its display name, group, instructions, and fields. The collection's or blueprint's guideline files come back as `guidelines`. See [guidelines.md](guidelines.md). |
 
 ## Entries
@@ -16,11 +16,16 @@ should start with `statamic_overview`.
 |---|---|
 | `entries_list` | Paginated summaries (id, title, slug, status, url, date, updated_at) — never field data. Deterministic ordering: dated collections newest-first, others alphabetical, id as tiebreaker. |
 | `entries_get` | Full entry by id or collection + slug. Raw (round-trippable) by default; `format=augmented` for display only. Long rich-text values are truncated to previews unless requested via `fields`. On revision-enabled entries, `has_working_copy` reports staged changes; the returned data is always the live entry. |
-| `entries_create` | Raw-data create through Statamic's own validation. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
+| `entries_create` | Raw-data create through the same validate-and-process steps as the CP's save, so stored values match what the CP writes. Always saves an unpublished **draft**; nothing goes live here. On revision-enabled collections the draft gets an initial revision attributed to you. |
 | `entries_update` | Shallow top-level merge of raw data (nested structures replaced wholesale). Never changes publish state. On revision-enabled collections, edits to a published entry become a **working copy** — the live entry is never touched; an existing working copy is amended (created vs amended is stated in the result). Without revisions, edits save straight to the entry, so changes to a published entry are live at once. No-op updates save nothing. |
 | `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An already-published entry with nothing staged is a no-op. |
 | `entries_unpublish` | Takes a live entry offline. Same permission as publish, since Statamic has no separate unpublish permission. On revision-enabled collections a staged working copy is applied to the entry and cleared, with an unpublish revision attributed to you. A draft is a no-op. |
 | `entries_delete` | Only registered when `deletes` is enabled. Deleting an origin cascades to all localizations (requires site access to each); revision files stay on disk as orphans, same as the CP. |
+
+On a blueprint with an `author` field, the write tools also apply Statamic's author
+rules: an entry you are not an author of needs the "other authors" permission, and
+`entries_create` makes you the author unless `data` names one. See
+[How authorization works](permissions.md#how-authorization-works).
 
 ## Taxonomy terms
 

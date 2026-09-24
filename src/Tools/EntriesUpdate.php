@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
@@ -22,10 +23,11 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
+    use AuthorizesEntries;
     use ComparesPatchData;
     use NormalizesEntryInput;
     use ResolvesEntries;
@@ -76,7 +78,7 @@ class EntriesUpdate extends Tool
         $collection = $entry->collection();
         $collectionHandle = $collection->handle();
 
-        $this->ensurePermission($user, "edit {$collectionHandle} entries");
+        $this->ensureEntryPermission($user, 'edit', $entry);
 
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
@@ -104,10 +106,31 @@ class EntriesUpdate extends Tool
         // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
+        $this->ensureAuthorUnchanged($user, $basis, $data);
+
         $current = $basis->data()->all();
-        $merged = array_merge($current, $data);
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
+
+        // The injected date field on dated collections is required — satisfy
+        // it with the effective Carbon, which preProcess() turns into the
+        // date picker's shape. Slug likewise: entries never store it in
+        // data, so a blueprint that marks slug required must be fed the
+        // effective value (the new slug, or the entry's current one).
+        // Replacements mirror the CP's update path, so unique_entry_value
+        // excludes this entry itself.
+        $values = [...$current, ...$data, 'slug' => $slug ?? $basis->slug()];
+
+        if ($collection->dated()) {
+            $values['date'] = $date ?? $basis->date();
+        }
+
+        $merged = array_merge($current, $this->processAgainstBlueprint(
+            $blueprint,
+            $values,
+            array_keys($data),
+            ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
+        ));
 
         // Strict compare over normalized values: assoc key order is
         // irrelevant (sorted recursively), but types matter — loose == would
@@ -127,25 +150,6 @@ class EntriesUpdate extends Tool
                 'cp_edit_url' => $entry->editUrl(),
             ]);
         }
-
-        // The injected date field on dated collections is required — satisfy
-        // it with a Carbon (Statamic\Rules\DateFieldtype accepts Carbon,
-        // rejects plain strings). Slug likewise: entries never store it in
-        // data, so a blueprint that marks slug required must be fed the
-        // effective value (the new slug, or the entry's current one).
-        // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself.
-        $values = [...$merged, 'slug' => $slug ?? $basis->slug()];
-
-        if ($collection->dated()) {
-            $values['date'] = $date ?? $basis->date();
-        }
-
-        $this->validateAgainstBlueprint(
-            $blueprint,
-            $values,
-            ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
-        );
 
         // Stage on the rebased clone when amending, on a fresh clone of live
         // when creating the first working copy — the live Stache instance

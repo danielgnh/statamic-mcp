@@ -242,13 +242,13 @@ class BlueprintsGet extends Tool
             'float' => [3.14, null],
             'toggle' => [true, null],
             'date' => $this->dateExample($field),
-            // multi-selects store arrays; Statamic silently accepts a scalar and saves the wrong shape
+            // multi-selects store arrays
             'select' => $this->firstOption($field, wrapInArray: (bool) ($field->config()['multiple'] ?? false)),
             'radio' => $this->firstOption($field),
             'checkboxes' => $this->firstOption($field, wrapInArray: true),
-            'entries' => [['REPLACE-WITH-REAL-ENTRY-ID'], null],
-            'terms' => [['REPLACE-WITH-REAL-TERM-ID'], null],
-            'users' => [['REPLACE-WITH-REAL-USER-ID'], null],
+            'entries' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-ENTRY-ID'),
+            'terms' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-TERM-ID'),
+            'users' => $this->relationshipExample($field, 'REPLACE-WITH-REAL-USER-ID'),
             'assets' => $this->assetsFieldExample($field),
             default => [null, sprintf(
                 "no example generated for fieldtype '%s' — read a real value from existing content before writing this field",
@@ -258,12 +258,10 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * A date example matching the shape the DateFieldtype validation rule
-     * accepts (vendor src/Rules/DateFieldtype.php): the string format follows
-     * the field's SAVE format, not time_enabled — the default save format is
-     * 'Y-m-d H:i' (contains time), so a default-config date field requires
-     * 'Y-m-d\TH:i:s.v\Z'; plain 'Y-m-d' only validates when a time-less
-     * 'format' is configured. mode:range wants a start/end pair of the same.
+     * A date example in the shape Statamic stores and entries_get returns:
+     * the field's own save format, which the fieldtype's process() produces
+     * from an ISO instant the same way it does for the CP's date picker.
+     * mode:range stores a start/end pair.
      *
      * @return array{0: mixed, 1: ?string}
      */
@@ -272,16 +270,11 @@ class BlueprintsGet extends Tool
         /** @var Date $fieldtype */
         $fieldtype = $field->fieldtype();
 
-        $hasTime = $fieldtype->formatHasTime();
+        $value = $fieldtype->config('mode', 'single') === 'range'
+            ? ['start' => '2026-01-15T09:30:00.000Z', 'end' => '2026-01-16T09:30:00.000Z']
+            : '2026-01-15T09:30:00.000Z';
 
-        $start = $hasTime ? '2026-01-15T09:30:00.000Z' : '2026-01-15';
-        $end = $hasTime ? '2026-01-16T09:30:00.000Z' : '2026-01-16';
-
-        if ($fieldtype->config('mode', 'single') === 'range') {
-            return [['start' => $start, 'end' => $end], null];
-        }
-
-        return [$start, null];
+        return [$fieldtype->process($value), null];
     }
 
     /**
@@ -307,6 +300,17 @@ class BlueprintsGet extends Tool
     }
 
     /**
+     * Relationship fields store a single id when max_items is 1 and a list
+     * otherwise (vendor Fieldtypes\Relationship::process).
+     *
+     * @return array{0: mixed, 1: null}
+     */
+    private function relationshipExample(Field $field, string $placeholder): array
+    {
+        return [$field->get('max_items') === 1 ? $placeholder : [$placeholder], null];
+    }
+
+    /**
      * Assets fields store paths relative to the field's container root —
      * a single string when max_files is 1, a list otherwise (vendor
      * Fieldtypes\Assets::process). Point the agent at the assets tools
@@ -320,7 +324,7 @@ class BlueprintsGet extends Tool
         $single = (int) ($field->config()['max_files'] ?? 0) === 1;
 
         $note = sprintf(
-            'stores asset paths relative to the container root%s — %s. Find existing paths with assets_list, or upload new files with assets_upload, then use the returned path (not the id or url).',
+            'stores asset paths relative to the container root%s — %s. Find existing paths with assets_list, or upload new files with assets_upload, then use the returned path.',
             $container ? sprintf(" (container '%s')", $container) : ' (no container configured on the field — statamic_overview lists the available ones)',
             $single ? 'max_files is 1, so pass a single string path' : 'pass a list of path strings',
         );
