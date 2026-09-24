@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -12,10 +13,11 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('entries_publish')]
-#[Description('Make an entry live by id. Requires the publish permission for the collection. On revision-enabled collections this promotes the staged working copy (or the draft itself when nothing is staged) and records a publish revision attributed to you — the same flow as the Control Panel\'s Publish button. An already-published entry with nothing staged is a no-op. This is the only tool that publishes: entries_create and entries_update never change publish state.')]
+#[Description('Make an entry live by id. Requires the publish permission for the collection, or \'publish other authors {collection} entries\' for an entry you are not an author of when the blueprint has an author field. On revision-enabled collections this promotes the staged working copy (or the draft itself when nothing is staged) and records a publish revision attributed to you — the same flow as the Control Panel\'s Publish button. An already-published entry with nothing staged is a no-op. This is the only tool that publishes: entries_create and entries_update never change publish state.')]
 #[IsIdempotent]
 class EntriesPublish extends Tool
 {
+    use AuthorizesEntries;
     use ResolvesEntries;
     use ResolvesSites;
 
@@ -42,9 +44,7 @@ class EntriesPublish extends Tool
 
         $entry = $this->findExposedEntry($validated['id'], $user);
 
-        $collection = $entry->collection()->handle();
-
-        $this->ensurePermission($user, "publish {$collection} entries");
+        $this->ensureEntryPermission($user, 'publish', $entry);
 
         $promotingWorkingCopy = $entry->revisionsEnabled() && $entry->hasWorkingCopy();
 

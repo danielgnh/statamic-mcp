@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
@@ -22,10 +23,11 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
+    use AuthorizesEntries;
     use ComparesPatchData;
     use NormalizesEntryInput;
     use ResolvesEntries;
@@ -76,7 +78,7 @@ class EntriesUpdate extends Tool
         $collection = $entry->collection();
         $collectionHandle = $collection->handle();
 
-        $this->ensurePermission($user, "edit {$collectionHandle} entries");
+        $this->ensureEntryPermission($user, 'edit', $entry);
 
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
@@ -103,6 +105,8 @@ class EntriesUpdate extends Tool
         // already staged, edits rebase onto it. fromWorkingCopy() hydrates a
         // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
+
+        $this->ensureAuthorUnchanged($user, $basis, $data);
 
         $current = $basis->data()->all();
 

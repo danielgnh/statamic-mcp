@@ -7,7 +7,7 @@ should start with `statamic_overview`.
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled; collections whose blueprint has an `author` field add `can_edit_other_authors`, `can_publish_other_authors`, and `can_delete_other_authors`); the acting user, including their `id`; server flags (`read_only`, `deletes`). |
 | `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
 
 ## Entries
@@ -21,6 +21,11 @@ should start with `statamic_overview`.
 | `entries_publish` | Makes an entry live. Needs the collection's publish permission. On revision-enabled collections it promotes the staged working copy (or the draft itself) and records a publish revision attributed to you, the same flow as the CP's Publish button. An already-published entry with nothing staged is a no-op. |
 | `entries_unpublish` | Takes a live entry offline. Same permission as publish, since Statamic has no separate unpublish permission. On revision-enabled collections a staged working copy is applied to the entry and cleared, with an unpublish revision attributed to you. A draft is a no-op. |
 | `entries_delete` | Only registered when `deletes` is enabled. Deleting an origin cascades to all localizations (requires site access to each); revision files stay on disk as orphans, same as the CP. |
+
+On a blueprint with an `author` field, the write tools also apply Statamic's author
+rules: an entry you are not an author of needs the "other authors" permission, and
+`entries_create` makes you the author unless `data` names one. See
+[How authorization works](permissions.md#how-authorization-works).
 
 ## Taxonomy terms
 
