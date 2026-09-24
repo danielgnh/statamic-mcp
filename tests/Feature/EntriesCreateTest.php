@@ -512,6 +512,31 @@ it('makes the acting user the author, so they can edit what they create', functi
         ->assertOk();
 });
 
+it('stores the default author the way the CP does', function (?int $maxItems, bool $plainId) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::authors(maxItems: $maxItems);
+
+    $user = Fixtures::makeUser('create blog entries', 'edit blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'My Post']])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'blog')->first();
+
+    expect($entry->get('author'))->toBe($plainId ? $user->id() : [$user->id()]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['author' => $entry->get('author')]])
+        ->assertOk()
+        ->assertSee('no-op');
+})->with([
+    'a plain id with max_items 1' => [1, true],
+    'a list without max_items' => [null, false],
+]);
+
 it("requires 'edit other authors blog entries' to name someone else as author", function () {
     Fixtures::site();
     Fixtures::tags();

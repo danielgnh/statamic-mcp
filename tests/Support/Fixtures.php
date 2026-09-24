@@ -74,12 +74,12 @@ class Fixtures
 
     // An author field turns on Statamic's author rules: entries by anyone
     // else need the "other authors" permissions.
-    public static function authors(string $collection = 'blog'): void
+    public static function authors(string $collection = 'blog', ?int $maxItems = 1): void
     {
         $handle = Collection::findByHandle($collection)->entryBlueprint()->handle();
 
         Blueprint::find("collections.{$collection}.{$handle}")
-            ->ensureField('author', ['type' => 'users', 'max_items' => 1])
+            ->ensureField('author', array_filter(['type' => 'users', 'max_items' => $maxItems]))
             ->save();
     }
 
