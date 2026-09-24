@@ -10,6 +10,24 @@ called out here explicitly.
 
 ### Added
 
+- `blueprints_get` lists the sets of Replicator and Bard fields, the blocks of a
+  page builder, with each set's display name, group, instructions, and fields.
+  Fieldset imports inside a set are resolved, nested sets are listed under
+  their field, and sets hidden from the CP's set picker come back with
+  `"hidden": true`. Until now these fields had no description beyond their
+  type. A set's `instructions` is now where you tell agents when to use a
+  block; editors already see the same text in the CP.
+- **Guidelines for agents.** Markdown files under `resources/mcp/guidelines`
+  (the new `guidelines_path` config key). `statamic_overview` returns
+  `site.md`, and `blueprints_get` returns `collections/{handle}.md` plus
+  `collections/{handle}/{blueprint}.md`, with taxonomies and globals laid out
+  the same way. HTML comments are stripped, so notes to yourself and untouched
+  stubs never reach an agent. See `docs/guidelines.md`.
+- `mcp:guidelines` creates `site.md` and a file per exposed collection, never
+  overwriting one, and lists the page builder blocks that have no instructions.
+- A `statamic-mcp-guidelines` Boost skill that teaches coding agents to write
+  block instructions from each block's template.
+
 - `entries_publish` and `entries_unpublish`. Publishing is its own pair of tools
   now, the same split Statamic's CP makes with `PublishedEntriesController`.
   Both need the collection's publish permission. On revision-enabled collections

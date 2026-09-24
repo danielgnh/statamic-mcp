@@ -7,8 +7,8 @@ should start with `statamic_overview`.
 
 | Tool | What it does |
 |---|---|
-| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`). |
-| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. |
+| `statamic_overview` | Call this first. Sites; the collections, taxonomies, global sets, and asset containers exposed to MCP and visible to you; your capability flags per resource (`can_create`, `can_edit`, `can_publish`, `can_upload`, `can_delete` — delete flags appear only when deletes are enabled); the acting user; server flags (`read_only`, `deletes`); the site's `guidelines` when `site.md` has any. |
+| `blueprints_get` | A blueprint's fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Works for collections, taxonomies, and globals. Replicator and Bard fields list their `sets`, the blocks of a page builder, each with its display name, group, instructions, and fields. The collection's or blueprint's guideline files come back as `guidelines`. See [guidelines.md](guidelines.md). |
 
 ## Entries
 
