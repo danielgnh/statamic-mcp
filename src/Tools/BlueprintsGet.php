@@ -18,14 +18,13 @@ use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
-use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Date;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 use Statamic\Fieldtypes\Replicator;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, instructions, and fields — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Grid and group fields list their nested fields; the example shows one set or row, and example_notes keys notes on nested values by path, like page_builder.0.image. When the site has written guidelines for this collection or blueprint, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle for its fields. Grid and group fields list their nested fields; the example shows one set or row, and example_notes keys notes on nested values by path, like page_builder.0.image. When the site has written guidelines for this collection or blueprint, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -42,6 +41,8 @@ class BlueprintsGet extends Tool
                 ->required(),
             'blueprint' => $schema->string()
                 ->description("Blueprint handle. Defaults to the resource's first blueprint."),
+            'set' => $schema->string()
+                ->description('A set handle from the sets of a replicator or Bard field. Returns only that set, with its fields, instead of the whole blueprint. When a handle has different fields in different places, the error lists their paths; pass one of those instead.'),
         ];
     }
 
@@ -52,6 +53,7 @@ class BlueprintsGet extends Tool
                 'type' => 'required|string|in:collection,taxonomy,global',
                 'handle' => 'required|string',
                 'blueprint' => 'nullable|string',
+                'set' => 'nullable|string',
             ],
             [
                 'type.in' => 'type must be one of: collection, taxonomy, global.',
@@ -84,6 +86,15 @@ class BlueprintsGet extends Tool
 
         if ($blueprint === null) {
             return $this->notFound('blueprint', (string) $requested, $blueprints->keys()->all());
+        }
+
+        if (filled($set = $request->get('set'))) {
+            return $this->json([
+                'type' => $type,
+                'handle' => $handle,
+                'blueprint' => $blueprint->handle(),
+                ...$this->setPayload($blueprint, $set),
+            ]);
         }
 
         $fields = [];
@@ -228,22 +239,97 @@ class BlueprintsGet extends Tool
     }
 
     /**
+     * A set as its field lists it: enough to pick one. Its fields come with
+     * a lookup by handle, see setPayload().
+     *
      * @param  array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}  $set
      * @return array<string, mixed>
      */
     private function describeSet(array $set): array
     {
-        $descriptor = array_filter([
+        return array_filter([
             'handle' => $set['handle'],
             'display' => $set['display'],
             'group' => $set['group'],
             'instructions' => $set['instructions'],
             'hidden' => $set['hidden'] ?: null,
         ], filled(...));
+    }
 
-        $descriptor['fields'] = $this->describeFields($set['fields']);
+    /**
+     * One set with its fields, described recursively. Sets nested in them
+     * are listed by handle again, so every response stays one level deep.
+     *
+     * @return array<string, mixed>
+     */
+    private function setPayload(Blueprint $blueprint, string $set): array
+    {
+        [$found, $fields] = $this->findSet($blueprint, $set);
 
-        return $descriptor;
+        return ['set' => [...$this->describeSet($found), 'fields' => $fields]];
+    }
+
+    /**
+     * The set a handle or path names. A handle is looked up everywhere in
+     * the blueprint, inside other sets too, and may turn up more than once
+     * (a section that offers the page builder's sections again). That is
+     * one answer while every match has the same fields, and an error naming
+     * the paths when they differ.
+     *
+     * @return array{0: array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}, 1: array<int, array<string, mixed>>}
+     */
+    private function findSet(Blueprint $blueprint, string $set): array
+    {
+        $sets = collect($this->setsIn($blueprint->fields()));
+
+        $matches = $sets
+            ->filter(fn (array $found, string $path) => $path === $set || $found['handle'] === $set)
+            ->sortBy(fn (array $found, string $path) => substr_count($path, '.'));
+
+        if ($matches->isEmpty()) {
+            throw new ToolException($this->notFoundMessage('set', $set, $sets->pluck('handle')->unique()->values()->all()));
+        }
+
+        $fields = $this->describeFields($matches->first()['fields']);
+
+        if ($matches->contains(fn (array $found) => $this->describeFields($found['fields']) !== $fields)) {
+            throw new ToolException(sprintf(
+                "set '%s' has different fields in %s — pass the path of the one you mean as set",
+                $set,
+                $matches->keys()->implode(', '),
+            ));
+        }
+
+        return [$matches->first(), $fields];
+    }
+
+    /**
+     * Every set in these fields, keyed by its path of field and set handles
+     * (page_builder.section_combined.sections.section_hero), including sets
+     * inside other sets, grids, and groups.
+     *
+     * @return array<string, array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}>
+     */
+    private function setsIn(Fields $fields, string $prefix = ''): array
+    {
+        $sets = [];
+
+        foreach ($fields->all() as $field) {
+            $path = ltrim("{$prefix}.{$field->handle()}", '.');
+
+            foreach (Sets::of($field) as $set) {
+                $sets["{$path}.{$set['handle']}"] = $set;
+                $sets = [...$sets, ...$this->setsIn($set['fields'], "{$path}.{$set['handle']}")];
+            }
+
+            $fieldtype = $field->fieldtype();
+
+            if ($fieldtype instanceof Grid || $fieldtype instanceof Group) {
+                $sets = [...$sets, ...$this->setsIn($fieldtype->fields(), $path)];
+            }
+        }
+
+        return $sets;
     }
 
     /**
@@ -357,7 +443,7 @@ class BlueprintsGet extends Tool
         /** @var Replicator $fieldtype */
         $fieldtype = $field->fieldtype();
 
-        if (($set = $this->firstSet($fieldtype)) === null) {
+        if (($set = $this->firstSet($field)) === null) {
             return [[], []];
         }
 
@@ -400,10 +486,7 @@ class BlueprintsGet extends Tool
      */
     private function bardExample(Field $field): array
     {
-        /** @var Bard $fieldtype */
-        $fieldtype = $field->fieldtype();
-
-        if (($set = $this->firstSet($fieldtype)) === null) {
+        if (($set = $this->firstSet($field)) === null) {
             return $this->noExample($field);
         }
 
@@ -416,9 +499,9 @@ class BlueprintsGet extends Tool
     /**
      * The first set the CP offers editors, skipping hidden ones.
      */
-    private function firstSet(Replicator $fieldtype): ?string
+    private function firstSet(Field $field): ?string
     {
-        return $fieldtype->flattenedSetsConfig()->reject(fn (array $set) => data_get($set, 'hide'))->keys()->first();
+        return data_get(collect(Sets::of($field))->reject(fn (array $set) => $set['hidden'])->first(), 'handle');
     }
 
     /**
