@@ -38,6 +38,9 @@ called out here explicitly.
   files / pending provision) and fails with a dedicated remedy when the stored
   key can't be decrypted after an `APP_KEY` change — deliberately never
   regenerating over it, which would silently disconnect every client.
+- `statamic_overview` reports the acting user's `id`, and collections whose
+  blueprint has an `author` field add `can_edit_other_authors`,
+  `can_publish_other_authors`, and `can_delete_other_authors`.
 
 ### Changed
 
@@ -52,6 +55,28 @@ called out here explicitly.
 - `mcp:setup` provisions keys **after** the migrate step so they land in the
   database, and declining the key step is no longer fatal — the first OAuth
   request self-provisions.
+- `entries_create` makes the acting user the author when the blueprint has an
+  `author` field and `data` names none, as the Control Panel does. Naming
+  anyone else, and changing an entry's author with `entries_update`, needs
+  `edit other authors {collection} entries`.
+
+### Security
+
+- **Breaking:** the entry write tools skipped Statamic's author rules. On a
+  blueprint with an `author` field, a role with `edit blog entries` could edit
+  anyone's entry through MCP, while the Control Panel limits it to entries the
+  user is an author of. `entries_update`, `entries_publish`,
+  `entries_unpublish`, and `entries_delete` now check what Statamic's
+  `EntryPolicy` checks: an entry the user is not an author of, including one
+  with no author, needs `edit other authors {collection} entries`,
+  `publish other authors {collection} entries`, or
+  `delete other authors {collection} entries`. The denial names the
+  permission.
+- **Breaking:** on multi-site installs the default site now needs
+  `access {site} site` like every other site, as Statamic's `SitePolicy`
+  requires. MCP used to exempt it, so a role with only `access fr site` could
+  still read and write default-site content. Grant the default site's
+  permission to roles that should keep that access.
 
 ## [0.3.2] - 2026-07-15
 
