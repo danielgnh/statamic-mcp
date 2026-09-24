@@ -7,6 +7,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Events\CollectionTreeSaving;
+use Statamic\Events\EntrySaving;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
@@ -430,4 +431,39 @@ it('reports a listener-cancelled move instead of claiming success', function () 
 
     expect(Fixtures::storedPagesTree())->toBe([['entry' => $about], ['entry' => $contact]])
         ->and(Entry::find($contact)->get('title'))->toBe('Contact us');
+});
+
+it('keeps a tree change another call saved while it was moving an entry', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $contact = Fixtures::page('contact', 'Contact');
+    $team = Fixtures::page('team', 'Team');
+
+    storePagesTree([['entry' => $about], ['entry' => $contact], ['entry' => $team]]);
+
+    // After this call read the tree, another one moves Contact under About.
+    $moved = false;
+
+    Event::listen(EntrySaving::class, function () use (&$moved, $about, $contact, $team) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        Collection::findByHandle('pages')->structure()
+            ->makeTree('en', [['entry' => $about, 'children' => [['entry' => $contact]]], ['entry' => $team]])
+            ->save();
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $about])
+        ->assertOk();
+
+    expect(Fixtures::storedPagesTree())->toBe([
+        ['entry' => $about, 'children' => [['entry' => $contact], ['entry' => $team]]],
+    ]);
 });

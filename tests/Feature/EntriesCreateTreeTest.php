@@ -3,6 +3,10 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
+use Statamic\Events\CollectionTreeSaving;
+use Statamic\Events\EntrySaving;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
@@ -224,3 +228,55 @@ it('rejects parent on a collection whose entries do not nest', function (?int $m
     'no structure' => [null, "collection 'pages' has no tree — omit parent; only structured collections nest entries"],
     'an orderable structure' => [1, "collection 'pages' is a flat, orderable list (max_depth 1) — omit parent"],
 ]);
+
+it('keeps a tree change another call saved while it was creating an entry', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $contact = Fixtures::page('contact', 'Contact');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about], ['entry' => $contact]])->save();
+
+    // After this call read the tree, another one moves Contact under About.
+    $moved = false;
+
+    Event::listen(EntrySaving::class, function () use (&$moved, $about, $contact) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        Collection::findByHandle('pages')->structure()
+            ->makeTree('en', [['entry' => $about, 'children' => [['entry' => $contact]]]])
+            ->save();
+    });
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => $about])
+        ->assertOk();
+
+    expect(Fixtures::storedPagesTree())->toBe([
+        ['entry' => $about, 'children' => [['entry' => $contact], ['entry' => Fixtures::pageId('team')]]],
+    ]);
+});
+
+it('saves the tree under the collection lock of its site', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $locked = null;
+
+    Event::listen(CollectionTreeSaving::class, function () use (&$locked) {
+        $locked ??= ! Cache::lock('statamic-mcp-tree:pages:en', 10)->get();
+    });
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'About']])
+        ->assertOk();
+
+    expect($locked)->toBeTrue();
+});

@@ -198,7 +198,7 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
     private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move): Response
     {
@@ -233,7 +233,7 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
     private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move): Response
     {
@@ -266,7 +266,7 @@ class EntriesUpdate extends Tool
      * is an omitted one, as for every other top-level parameter, so a client
      * that sends null for each unset parameter never moves an entry.
      *
-     * @return array{tree: CollectionTree, from: ?string, to: ?string}|null
+     * @return array{from: ?string, to: ?string}|null
      */
     private function resolveMove(?string $parent, EntryContract $entry, UserContract $user): ?array
     {
@@ -285,7 +285,6 @@ class EntriesUpdate extends Tool
         $current = $page->parent();
 
         return [
-            'tree' => $tree,
             'from' => $current && ! $current->isRoot() ? $current->id() : null,
             'to' => $this->resolveParent($parent, $tree, $page)?->id(),
         ];
@@ -295,7 +294,7 @@ class EntriesUpdate extends Tool
      * Tree position is not part of an entry's revisions: like the CP's tree
      * view, a move saves the live tree at once, whatever the data does.
      *
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move
+     * @param  array{from: ?string, to: ?string}|null  $move
      * @return array<string, mixed>
      */
     private function applyMove(EntryContract $entry, ?array $move, bool $workingCopy): array
@@ -304,13 +303,13 @@ class EntriesUpdate extends Tool
             return [];
         }
 
-        ['tree' => $tree, 'from' => $from, 'to' => $to] = $move;
+        ['from' => $from, 'to' => $to] = $move;
 
         if ($from === $to) {
             return ['parent' => $to, 'move' => $to === null ? 'no-op — already at the top level' : "no-op — already under '{$to}'"];
         }
 
-        if (! $this->materializeTree($tree)->move($entry->id(), $to)->save()) {
+        if (! $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $tree->move($entry->id(), $to))) {
             throw new ToolException('the move was cancelled by a listener on this site — the entry was not moved, and any other change in this update was saved');
         }
 

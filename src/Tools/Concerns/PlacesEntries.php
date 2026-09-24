@@ -2,7 +2,10 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Structures\Page;
@@ -109,5 +112,25 @@ trait PlacesEntries
     protected function materializeTree(CollectionTree $tree): CollectionTree
     {
         return $tree->tree($tree->tree());
+    }
+
+    /**
+     * A tree is saved whole, so two calls editing one at the same time would
+     * each drop the other's change. Every edit takes the tree's lock and
+     * reads the tree afresh inside it.
+     *
+     * @param  Closure(CollectionTree): CollectionTree  $change
+     */
+    protected function saveTreeChange(CollectionContract $collection, string $site, Closure $change): bool
+    {
+        try {
+            return Cache::lock("statamic-mcp-tree:{$collection->handle()}:{$site}", 10)->block(5, function () use ($collection, $site, $change) {
+                $tree = $this->placementTree($collection, $site) ?? throw $this->cannotNest($collection);
+
+                return $change($this->materializeTree($tree))->save();
+            });
+        } catch (LockTimeoutException) {
+            throw new ToolException("another call is still saving the tree of collection '{$collection->handle()}' (site '{$site}') — the entry was not placed in it, and anything else this call changed was saved. Place it with entries_update and parent.");
+        }
     }
 }
