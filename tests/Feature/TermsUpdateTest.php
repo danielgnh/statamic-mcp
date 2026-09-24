@@ -2,9 +2,11 @@
 
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tools\TermsGet;
 use Danielgnh\StatamicMcp\Tools\TermsUpdate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Mcp\Request;
 use Statamic\Events\TermSaving;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Entry;
@@ -394,4 +396,23 @@ it('stores a single-file asset as a plain string', function () {
         ->assertSee('"icon":"php.svg"');
 
     expect(Term::find('topics::php')->value('icon'))->toBe('php.svg');
+});
+
+it('takes back what terms_get returned in a taxonomy with several blueprints', function () {
+    Fixtures::site();
+    makeTopicsTaxonomy();
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text', 'validate' => 'required']])
+        ->setHandle('category')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->blueprint('topic')->slug('alpha')->data(['title' => 'Alpha'])->save();
+
+    $this->actingAs(Fixtures::makeUser('view topics terms'));
+
+    $got = json_decode((string) (new TermsGet)->handle(new Request(['id' => 'topics::alpha']))->content(), true);
+
+    Server::actingAs(Fixtures::makeUser('edit topics terms'))
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => $got['data']])
+        ->assertOk()
+        ->assertSee('no-op');
 });

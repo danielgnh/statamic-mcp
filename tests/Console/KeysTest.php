@@ -10,6 +10,10 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
+use Symfony\Component\Console\Output\BufferedOutput;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
+use Symfony\Component\Console\Output\ConsoleSectionOutput;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * A PEM as it appears in the exported env block: one line, real newlines
@@ -19,6 +23,46 @@ use Laravel\Passport\Passport;
 function envEscapedKey(string $pem): string
 {
     return '"'.str_replace("\n", '\n', trim($pem)).'"';
+}
+
+/**
+ * Runs mcp:keys with stdout and stderr apart, as a shell sees them, so a
+ * test knows what `mcp:keys | jq` or `mcp:keys >> .env` would capture.
+ *
+ * @return array{int, string, string}
+ */
+function keysApart(array $parameters = []): array
+{
+    $output = new class extends BufferedOutput implements ConsoleOutputInterface
+    {
+        public BufferedOutput $stderr;
+
+        public function __construct()
+        {
+            parent::__construct();
+
+            $this->stderr = new BufferedOutput;
+        }
+
+        public function getErrorOutput(): OutputInterface
+        {
+            return $this->stderr;
+        }
+
+        public function setErrorOutput(OutputInterface $error): void
+        {
+            //
+        }
+
+        public function section(): ConsoleSectionOutput
+        {
+            throw new LogicException('Sections are not supported.');
+        }
+    };
+
+    $exit = Artisan::call('statamic:mcp:keys', $parameters, $output);
+
+    return [$exit, $output->fetch(), $output->stderr->fetch()];
 }
 
 beforeEach(function () {
@@ -197,4 +241,76 @@ it('fails with guidance when Passport is not installed', function () {
 
     expect(Artisan::call('statamic:mcp:keys'))->toBe(1)
         ->and(Artisan::output())->toContain('composer require laravel/passport');
+});
+
+it('keeps stdout to the json when it generates the pair', function () {
+    OAuthFixtures::migrateKeyStore();
+
+    [$exit, $stdout, $stderr] = keysApart(['--json' => true]);
+
+    expect($exit)->toBe(0)
+        ->and(json_decode($stdout, true))->toHaveKeys(['PASSPORT_PRIVATE_KEY', 'PASSPORT_PUBLIC_KEY'])
+        ->and($stderr)->toContain('generated a fresh pair into the database');
+});
+
+it('keeps stdout to the two variables when it adopts key files', function () {
+    OAuthFixtures::migrateKeyStore();
+    $pem = OAuthFixtures::rsaPrivateKey();
+    file_put_contents($this->keyDir.'/oauth-private.key', $pem);
+    file_put_contents($this->keyDir.'/oauth-public.key', (new KeyStore)->publicKeyFor($pem));
+
+    [$exit, $stdout, $stderr] = keysApart();
+
+    $lines = array_values(array_filter(explode("\n", trim($stdout))));
+
+    expect($exit)->toBe(0)
+        ->and($lines)->toHaveCount(2)
+        ->and($lines[0])->toBe('PASSPORT_PRIVATE_KEY='.envEscapedKey($pem))
+        ->and($lines[1])->toStartWith('PASSPORT_PUBLIC_KEY=')
+        ->and($stderr)->toContain('Adopted the existing key files into the database');
+});
+
+it('keeps its errors off stdout', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    Crypt::clearResolvedInstance('encrypter');
+
+    [$exit, $stdout, $stderr] = keysApart();
+
+    expect($exit)->toBe(1)
+        ->and($stdout)->toBe('')
+        ->and($stderr)->toContain('APP_KEY');
+});
+
+it('refuses to export the database pair while one env key is set, since the runtime ignores it then', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    config(['passport.private_key' => OAuthFixtures::rsaPrivateKey()]);
+
+    [$exit, $stdout, $stderr] = keysApart(['--json' => true]);
+
+    expect($exit)->toBe(1)
+        ->and($stdout)->toBe('')
+        ->and($stderr)->toContain('PASSPORT_PUBLIC_KEY');
+});
+
+it('pairs an env key with the key file of its other half, as Passport does', function () {
+    $pem = OAuthFixtures::rsaPrivateKey();
+    $public = (new KeyStore)->publicKeyFor($pem);
+
+    config(['passport.private_key' => $pem]);
+    file_put_contents($this->keyDir.'/oauth-public.key', $public);
+
+    [$exit, $stdout] = keysApart(['--json' => true]);
+
+    expect($exit)->toBe(0)
+        ->and(json_decode($stdout, true))->toBe([
+            'PASSPORT_PRIVATE_KEY' => trim($pem),
+            'PASSPORT_PUBLIC_KEY' => trim($public),
+        ])
+        ->and(file_get_contents($this->keyDir.'/oauth-public.key'))->toBe($public);
 });

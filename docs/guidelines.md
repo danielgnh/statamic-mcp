@@ -140,6 +140,8 @@ lists the blocks that have no instructions:
 A block that several blueprints share through a fieldset is listed once. Hidden
 sets don't count.
 
-With Laravel Boost, `boost:install` adds a `statamic-mcp-guidelines` skill. Ask
-your coding agent to fill in the missing instructions, and it reads each
-block's template to write them.
+With Laravel Boost, select `danielgnh/statamic-mcp` when `boost:install` lists
+third-party packages. It isn't selected by default, and a non-interactive run
+needs the package under `packages` in `boost.json`. That installs a
+`statamic-mcp-guidelines` skill: ask your coding agent to fill in the missing
+instructions, and it reads each block's template to write them.

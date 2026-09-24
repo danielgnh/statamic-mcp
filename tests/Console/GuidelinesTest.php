@@ -166,3 +166,53 @@ it('scans taxonomy and global blueprints, respecting exposure', function () {
         ])
         ->assertExitCode(0);
 });
+
+it('lists blocks inside grid and group fields', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'rows' => ['type' => 'grid', 'fields' => [
+            ['handle' => 'cells', 'field' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+                'badge' => ['display' => 'Badge'],
+            ]]]]],
+        ]],
+        'seo' => ['type' => 'group', 'fields' => [
+            ['handle' => 'extras', 'field' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+                'chip' => ['display' => 'Chip'],
+            ]]]]],
+        ]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    $this->artisan('statamic:mcp:guidelines')
+        ->expectsOutputToContain('0 of 2 blocks have instructions.')
+        ->expectsTable(['Block', 'Field', 'Blueprints'], [
+            ['badge', 'rows.cells', 'collections.pages.page'],
+            ['chip', 'seo.extras', 'collections.pages.page'],
+        ])
+        ->assertExitCode(0);
+});
+
+it('counts blocks of unrelated blueprints apart, even at the same path', function () {
+    Fixtures::site();
+
+    foreach (['pages' => 'Home page hero.', 'guides' => null] as $collection => $instructions) {
+        Collection::make($collection)->title(ucfirst($collection))->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text'],
+            'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+                'hero' => array_filter(['display' => 'Hero', 'instructions' => $instructions]),
+            ]]]],
+        ])->setHandle('page')->setNamespace("collections.{$collection}")->save();
+    }
+
+    $this->artisan('statamic:mcp:guidelines')
+        ->expectsOutputToContain('1 of 2 blocks have instructions.')
+        ->expectsTable(['Block', 'Field', 'Blueprints'], [
+            ['hero', 'page_builder', 'collections.guides.page'],
+        ])
+        ->assertExitCode(0);
+});

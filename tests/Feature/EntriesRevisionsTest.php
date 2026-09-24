@@ -282,3 +282,21 @@ it('saves unpublished drafts directly without a working copy (CP parity)', funct
     expect($fresh->get('title'))->toBe('Edited Draft')  // saved directly
         ->and($fresh->hasWorkingCopy())->toBeFalse();
 });
+
+it('reports the staged slug with its own URL when it stages a working copy', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = makePublishedRevisableEntry();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'slug' => 'renamed-post'])
+        ->assertOk()
+        ->assertSee('"slug":"renamed-post"')
+        ->assertSee('"url":"/blog/renamed-post"')
+        ->assertSee('working copy created — live entry unchanged');
+
+    expect(Entry::find($entry->id())->url())->toBe('/blog/live-post');
+});

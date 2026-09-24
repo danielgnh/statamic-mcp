@@ -14,6 +14,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
+use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
@@ -145,9 +146,11 @@ class EntriesCreate extends Tool
             $entry->date($date);
         }
 
+        $this->ensureUniqueUri($entry, $tree, $parent?->id());
+
         if ($tree) {
             // The tree as it reads may already list this entry at the top level.
-            $entry->afterSave(fn ($entry) => $this->materializeTree($tree)->remove($entry)->appendTo($parent?->id(), $entry)->save());
+            $entry->afterSave(fn ($entry) => $this->saveTreeChange($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent?->id(), $entry)));
         }
 
         // CP parity: created entries carry updated_by/updated_at. save()

@@ -515,19 +515,23 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Bard keeps a null example. With sets, the note shows what a set node
-     * looks like, since HTML (which preProcess() converts) cannot hold one.
+     * Bard keeps a null example, and the note says HTML works (preProcess()
+     * converts it). With sets, it also shows what a set node looks like,
+     * since HTML cannot hold one.
      *
      * @return array{0: null, 1: string}
      */
     private function bardExample(Field $field): array
     {
+        $note = 'no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves.';
+
         if (($set = $this->firstSet($field)) === null) {
-            return $this->noExample($field);
+            return [null, $note];
         }
 
         return [null, sprintf(
-            'no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves. A set is a node {"type":"set","attrs":{"values":{"type":"%1$s", ...its field values}}}; call blueprints_get with set: %1$s, or another handle from sets, for a set\'s fields and an example of its values. HTML cannot hold sets.',
+            '%s A set is a node {"type":"set","attrs":{"values":{"type":"%2$s", ...its field values}}}; call blueprints_get with set: %2$s, or another handle from sets, for a set\'s fields and an example of its values. HTML cannot hold sets.',
+            $note,
             $set,
         )];
     }

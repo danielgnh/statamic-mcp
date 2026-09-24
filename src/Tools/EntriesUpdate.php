@@ -20,6 +20,7 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Structures\CollectionTree;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
@@ -42,7 +43,7 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug or date.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or parent.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
@@ -65,14 +66,14 @@ class EntriesUpdate extends Tool
             [
                 'id' => 'required|string',
                 // present (not required): Laravel's 'required' fails on [],
-                // and a slug/date-only update sends an empty object.
+                // and a slug, date, or parent-only update sends an empty object.
                 'data' => 'present|array',
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
                 'site' => 'nullable|string',
                 'parent' => 'nullable|string',
             ],
-            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug or date).'],
+            ['data.present' => 'Pass data to merge (may be an empty object when only changing slug, date, or parent).'],
         );
 
         $user = $this->user($request);
@@ -88,7 +89,11 @@ class EntriesUpdate extends Tool
         // updated_at/updated_by are Statamic-managed metadata (entries_get
         // strips them from raw output, but stale copies may live in agent
         // context) — silently ignored, never merged or treated as a change.
-        $data = collect((array) $validated['data'])->except(['updated_at', 'updated_by'])->all();
+        // So is the entry's own blueprint; naming another one stays an error.
+        $data = collect((array) $validated['data'])
+            ->except(['updated_at', 'updated_by'])
+            ->reject(fn (mixed $value, int|string $key) => $key === 'blueprint' && $value === $entry->blueprint()->handle())
+            ->all();
 
         $this->rejectPreviewObjects($data, 'entries_get');
 
@@ -125,8 +130,15 @@ class EntriesUpdate extends Tool
         // data, so a blueprint that marks slug required must be fed the
         // effective value (the new slug, or the entry's current one).
         // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself.
-        $values = [...$current, ...$data, 'slug' => $slug ?? $basis->slug()];
+        // excludes this entry itself. A localization validates with the
+        // values it inherits under its own, as in the CP's form, so a partial
+        // patch never false-fails a required field — only its data is stored.
+        $values = [
+            ...($basis->hasOrigin() ? $basis->origin()->values()->all() : []),
+            ...$current,
+            ...$data,
+            'slug' => $slug ?? $basis->slug(),
+        ];
 
         if ($collection->dated()) {
             $values['date'] = $date ?? $basis->date();
@@ -149,6 +161,10 @@ class EntriesUpdate extends Tool
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
         if (! $dirty) {
+            if ($move !== null && $move['from'] !== $move['to']) {
+                $this->ensureUniqueUriAfter($entry, $move);
+            }
+
             $placement = $this->applyMove($entry, $move, $workingCopy);
 
             if ($move !== null && $move['from'] !== $move['to']) {
@@ -192,13 +208,15 @@ class EntriesUpdate extends Tool
             $target->date($date);
         }
 
+        $this->ensureUniqueUriAfter($target, $move);
+
         return $workingCopy
             ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move)
             : $this->persistLive($entry, $user, $collection, $move);
     }
 
     /**
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
     private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move): Response
     {
@@ -217,6 +235,11 @@ class EntriesUpdate extends Tool
 
         $placement = $this->applyMove($target, $move, workingCopy: true);
 
+        // Statamic caches URIs by entry id and the working copy shares the
+        // live entry's id, so forget it for the staged URL, and again after
+        // so the staged URL never sticks to the live entry.
+        Blink::store('entry-uris')->forget($target->id());
+
         $payload = [
             'id' => $target->id(),
             'slug' => $target->slug(),
@@ -224,6 +247,8 @@ class EntriesUpdate extends Tool
             'url' => $target->url(),
             ...$this->liveness($target, $amending ? self::LIVENESS_WORKING_COPY_AMENDED : self::LIVENESS_WORKING_COPY),
         ];
+
+        Blink::store('entry-uris')->forget($target->id());
 
         if ($collection->dated()) {
             $payload['date'] = $target->date()?->toIso8601String();
@@ -233,7 +258,7 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
     private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move): Response
     {
@@ -266,7 +291,7 @@ class EntriesUpdate extends Tool
      * is an omitted one, as for every other top-level parameter, so a client
      * that sends null for each unset parameter never moves an entry.
      *
-     * @return array{tree: CollectionTree, from: ?string, to: ?string}|null
+     * @return array{from: ?string, to: ?string}|null
      */
     private function resolveMove(?string $parent, EntryContract $entry, UserContract $user): ?array
     {
@@ -285,17 +310,28 @@ class EntriesUpdate extends Tool
         $current = $page->parent();
 
         return [
-            'tree' => $tree,
             'from' => $current && ! $current->isRoot() ? $current->id() : null,
             'to' => $this->resolveParent($parent, $tree, $page)?->id(),
         ];
     }
 
     /**
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     */
+    private function ensureUniqueUriAfter(EntryContract $entry, ?array $move): void
+    {
+        $this->ensureUniqueUri(
+            $entry,
+            $this->placementTree($entry->collection(), $entry->locale()),
+            $move === null ? $entry->parent()?->id() : $move['to'],
+        );
+    }
+
+    /**
      * Tree position is not part of an entry's revisions: like the CP's tree
      * view, a move saves the live tree at once, whatever the data does.
      *
-     * @param  array{tree: CollectionTree, from: ?string, to: ?string}|null  $move
+     * @param  array{from: ?string, to: ?string}|null  $move
      * @return array<string, mixed>
      */
     private function applyMove(EntryContract $entry, ?array $move, bool $workingCopy): array
@@ -304,13 +340,13 @@ class EntriesUpdate extends Tool
             return [];
         }
 
-        ['tree' => $tree, 'from' => $from, 'to' => $to] = $move;
+        ['from' => $from, 'to' => $to] = $move;
 
         if ($from === $to) {
             return ['parent' => $to, 'move' => $to === null ? 'no-op — already at the top level' : "no-op — already under '{$to}'"];
         }
 
-        if (! $this->materializeTree($tree)->move($entry->id(), $to)->save()) {
+        if (! $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $tree->move($entry->id(), $to))) {
             throw new ToolException('the move was cancelled by a listener on this site — the entry was not moved, and any other change in this update was saved');
         }
 

@@ -11,7 +11,7 @@ It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package an
 ## Requirements
 
 - PHP 8.3 or newer
-- Statamic 6 on Laravel 12 or 13
+- Statamic 6.31 or newer, on Laravel 12 or 13
 - `laravel/passport` and a database for Passport's tables, for OAuth mode only
 
 ## Installation
@@ -57,7 +57,7 @@ Your users stay where they are. File-based users work, and the wizard never touc
 
 To deploy, set `STATAMIC_MCP_AUTH=oauth` in each environment and run `php artisan migrate --force` as usual. The keys live in the database, so there is no key step. [docs/oauth.md](docs/oauth.md) covers manual setup, the consent screen, and disconnecting clients.
 
-`mcp:setup` handles token mode too, and `--yes` runs it unattended. Laravel Boost users get guidelines on `boost:install` that teach coding agents to run it that way.
+`mcp:setup` handles token mode too, and `--yes` runs it unattended. Laravel Boost users get guidelines that teach coding agents to run it that way, once they select this package in `boost:install`.
 
 ### Managing tokens
 

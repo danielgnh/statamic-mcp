@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Mcp\Request;
 use Statamic\Events\EntrySaved;
 use Statamic\Events\EntrySaving;
 use Statamic\Facades\Blueprint;
@@ -345,7 +346,7 @@ it('still requires the data key to be present', function () {
 
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'slug' => 'hello-again'])
-        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug or date).']);
+        ->assertHasErrors(['Pass data to merge (may be an empty object when only changing slug, date, or parent).']);
 
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });
@@ -768,4 +769,70 @@ it("refuses to change the author without 'edit other authors blog entries'", fun
 
     expect($fresh->get('title'))->toBe('Renamed')
         ->and($fresh->authors()->all())->toBe([$user->id()]);
+});
+
+it('takes back what entries_get returned in a collection with several blueprints', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text', 'validate' => 'required']])
+        ->setHandle('longread')->setNamespace('collections.blog')->save();
+
+    $entry = tap(Entry::make()->collection('blog')->blueprint('article')->slug('hello')->data(['title' => 'Hello']))->save();
+
+    $this->actingAs(Fixtures::makeUser('view blog entries'));
+
+    $got = json_decode((string) (new EntriesGet)->handle(new Request(['id' => $entry->id()]))->content(), true);
+
+    expect($got['blueprint'])->toBe('article')
+        ->and($got['data'])->toBe(['title' => 'Hello']);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => $got['data']])
+        ->assertOk()
+        ->assertSee('no-op');
+});
+
+it('ignores the entry\'s own blueprint in the patch and refuses another one', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text', 'validate' => 'required']])
+        ->setHandle('longread')->setNamespace('collections.blog')->save();
+
+    $entry = tap(Entry::make()->collection('blog')->blueprint('article')->slug('hello')->data(['title' => 'Hello']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blueprint' => 'article', 'title' => 'Hello']])
+        ->assertOk()
+        ->assertSee('no-op');
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blueprint' => 'longread']])
+        ->assertHasErrors(['field blueprint is reserved — never writable via data']);
+});
+
+it('validates a localization with the values it inherits', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de'))->save();
+
+    // title is required and only inherited: the patch alone never has it.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['hero_image' => 'hallo.jpg']])
+        ->assertOk();
+
+    $fresh = Entry::find($localization->id());
+
+    expect($fresh->data()->has('title'))->toBeFalse()
+        ->and($fresh->get('hero_image'))->toBe('hallo.jpg')
+        ->and($fresh->value('title'))->toBe('Hello');
 });

@@ -35,7 +35,9 @@ collections, edits to a live entry become working copies and the live entry is n
 touched. Without revisions, an edit to a live entry saves straight to it, as it would
 in the CP. Going live is a separate tool, `entries_publish`, and it needs the publish
 permission. Two things follow from that split. A role without the publish permission
-cannot publish through MCP at all, whatever the agent sends. And because publishing is
+cannot publish through MCP, whatever the agent sends. It can still change the date of
+an entry that is already published, and on a dated collection without revisions that
+decides whether a scheduled entry is live, as it does in the CP. And because publishing is
 its own tool, MCP clients ask about it separately: you can allow `entries_update` for
 a session and still approve each publish by hand. Terms and globals have no draft
 state, so writes to them are live immediately.

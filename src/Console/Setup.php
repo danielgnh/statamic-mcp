@@ -163,7 +163,9 @@ class Setup extends Command
 
         // Subprocess on purpose: when Passport was installed moments ago by
         // this very wizard, its classes are not autoloadable in THIS process.
-        return $this->runProcess('php please mcp:keys');
+        // Its stdout is the private key, and this output ends up in CI logs
+        // and agent transcripts, so only what it did (stderr) is shown.
+        return $this->runProcess('php please mcp:keys', stdout: false);
     }
 
     protected function offerConsentViews(): bool
@@ -250,13 +252,19 @@ class Setup extends Command
         return self::SUCCESS;
     }
 
-    protected function runProcess(string $command): bool
+    protected function runProcess(string $command, bool $stdout = true): bool
     {
         $this->line('  → '.$command);
 
-        $result = Process::forever()->run($command, function (string $type, string $output) {
-            $this->output->write($output);
-        });
+        if ($stdout) {
+            $result = Process::forever()->run($command, function (string $type, string $output) {
+                $this->output->write($output);
+            });
+        } else {
+            $result = Process::forever()->run($command);
+
+            $this->output->write($result->errorOutput());
+        }
 
         if ($result->failed()) {
             $this->components->error("'{$command}' failed (exit {$result->exitCode()}).");

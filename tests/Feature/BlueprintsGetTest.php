@@ -41,7 +41,7 @@ it('falls back to null plus a type note for a bard field', function () {
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertOk()
         ->assertSee('"content":null')
-        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — read a real value from existing content before writing this field","slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"}');
+        ->assertSee('"example_notes":{"content":"no example generated for fieldtype \'bard\' — send an HTML string, which is converted to ProseMirror nodes, or the nodes themselves.","slug":"pass slug as a top-level parameter of entries_create and entries_update, not inside data"}');
 });
 
 it('returns the blueprint of a taxonomy', function () {

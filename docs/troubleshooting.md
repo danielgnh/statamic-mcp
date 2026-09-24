@@ -13,8 +13,9 @@ runtime.
 
 - **Kill switch and mounting** — is MCP enabled, and is the route actually mounted?
   "Enabled but not mounted" means boot failed: the addon never bricks the host site,
-  it logs `Statamic MCP failed to mount; run php please mcp:doctor` and the endpoint
-  404s until the underlying exception is fixed.
+  it logs `Statamic MCP failed to mount; run php please mcp:doctor`, and until the
+  underlying exception is fixed, requests to the endpoint reach Statamic's frontend
+  route: a 404, or a 419 for a POST.
 - **Middleware** — every configured middleware entry must resolve to a class, alias,
   or group; a typo'd entry mounts fine and then 500s every request.
 - **APP_URL** — warns on the Laravel default (`http://localhost`) and on plain
@@ -28,8 +29,8 @@ runtime.
 - **OAuth mode** — Passport installed; encryption keys available, naming the
   source (environment config / database / key files / pending provision — keys
   are database-managed and provision automatically once `php artisan migrate`
-  created the addon's key table; `PASSPORT_*` env vars and key files take
-  precedence), with a dedicated failure when the stored key can't be decrypted
+  created the addon's key table; `PASSPORT_*` env vars take precedence, and
+  key files are adopted into the database on first use), with a dedicated failure when the stored key can't be decrypted
   because `APP_KEY` changed; Passport's tables migrated with string `user_id`
   columns (Statamic ids are UUIDs — the addon's migration converts them); a
   consent view bound. No user-repository check: file users work in OAuth mode.
@@ -41,7 +42,7 @@ runtime.
 | `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: Passport's ResourceServer rejected the bearer, or its user no longer resolves. |
 | `403` "requires 'access mcp'…" | The user authenticated fine but lacks the `Access MCP` permission — grant it to one of their roles in the CP. |
 | `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. Only the MCP route is affected. |
-| `404` on the endpoint | MCP is disabled, or enabled but failed to mount — check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. |
+| `404`, or `419` for a POST, on the endpoint | MCP is disabled, or enabled but failed to mount, so Statamic's frontend route answers instead. Check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. |
 
 ## Token store locking
 

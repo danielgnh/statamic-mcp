@@ -8,8 +8,11 @@ use Danielgnh\StatamicMcp\Setup\EditResult;
 use Danielgnh\StatamicMcp\Setup\EnvWriter;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Illuminate\Console\Command;
+use Illuminate\Console\OutputStyle;
+use Illuminate\Console\View\Components\Factory;
 use Laravel\Passport\Passport;
 use Statamic\Console\RunsInPlease;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 
 /**
  * Provision and export Passport's keys. Since the addon manages keys in the
@@ -37,7 +40,7 @@ class Keys extends Command
     public function handle(OAuthPrerequisites $prereqs, PassportKeys $keys, KeyStore $store, EnvWriter $env): int
     {
         if (! $prereqs->passportInstalled()) {
-            $this->components->error("Laravel Passport isn't installed — there are no keys to export. Run 'composer require laravel/passport' (or `php please mcp:setup --oauth`).");
+            $this->messages()->error("Laravel Passport isn't installed — there are no keys to export. Run 'composer require laravel/passport' (or `php please mcp:setup --oauth`).");
 
             return self::FAILURE;
         }
@@ -71,34 +74,23 @@ class Keys extends Command
      */
     protected function resolvePair(PassportKeys $keys, KeyStore $store): ?array
     {
-        $configPrivate = trim((string) config('passport.private_key'));
-        $configPublic = trim((string) config('passport.public_key'));
-
-        if ($configPrivate !== '' && $configPublic !== '') {
-            $privatePath = Passport::keyPath('oauth-private.key');
-            $publicPath = Passport::keyPath('oauth-public.key');
-
-            if (file_exists($privatePath) && file_exists($publicPath)
-                && (trim((string) file_get_contents($privatePath)) !== $configPrivate || trim((string) file_get_contents($publicPath)) !== $configPublic)) {
-                $this->components->warn("The PASSPORT_* env keys and the storage/oauth-*.key files differ — exporting the env keys, since they're what this environment verifies tokens against. Consider deleting the stale files.");
-            }
-
-            return [$configPrivate, $configPublic, 'config'];
+        if (filled(config('passport.private_key')) || filled(config('passport.public_key'))) {
+            return $this->configuredPair();
         }
 
         // Named before resolve(): an undecryptable row must fail loudly, never
         // fall through to a regeneration that 401s every connected client.
         if ($store->undecryptable()) {
-            $this->components->error("The stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the row in '".KeyStore::TABLE."' to let a fresh pair provision (every connected client must then reconnect).");
+            $this->messages()->error("The stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the row in '".KeyStore::TABLE."' to let a fresh pair provision (every connected client must then reconnect).");
 
             return null;
         }
 
         if ($pair = $keys->resolve()) {
             match ($pair['source']) {
-                'generated' => $this->components->info('No keys found — generated a fresh pair into the database (shared across every server, nothing to paste anywhere).'),
+                'generated' => $this->messages()->info('No keys found — generated a fresh pair into the database (shared across every server, nothing to paste anywhere).'),
                 'files' => $store->has()
-                    ? $this->components->info('Adopted the existing key files into the database — every server now reads the same managed copy.')
+                    ? $this->messages()->info('Adopted the existing key files into the database — every server now reads the same managed copy.')
                     : null,
                 default => null,
             };
@@ -112,6 +104,52 @@ class Keys extends Command
     }
 
     /**
+     * Either PASSPORT_* key set means Passport reads each half from its env
+     * key, else from its key file, and the database copy stays out of it.
+     *
+     * @return array{string, string, string}|null
+     */
+    protected function configuredPair(): ?array
+    {
+        $private = $this->configuredKey('private');
+        $public = $this->configuredKey('public');
+
+        if ($private === null || $public === null) {
+            [$set, $missing] = $private === null ? ['PUBLIC', 'PRIVATE'] : ['PRIVATE', 'PUBLIC'];
+            $file = 'storage/oauth-'.strtolower($missing).'.key';
+
+            $this->messages()->error("PASSPORT_{$set}_KEY is set but PASSPORT_{$missing}_KEY isn't, and there is no {$file}, so Passport has half a key pair. Set PASSPORT_{$missing}_KEY too, or unset PASSPORT_{$set}_KEY to use the database-managed pair.");
+
+            return null;
+        }
+
+        $privateFile = $this->keyFile('private');
+        $publicFile = $this->keyFile('public');
+
+        if (filled(config('passport.private_key')) && filled(config('passport.public_key'))
+            && $privateFile !== null && $publicFile !== null
+            && ($privateFile !== $private || $publicFile !== $public)) {
+            $this->messages()->warn("The PASSPORT_* env keys and the storage/oauth-*.key files differ — exporting the env keys, since they're what this environment verifies tokens against. Consider deleting the stale files.");
+        }
+
+        return [$private, $public, 'config'];
+    }
+
+    protected function configuredKey(string $type): ?string
+    {
+        $key = trim((string) config("passport.{$type}_key"));
+
+        return $key !== '' ? $key : $this->keyFile($type);
+    }
+
+    protected function keyFile(string $type): ?string
+    {
+        $path = Passport::keyPath("oauth-{$type}.key");
+
+        return file_exists($path) ? trim((string) file_get_contents($path)) : null;
+    }
+
+    /**
      * @return array{string, string, string}|null
      */
     protected function generateFiles(): ?array
@@ -120,7 +158,7 @@ class Keys extends Command
         $public = $private === null ? null : app(KeyStore::class)->publicKeyFor($private);
 
         if ($private === null || $public === null) {
-            $this->components->error('OpenSSL could not generate an RSA key pair: '.(openssl_error_string() ?: 'unknown error'));
+            $this->messages()->error('OpenSSL could not generate an RSA key pair: '.(openssl_error_string() ?: 'unknown error'));
 
             return null;
         }
@@ -133,7 +171,7 @@ class Keys extends Command
         chmod($privatePath, 0600);
         chmod($publicPath, 0600);
 
-        $this->components->info("No keys found and the addon's key table is not migrated yet — generated a fresh pair into storage/oauth-*.key. Run 'php artisan migrate' to let the database manage them instead.");
+        $this->messages()->info("No keys found and the addon's key table is not migrated yet — generated a fresh pair into storage/oauth-*.key. Run 'php artisan migrate' to let the database manage them instead.");
 
         return [$private, $public, 'files'];
     }
@@ -144,7 +182,7 @@ class Keys extends Command
             $result = $env->apply(base_path('.env'), $key, $this->envValue($pem));
 
             if ($result === EditResult::Bailed) {
-                $this->components->error(base_path('.env').' is missing or not writable — paste the output of `php please mcp:keys` in manually.');
+                $this->messages()->error(base_path('.env').' is missing or not writable — paste the output of `php please mcp:keys` in manually.');
 
                 return self::FAILURE;
             }
@@ -166,6 +204,17 @@ class Keys extends Command
     }
 
     /**
+     * Notices and errors go to stderr, like the guidance below, so
+     * `mcp:keys | pbcopy`, `--json | jq`, and `>> .env` capture only the keys.
+     */
+    protected function messages(): Factory
+    {
+        $output = $this->output->getOutput();
+
+        return new Factory(new OutputStyle($this->input, $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output));
+    }
+
+    /**
      * Goes to stderr on purpose: `mcp:keys | pbcopy` and shell redirection
      * capture only the two variables above.
      */
@@ -177,8 +226,8 @@ class Keys extends Command
 
         if (in_array($source, ['database', 'generated', 'files'], true) && app(KeyStore::class)->has()) {
             $err->writeln('These keys live in the database — provisioned automatically, shared across every');
-            $err->writeln('server, surviving releases. Deploys need no key step; pasting the lines above into');
-            $err->writeln('the environment is only for overriding the database copy (env config wins).');
+            $err->writeln('server, surviving releases. Deploys need no key step; set the PASSPORT_* variables');
+            $err->writeln('only to override the database copy (env config wins).');
 
             return;
         }

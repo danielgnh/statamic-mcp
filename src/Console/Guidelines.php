@@ -14,6 +14,9 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
+use Statamic\Fields\Fields;
+use Statamic\Fieldtypes\Grid;
+use Statamic\Fieldtypes\Group;
 
 /**
  * Creates the guideline files agents read (never overwriting one) and lists
@@ -102,7 +105,8 @@ class Guidelines extends Command
     }
 
     /**
-     * Every set in these fields, including sets nested inside other sets.
+     * Every set in these fields, including sets nested inside other sets,
+     * grids, and groups, as blueprints_get finds them.
      *
      * @param  SupportCollection<string, Field>  $fields
      * @return list<array{key: string, handle: string, field: string, instructions: ?string, hidden: bool}>
@@ -116,7 +120,7 @@ class Guidelines extends Command
 
             foreach (Sets::of($field) as $set) {
                 $blocks[] = [
-                    'key' => "{$path}.{$set['handle']}",
+                    'key' => $this->blockKey("{$path}.{$set['handle']}", $set),
                     'handle' => $set['handle'],
                     'field' => $path,
                     'instructions' => $set['instructions'],
@@ -125,9 +129,27 @@ class Guidelines extends Command
 
                 array_push($blocks, ...$this->blocksIn($set['fields']->all(), "{$path}.{$set['handle']}."));
             }
+
+            $fieldtype = $field->fieldtype();
+
+            if ($fieldtype instanceof Grid || $fieldtype instanceof Group) {
+                array_push($blocks, ...$this->blocksIn($fieldtype->fields()->all(), "{$path}."));
+            }
         }
 
         return $blocks;
+    }
+
+    /**
+     * A set that several blueprints share through a fieldset is one block,
+     * but its path doesn't say so: unrelated blueprints can each have their
+     * own page_builder.hero. The same path with the same definition does.
+     *
+     * @param  array{display: ?string, instructions: ?string, fields: Fields}  $set
+     */
+    protected function blockKey(string $path, array $set): string
+    {
+        return $path.':'.md5(serialize([$set['display'], $set['instructions'], $set['fields']->all()->map->config()->all()]));
     }
 
     /**

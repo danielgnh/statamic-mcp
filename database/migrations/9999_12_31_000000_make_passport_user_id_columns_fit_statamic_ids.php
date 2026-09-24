@@ -9,8 +9,11 @@ use Illuminate\Support\Facades\Schema;
  * UUID strings for file users (and for Eloquent users imported from files).
  * Convert user_id to string(36) wherever a Passport table carries one —
  * integer ids from a stock Eloquent install still fit, so the change is safe
- * on every setup. Loaded only in OAuth mode; timestamped after Passport's
- * published migrations so a single `php artisan migrate` orders correctly.
+ * on every setup. Loaded only in OAuth mode.
+ *
+ * Dated far ahead on purpose: vendor:publish stamps Passport's migrations
+ * with the moment they are published, so this one must sort after whatever
+ * date that is, or it runs before their tables exist and does nothing.
  *
  * One-way on purpose: reverting to bigint would truncate UUID rows.
  */
