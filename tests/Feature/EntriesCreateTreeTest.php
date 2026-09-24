@@ -280,3 +280,35 @@ it('saves the tree under the collection lock of its site', function () {
 
     expect($locked)->toBeTrue();
 });
+
+it('refuses a URL another entry already has, as the CP does', function () {
+    Fixtures::site();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
+    $blog = Fixtures::page('blog', 'Blog');
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello'], 'parent' => $blog])
+        ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
+
+    expect(Entry::query()->where('collection', 'pages')->where('slug', 'hello')->count())->toBe(0);
+});
+
+it('refuses a URL another entry already has in a collection without a tree', function () {
+    Fixtures::site();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Collection::findByHandle('blog')->routes('/{slug}')->save();
+
+    $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello']])
+        ->assertHasErrors([sprintf("URL '/hello' already belongs to entry '%s' in collection 'blog' — pick another slug", $post)]);
+
+    expect(Entry::query()->where('collection', 'pages')->where('slug', 'hello')->count())->toBe(0);
+});

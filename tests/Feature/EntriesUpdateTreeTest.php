@@ -467,3 +467,43 @@ it('keeps a tree change another call saved while it was moving an entry', functi
         ['entry' => $about, 'children' => [['entry' => $contact], ['entry' => $team]]],
     ]);
 });
+
+it('refuses a move onto a URL another entry already has', function () {
+    Fixtures::site();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
+    $blog = Fixtures::page('blog', 'Blog');
+    $hello = Fixtures::page('hello', 'Hello');
+
+    storePagesTree([['entry' => $blog], ['entry' => $hello]]);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $hello, 'data' => [], 'parent' => $blog])
+        ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $blog], ['entry' => $hello]]);
+});
+
+it('refuses a new slug whose URL another entry already has', function () {
+    Fixtures::site();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
+    $blog = Fixtures::page('blog', 'Blog');
+    $team = Fixtures::page('team', 'Team');
+
+    storePagesTree([['entry' => $blog, 'children' => [['entry' => $team]]]]);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => [], 'slug' => 'hello'])
+        ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
+
+    Stache::clear();
+
+    expect(Entry::find($team)->slug())->toBe('team');
+});

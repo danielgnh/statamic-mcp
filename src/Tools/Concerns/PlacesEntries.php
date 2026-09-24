@@ -7,7 +7,11 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
+use Statamic\Contracts\Entries\Entry as EntryContract;
+use Statamic\Contracts\Routing\UrlBuilder;
 use Statamic\Contracts\Structures\CollectionTree;
+use Statamic\Facades\Entry;
+use Statamic\Facades\Stache;
 use Statamic\Structures\Page;
 
 trait PlacesEntries
@@ -112,6 +116,57 @@ trait PlacesEntries
     protected function materializeTree(CollectionTree $tree): CollectionTree
     {
         return $tree->tree($tree->tree());
+    }
+
+    /**
+     * CP parity (EntriesController::validateUniqueUri): an entry can't take a
+     * URL another entry of its site already has, in any collection.
+     */
+    protected function ensureUniqueUri(EntryContract $entry, ?CollectionTree $tree, ?string $parent): void
+    {
+        if (! $uri = $this->futureUri($entry, $tree, $parent)) {
+            return;
+        }
+
+        $existing = Entry::findByUri($uri, $entry->locale());
+
+        if ($existing && $existing->id() !== $entry->id()) {
+            throw new ToolException(sprintf(
+                "URL '%s' already belongs to entry '%s' in collection '%s' — pick another slug%s",
+                $uri,
+                $existing->id(),
+                $existing->collectionHandle(),
+                $tree ? ' or parent' : '',
+            ));
+        }
+    }
+
+    /**
+     * The URL the entry gets under this parent, built the way the CP's
+     * entryUri() builds it. Null when the collection has no route.
+     */
+    private function futureUri(EntryContract $entry, ?CollectionTree $tree, ?string $parent): ?string
+    {
+        if (! $route = $entry->route()) {
+            return null;
+        }
+
+        if (! $tree) {
+            return app(UrlBuilder::class)->content($entry)->merge(['id' => $entry->id() ?? Stache::generateId()])->build($route);
+        }
+
+        $page = $parent === null ? null : $tree->find($parent);
+
+        if ($page?->isRoot()) {
+            $page = null;
+        }
+
+        return app(UrlBuilder::class)->content($entry)->merge([
+            'parent_uri' => $page?->uri(),
+            'slug' => $entry->slug(),
+            'depth' => $page ? $page->depth() + 1 : 1,
+            'is_root' => false,
+        ])->build($route);
     }
 
     /**

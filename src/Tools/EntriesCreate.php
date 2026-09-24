@@ -146,6 +146,8 @@ class EntriesCreate extends Tool
             $entry->date($date);
         }
 
+        $this->ensureUniqueUri($entry, $tree, $parent?->id());
+
         if ($tree) {
             // The tree as it reads may already list this entry at the top level.
             $entry->afterSave(fn ($entry) => $this->saveTreeChange($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent?->id(), $entry)));

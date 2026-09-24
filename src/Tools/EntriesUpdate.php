@@ -149,6 +149,10 @@ class EntriesUpdate extends Tool
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
         if (! $dirty) {
+            if ($move !== null && $move['from'] !== $move['to']) {
+                $this->ensureUniqueUriAfter($entry, $move);
+            }
+
             $placement = $this->applyMove($entry, $move, $workingCopy);
 
             if ($move !== null && $move['from'] !== $move['to']) {
@@ -191,6 +195,8 @@ class EntriesUpdate extends Tool
         if ($date instanceof Carbon) {
             $target->date($date);
         }
+
+        $this->ensureUniqueUriAfter($target, $move);
 
         return $workingCopy
             ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move)
@@ -288,6 +294,18 @@ class EntriesUpdate extends Tool
             'from' => $current && ! $current->isRoot() ? $current->id() : null,
             'to' => $this->resolveParent($parent, $tree, $page)?->id(),
         ];
+    }
+
+    /**
+     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     */
+    private function ensureUniqueUriAfter(EntryContract $entry, ?array $move): void
+    {
+        $this->ensureUniqueUri(
+            $entry,
+            $this->placementTree($entry->collection(), $entry->locale()),
+            $move === null ? $entry->parent()?->id() : $move['to'],
+        );
     }
 
     /**
