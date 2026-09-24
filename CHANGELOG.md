@@ -8,6 +8,14 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- `mcp:guidelines` lists the blocks without instructions as text that fits the
+  terminal instead of a table: one heading per set of blueprints that share
+  them, then one line per field with the names of its sets. A page builder
+  fieldset that six blueprints import used to repeat all six on every row,
+  which made the table wider than any terminal.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added

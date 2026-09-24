@@ -127,14 +127,15 @@ lists the blocks that have no instructions:
   Created  resources/mcp/guidelines/site.md
   Created  resources/mcp/guidelines/collections/pages.md
 
-  11 of 14 blocks have instructions. Agents see only the name of these until they look one up, so add instructions to each set in its blueprint or fieldset:
-+--------------+----------------------------+-----------------------------------------------------+
-| Block        | Field                      | Blueprints                                          |
-+--------------+----------------------------+-----------------------------------------------------+
-| logo_wall    | page_builder               | collections.landing.landing, collections.pages.page |
-| testimonials | page_builder               | collections.landing.landing, collections.pages.page |
-| text         | page_builder.columns.items | collections.pages.page                              |
-+--------------+----------------------------+-----------------------------------------------------+
+  11 of 14 blocks have instructions. Agents see only the name of the rest
+  until they look one up, so add instructions to each set in its blueprint or
+  fieldset:
+
+  In collections.landing.landing, collections.pages.page
+    page_builder: logo_wall, testimonials
+
+  In collections.pages.page
+    page_builder.columns.items: text
 ```
 
 A block that several blueprints share through a fieldset is listed once. Hidden

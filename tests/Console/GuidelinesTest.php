@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Support\GuidelineFiles;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
@@ -12,6 +13,13 @@ use Statamic\Facades\Taxonomy;
 function guidelinesPath(string $file = ''): string
 {
     return config('statamic.mcp.guidelines_path').($file === '' ? '' : '/'.$file);
+}
+
+function guidelinesOutput(): string
+{
+    expect(Artisan::call('statamic:mcp:guidelines'))->toBe(0);
+
+    return Artisan::output();
 }
 
 function pageBuilder(): void
@@ -80,19 +88,40 @@ it('never overwrites a guideline file', function () {
     expect(File::get(guidelinesPath('site.md')))->toBe('Friendly, never salesy.');
 });
 
-it('lists blocks without instructions once, however many blueprints share them', function () {
+it('lists blocks without instructions once, under the blueprints that share them', function () {
     Fixtures::site();
 
     pageBuilder();
 
-    $this->artisan('statamic:mcp:guidelines')
-        // hero and columns have instructions; the hidden old_banner is not counted
-        ->expectsOutputToContain('2 of 4 blocks have instructions.')
-        ->expectsTable(['Block', 'Field', 'Blueprints'], [
-            ['logo_wall', 'page_builder', 'collections.landing.landing, collections.pages.page'],
-            ['text', 'page_builder.columns.items', 'collections.landing.landing, collections.pages.page'],
-        ])
-        ->assertExitCode(0);
+    // hero and columns have instructions; the hidden old_banner is not counted
+    expect(guidelinesOutput())
+        ->toContain('2 of 4 blocks have instructions.')
+        ->toContain("  In collections.landing.landing, collections.pages.page\n    page_builder: logo_wall\n    page_builder.columns.items: text\n")
+        ->not->toContain("In collections.pages.page\n");
+});
+
+it('lists the sets of one field on one line, wrapped to the terminal', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->save();
+
+    $sets = collect(range(1, 12))->mapWithKeys(fn (int $i) => ["block_number_{$i}" => ['display' => "Block {$i}"]]);
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'page_builder' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => $sets->all()]]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    putenv('COLUMNS=80');
+
+    try {
+        $output = guidelinesOutput();
+    } finally {
+        putenv('COLUMNS');
+    }
+
+    expect($output)
+        ->toContain("  In collections.pages.page\n    page_builder: block_number_1, block_number_2, block_number_3,\n      block_number_4, ");
 });
 
 it('says so when every block has instructions', function () {
@@ -151,20 +180,15 @@ it('scans taxonomy and global blueprints, respecting exposure', function () {
     GlobalSet::make('settings')->title('Settings')->save();
     GlobalSet::make('empty')->title('Empty')->save();
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsTable(['Block', 'Field', 'Blueprints'], [
-            ['quote', 'body', 'taxonomies.tags.tag'],
-            ['cta', 'blocks', 'globals.settings'],
-        ])
-        ->assertExitCode(0);
+    expect(guidelinesOutput())
+        ->toContain("  In taxonomies.tags.tag\n    body: quote\n")
+        ->toContain("  In globals.settings\n    blocks: cta\n");
 
     config(['statamic.mcp.resources.globals' => []]);
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsTable(['Block', 'Field', 'Blueprints'], [
-            ['quote', 'body', 'taxonomies.tags.tag'],
-        ])
-        ->assertExitCode(0);
+    expect(guidelinesOutput())
+        ->toContain("  In taxonomies.tags.tag\n    body: quote\n")
+        ->not->toContain('globals.settings');
 });
 
 it('lists blocks inside grid and group fields', function () {
@@ -186,13 +210,9 @@ it('lists blocks inside grid and group fields', function () {
         ]],
     ])->setHandle('page')->setNamespace('collections.pages')->save();
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('0 of 2 blocks have instructions.')
-        ->expectsTable(['Block', 'Field', 'Blueprints'], [
-            ['badge', 'rows.cells', 'collections.pages.page'],
-            ['chip', 'seo.extras', 'collections.pages.page'],
-        ])
-        ->assertExitCode(0);
+    expect(guidelinesOutput())
+        ->toContain('0 of 2 blocks have instructions.')
+        ->toContain("  In collections.pages.page\n    rows.cells: badge\n    seo.extras: chip\n");
 });
 
 it('counts blocks of unrelated blueprints apart, even at the same path', function () {
@@ -209,10 +229,7 @@ it('counts blocks of unrelated blueprints apart, even at the same path', functio
         ])->setHandle('page')->setNamespace("collections.{$collection}")->save();
     }
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('1 of 2 blocks have instructions.')
-        ->expectsTable(['Block', 'Field', 'Blueprints'], [
-            ['hero', 'page_builder', 'collections.guides.page'],
-        ])
-        ->assertExitCode(0);
+    expect(guidelinesOutput())
+        ->toContain('1 of 2 blocks have instructions.')
+        ->toContain("  In collections.guides.page\n    page_builder: hero\n");
 });

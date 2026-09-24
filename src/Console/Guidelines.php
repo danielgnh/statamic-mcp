@@ -17,6 +17,7 @@ use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Symfony\Component\Console\Terminal;
 
 /**
  * Creates the guideline files agents read (never overwriting one) and lists
@@ -84,9 +85,9 @@ class Guidelines extends Command
             ->reject(fn (array $block) => filled($block['instructions']))
             ->groupBy('key')
             ->map(fn (SupportCollection $found) => [
-                data_get($found->first(), 'handle'),
-                data_get($found->first(), 'field'),
-                $found->pluck('blueprint')->unique()->sort()->implode(', '),
+                'field' => data_get($found->first(), 'field'),
+                'handle' => data_get($found->first(), 'handle'),
+                'blueprints' => $found->pluck('blueprint')->unique()->sort()->implode(', '),
             ]);
 
         if ($missing->isEmpty()) {
@@ -95,13 +96,34 @@ class Guidelines extends Command
             return;
         }
 
-        $this->line(sprintf(
-            '  %d of %d blocks have instructions. Agents see only the name of these until they look one up, so add instructions to each set in its blueprint or fieldset:',
+        $this->line($this->wrap(sprintf(
+            '%d of %d blocks have instructions. Agents see only the name of the rest until they look one up, so add instructions to each set in its blueprint or fieldset:',
             $total - $missing->count(),
             $total,
-        ));
+        ), 2));
 
-        $this->table(['Block', 'Field', 'Blueprints'], $missing->values()->all());
+        foreach ($missing->groupBy('blueprints') as $blueprints => $shared) {
+            $this->line('');
+            $this->line('<comment>'.$this->wrap("In {$blueprints}", 2).'</comment>');
+
+            foreach ($shared->groupBy('field') as $field => $sets) {
+                $this->line($this->wrap("{$field}: ".$sets->pluck('handle')->implode(', '), 4, 2));
+            }
+        }
+    }
+
+    /**
+     * Wraps text to the terminal width, indenting continuation lines by
+     * $hanging more than the first.
+     */
+    protected function wrap(string $text, int $indent, int $hanging = 0): string
+    {
+        $width = max(min((new Terminal)->getWidth(), 120) - $indent - $hanging, 40);
+
+        return str_repeat(' ', $indent).implode(
+            "\n".str_repeat(' ', $indent + $hanging),
+            explode("\n", wordwrap($text, $width)),
+        );
     }
 
     /**
