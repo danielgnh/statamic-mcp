@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Js;
 
 beforeEach(function () {
     config(['statamic.editions.pro' => true, 'cache.default' => 'array']);
@@ -50,6 +51,34 @@ it('shows a super admin all tokens with their owners', function () {
         ->assertOk()
         ->assertSee('theirs-beta', false)
         ->assertSee($other->email(), false);
+});
+
+it('links each token to its owner, with their avatar', function () {
+    $super = Fixtures::makeSuper();
+    $other = tap(Fixtures::makeUser()->set('name', 'Ada Lovelace'))->save();
+
+    app(TokenRepository::class)->issue($other, 'theirs-beta');
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('<inertia-link href="'.$other->editUrl().'"', false)
+        ->assertSee(':user="'.Js::from(['id' => $other->id(), 'name' => 'Ada Lovelace', 'avatar' => null, 'initials' => 'AL']).'"', false);
+});
+
+it('keeps the owner id, without a link, once the owner is deleted', function () {
+    $super = Fixtures::makeSuper();
+    $other = Fixtures::makeUser();
+
+    app(TokenRepository::class)->issue($other, 'theirs-beta');
+
+    $other->delete();
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('<span v-pre>'.$other->id().'</span>', false)
+        ->assertDontSee('<inertia-link', false);
 });
 
 // The CP compiles the Connections page as a Vue template at runtime, so

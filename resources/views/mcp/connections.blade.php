@@ -122,7 +122,7 @@
                             @foreach ($connections as $connection)
                                 <tr>
                                     <td><span v-pre>{{ $connection['client_name'] }}</span></td>
-                                    @if ($isSuper)<td><span v-pre>{{ $connection['email'] }}</span></td>@endif
+                                    @if ($isSuper)<td>@include('statamic-mcp::mcp.partials.user', ['user' => $connection['user'], 'userId' => $connection['user_id']])</td>@endif
                                     <td>{{ $connection['connected_at']->toFormattedDateString() }}</td>
                                     <td>{{ $connection['last_refreshed_at']->diffForHumans() }}</td>
                                     <td>
