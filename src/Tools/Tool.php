@@ -12,6 +12,7 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
@@ -85,7 +86,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'|'forms'  $type
      *
      * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
      * by design; the error lists only exposed handles.
@@ -100,7 +101,7 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'|'forms'  $type
      * @return list<string> handles that exist AND pass config('statamic.mcp.resources.{$type}')
      */
     protected function exposedHandles(string $type): array
@@ -117,6 +118,7 @@ abstract class Tool extends BaseTool
             'globals' => GlobalSet::all()->map->handle()->values()->all(),
             'asset_containers' => AssetContainer::all()->map->handle()->values()->all(),
             'navigations' => Nav::all()->map->handle()->values()->all(),
+            'forms' => Form::all()->map->handle()->values()->all(),
         };
 
         return $configured === true
