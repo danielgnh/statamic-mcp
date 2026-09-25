@@ -22,7 +22,6 @@ use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Blink;
-use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
@@ -196,29 +195,16 @@ class EntriesUpdate extends Tool
         }
 
         // Stage on the rebased clone when amending, on a fresh clone of live
-        // when creating the first working copy — the live Stache instance
-        // must stay pristine, it is never saved on the working-copy path.
-        $target = match (true) {
-            $amending => $basis, // already a clone hydrated from the staged copy
-            $workingCopy => clone $entry,
-            default => $entry,
-        };
-
-        $target->data($merged);
-
-        if ($slug !== null) {
-            $target->slug($slug);
-        }
-
-        if ($date instanceof Carbon) {
-            $target->date($date);
-        }
+        // otherwise — the live Stache instance must stay pristine: it is never
+        // saved on the working-copy path, and takes the changes on the live
+        // path only once the URL check has passed.
+        $target = $this->applyChanges($amending ? $basis : clone $entry, $merged, $slug, $date);
 
         $this->ensureUniqueUriAfter($target, $move);
 
         return $workingCopy
             ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move)
-            : $this->persistLive($entry, $user, $collection, $move);
+            : $this->persistLive($this->applyChanges($entry, $merged, $slug, $date), $user, $collection, $move);
     }
 
     /**
@@ -322,6 +308,24 @@ class EntriesUpdate extends Tool
     }
 
     /**
+     * @param  array<array-key, mixed>  $data
+     */
+    private function applyChanges(EntryContract $entry, array $data, ?string $slug, ?Carbon $date): EntryContract
+    {
+        $entry->data($data);
+
+        if ($slug !== null) {
+            $entry->slug($slug);
+        }
+
+        if ($date instanceof Carbon) {
+            $entry->date($date);
+        }
+
+        return $entry;
+    }
+
+    /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
     private function ensureUniqueUriAfter(EntryContract $entry, ?array $move): void
@@ -398,8 +402,8 @@ class EntriesUpdate extends Tool
     /**
      * The normalized new slug, or null when none was sent. Entry::save()
      * re-normalizes through Routable::slug() with the site's language — run
-     * the exact same call here so the no-op comparison and the collision
-     * check both see what will actually be persisted.
+     * the exact same call here so the no-op comparison, the blueprint's rules
+     * and the URL check all see what will actually be persisted.
      */
     private function resolveSlug(?string $slug, EntryContract $entry): ?string
     {
@@ -411,28 +415,6 @@ class EntriesUpdate extends Tool
 
         if ($normalized === '') {
             throw new ToolException(sprintf("slug '%s' normalizes to an empty string — pass a usable slug", $slug));
-        }
-
-        // Its own slug is never a collision — only a changed slug can collide,
-        // and the existing holder of the old slug is this entry itself.
-        if ($normalized === $entry->slug()) {
-            return $normalized;
-        }
-
-        $existing = Entry::query()
-            ->where('collection', $entry->collection()->handle())
-            ->where('slug', $normalized)
-            ->where('site', $entry->locale())
-            ->first();
-
-        if ($existing && $existing->id() !== $entry->id()) {
-            throw new ToolException(sprintf(
-                "slug '%s' already exists in collection '%s' (site '%s') as entry '%s'",
-                $normalized,
-                $entry->collection()->handle(),
-                $entry->locale(),
-                $existing->id(),
-            ));
         }
 
         return $normalized;

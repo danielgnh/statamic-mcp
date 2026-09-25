@@ -10,6 +10,7 @@ use Statamic\Events\EntryCreating;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Stache;
 
 function makeDatedEventsCollection(): void
 {
@@ -101,7 +102,7 @@ it('rejects date on a non-dated collection', function () {
         ->assertHasErrors(["collection 'blog' is not dated — omit date"]);
 });
 
-it('rejects a colliding slug with the existing id and points to entries_update', function () {
+it('refuses a slug whose URL another entry of the collection has, naming that entry', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
@@ -112,7 +113,35 @@ it('rejects a colliding slug with the existing id and points to entries_update',
 
     Server::actingAs(Fixtures::makeUser('create blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hello World'], 'slug' => 'hello-world'])
-        ->assertHasErrors(["slug 'hello-world' already exists in collection 'blog' (site 'en') as entry '{$existing->id()}' — use entries_update to modify it"]);
+        ->assertHasErrors(["URL '/blog/hello-world' already belongs to entry '{$existing->id()}' in collection 'blog' — pick another slug"]);
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(1);
+});
+
+it('allows a slug another entry has in a collection without a route, as the CP does', function () {
+    Fixtures::site();
+
+    tap(Collection::make('snippets')->title('Snippets')->sites(['en']))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('snippet')->setNamespace('collections.snippets')->save();
+
+    $existing = tap(Entry::make()->collection('snippets')->slug('footer')->data(['title' => 'Footer']))->save();
+
+    Server::actingAs(Fixtures::makeUser('create snippets entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'snippets', 'data' => ['title' => 'Footer'], 'slug' => 'footer'])
+        ->assertOk()
+        ->assertSee('"slug":"footer"');
+
+    // Statamic writes the second one to footer.1.md: neither overwrites the other.
+    Stache::clear();
+
+    $entries = Entry::query()->where('collection', 'snippets')->get();
+
+    expect($entries)->toHaveCount(2)
+        ->and($entries->map->slug()->all())->toBe(['footer', 'footer'])
+        ->and($entries->map->id()->contains($existing->id()))->toBeTrue();
 });
 
 it('rejects unknown data keys with valid handles and a did-you-mean hint', function () {
@@ -194,7 +223,7 @@ it('refuses to create when the server is read-only', function () {
     expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
 });
 
-it('normalizes the slug the way Statamic will persist it before checking collisions', function () {
+it('normalizes the slug the way Statamic will persist it before checking the URL', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
@@ -203,11 +232,11 @@ it('normalizes the slug the way Statamic will persist it before checking collisi
         Entry::make()->collection('blog')->slug('hello-world')->data(['title' => 'Hello'])->published(true)
     )->save();
 
-    // Entry::save() re-normalizes 'Hello World' to 'hello-world' — a raw-value
-    // collision query would miss this and silently produce two entries, one URL.
+    // Entry::save() re-normalizes 'Hello World' to 'hello-world' — a check on
+    // the raw value would miss this and silently produce two entries, one URL.
     Server::actingAs(Fixtures::makeUser('create blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Fresh'], 'slug' => 'Hello World'])
-        ->assertHasErrors(["slug 'hello-world' already exists in collection 'blog' (site 'en') as entry '{$existing->id()}' — use entries_update to modify it"]);
+        ->assertHasErrors(["URL '/blog/hello-world' already belongs to entry '{$existing->id()}' in collection 'blog' — pick another slug"]);
 });
 
 it('generates the slug with the target site language (CP parity)', function () {

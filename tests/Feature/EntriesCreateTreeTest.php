@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Statamic\Events\CollectionTreeSaving;
 use Statamic\Events\EntrySaving;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
@@ -312,6 +313,66 @@ it('refuses a URL another entry already has in a collection without a tree', fun
         ->assertHasErrors([sprintf("URL '/hello' already belongs to entry '%s' in collection 'blog' — pick another slug", $post)]);
 
     expect(Entry::query()->where('collection', 'pages')->where('slug', 'hello')->count())->toBe(0);
+});
+
+it('gives a page a slug another page has under a different parent, as the CP does', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $products = Fixtures::page('products', 'Products');
+    $services = Fixtures::page('services', 'Services');
+    $overview = Fixtures::page('overview', 'Overview');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([
+        ['entry' => $products, 'children' => [['entry' => $overview]]],
+        ['entry' => $services],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Overview'], 'parent' => $services])
+        ->assertOk()
+        ->assertSee('"slug":"overview"')
+        ->assertSee('"url":"/services/overview"');
+
+    // The same URL is still refused.
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Overview'], 'parent' => $products])
+        ->assertHasErrors([sprintf("URL '/products/overview' already belongs to entry '%s' in collection 'pages' — pick another slug or parent", $overview)]);
+
+    $created = Entry::query()->where('collection', 'pages')->where('slug', 'overview')->get()->map->id()->reject(fn (string $id) => $id === $overview)->sole();
+
+    expect(Fixtures::storedPagesTree())->toBe([
+        ['entry' => $products, 'children' => [['entry' => $overview]]],
+        ['entry' => $services, 'children' => [['entry' => $created]]],
+    ])
+        ->and(Entry::find($overview)->url())->toBe('/products/overview')
+        ->and(Entry::find($created)->url())->toBe('/services/overview');
+});
+
+it('keeps slugs unique when the blueprint asks for it with unique_entry_value', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    Blueprint::find('collections.pages.page')
+        ->ensureFieldHasConfig('slug', ['validate' => ['required', 'max:200', 'new \Statamic\Rules\UniqueEntryValue({collection}, {id}, {site})']])
+        ->save();
+
+    $products = Fixtures::page('products', 'Products');
+    $services = Fixtures::page('services', 'Services');
+    $overview = Fixtures::page('overview', 'Overview');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([
+        ['entry' => $products, 'children' => [['entry' => $overview]]],
+        ['entry' => $services],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Overview'], 'parent' => $services])
+        ->assertHasErrors(['validation failed: {"slug":["This value has already been taken."]}']);
+
+    expect(Entry::query()->where('collection', 'pages')->where('slug', 'overview')->count())->toBe(1);
 });
 
 it('keeps the entries another process placed while its Stache still lacks them', function () {

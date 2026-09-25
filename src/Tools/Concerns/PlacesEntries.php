@@ -146,7 +146,9 @@ trait PlacesEntries
 
     /**
      * CP parity (EntriesController::validateUniqueUri): an entry can't take a
-     * URL another entry of its site already has, in any collection.
+     * URL another entry of its site already has, in any collection. The slug
+     * alone may repeat, as it does under different parents in a tree; a
+     * blueprint that wants unique slugs sets unique_entry_value on it.
      */
     protected function ensureUniqueUri(EntryContract $entry, ?CollectionTree $tree, ?string $parent): void
     {
