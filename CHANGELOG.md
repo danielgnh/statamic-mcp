@@ -8,6 +8,8 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-25
+
 ### Changed
 
 - The User column on Tools → MCP → Connections shows each user the way the
@@ -596,7 +598,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...v0.5.0
