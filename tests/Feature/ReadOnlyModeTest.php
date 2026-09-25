@@ -7,6 +7,7 @@ use Danielgnh\StatamicMcp\Tools\AssetsUpdate;
 use Danielgnh\StatamicMcp\Tools\AssetsUpload;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesDelete;
+use Danielgnh\StatamicMcp\Tools\EntriesLocalize;
 use Danielgnh\StatamicMcp\Tools\EntriesPublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUnpublish;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
@@ -46,6 +47,12 @@ const WRITE_TOOLS = [
     'terms_update',
 ];
 
+// Write tools a single-site install has no use for: registered under
+// statamic.system.multisite only, on top of the read_only gate.
+const MULTISITE_TOOLS = [
+    'entries_localize',
+];
+
 const DELETE_TOOLS = [
     'assets_delete',
     'entries_delete',
@@ -57,6 +64,7 @@ const WRITE_TOOL_CLASSES = [
     'assets_update' => AssetsUpdate::class,
     'assets_upload' => AssetsUpload::class,
     'entries_create' => EntriesCreate::class,
+    'entries_localize' => EntriesLocalize::class,
     'entries_publish' => EntriesPublish::class,
     'entries_unpublish' => EntriesUnpublish::class,
     'entries_update' => EntriesUpdate::class,
@@ -144,6 +152,23 @@ it('advertises every non-delete tool with the zero-config default', function () 
     expect($names)->not->toContain(...DELETE_TOOLS);
 });
 
+it('advertises entries_localize only on a multisite install', function () {
+    $user = Fixtures::makeUser();
+    $token = app(TokenRepository::class)->issue($user, 'single-site')->token;
+
+    expect(readOnlyToolNames($token))->not->toContain(...MULTISITE_TOOLS);
+
+    // Statamic's CheckMultisite middleware refuses every request on a
+    // multisite install without Pro, so over HTTP the tool only ever shows
+    // up where both are on.
+    Fixtures::multisite();
+    config(['statamic.editions.pro' => true]);
+
+    expect(readOnlyToolNames($token))->toBe(
+        collect([...READ_TOOLS, ...WRITE_TOOLS, ...MULTISITE_TOOLS])->sort()->values()->all()
+    );
+});
+
 it('advertises the full tool set when deletes are enabled', function () {
     config(['statamic.mcp.deletes' => true]);
 
@@ -229,7 +254,7 @@ it('re-checks read_only inside the handler of every write and delete tool', func
 // without its in-handler re-check being swept.
 it('sweeps every advertised write and delete tool', function () {
     expect(collect(array_keys(WRITE_TOOL_CLASSES))->sort()->values()->all())
-        ->toBe(collect([...WRITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all());
+        ->toBe(collect([...WRITE_TOOLS, ...MULTISITE_TOOLS, ...DELETE_TOOLS])->sort()->values()->all());
 });
 
 it('refuses a stale-cached write tool call over HTTP in read_only mode', function () {

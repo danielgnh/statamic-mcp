@@ -8,6 +8,20 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- `entries_localize` adds an entry to another site of its collection, the way
+  the Control Panel's Localize action does. The new entry is a draft
+  localization that inherits every field it does not override, `data` holds
+  its own values such as a translated title and content, and `slug` defaults
+  to the origin's. On a structured collection it joins the target site's tree
+  under the localization of the origin's parent, or at the top level. The
+  origin is the entry passed, or the root entry when the collection's origin
+  behavior is root, as in the Control Panel. It needs the edit permission for
+  the origin entry and access to the target site, and it is registered on
+  multisite installs only. Until now an agent had to send
+  people to the Control Panel to add a page to a second language.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added

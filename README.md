@@ -105,13 +105,13 @@ Terms, globals, assets, and navigations have no draft state. Writes to them go l
 | Area | Tools |
 |---|---|
 | Discovery | `statamic_overview`, `blueprints_get` |
-| Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_preview`, `entries_publish`, `entries_unpublish`, `entries_delete` |
+| Entries | `entries_list`, `entries_get`, `entries_create`, `entries_update`, `entries_localize`, `entries_preview`, `entries_publish`, `entries_unpublish`, `entries_delete` |
 | Taxonomy terms | `terms_list`, `terms_get`, `terms_create`, `terms_update`, `terms_delete` |
 | Globals | `globals_get`, `globals_update` |
 | Navigation | `navigations_get`, `navigations_update` |
 | Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
 
-The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The three delete tools only exist when `deletes` is on.
+The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The three delete tools only exist when `deletes` is on, and `entries_localize` only on a multisite install.
 
 [docs/tools.md](docs/tools.md) documents every tool, the upload limits, and how URL uploads block private network addresses.
 
