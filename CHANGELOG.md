@@ -8,6 +8,13 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- The User column on Tools → MCP → Connections shows each user the way the
+  Users listing does: their avatar, or their initials when they have none,
+  next to their email, which links to the user. Rows of a deleted user still
+  show its ID.
+
 ## [0.7.0] - 2026-09-25
 
 ### Added

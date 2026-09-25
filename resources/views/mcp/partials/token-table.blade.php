@@ -24,7 +24,7 @@
                             <ui-badge size="sm" class="font-mono"><span v-pre>{{ $token['id'] }}</span></ui-badge>
                         </div>
                     </td>
-                    @if ($isSuper)<td><span v-pre>{{ $token['email'] }}</span></td>@endif
+                    @if ($isSuper)<td>@include('statamic-mcp::mcp.partials.user', ['user' => $token['user'], 'userId' => $token['user_id']])</td>@endif
                     <td>{{ $token['created_at']->toFormattedDateString() }}</td>
                     <td>{{ $token['expires_at']?->toFormattedDateString() ?? __('never') }}</td>
                     <td>

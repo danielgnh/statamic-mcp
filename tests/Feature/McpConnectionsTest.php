@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Js;
 use Laravel\Passport\Passport;
 
 beforeEach(function () {
@@ -159,6 +160,64 @@ it("shows a super admin everyone's connections with their emails", function () {
         ->assertOk()
         ->assertSee('Zebra Desktop', false)
         ->assertSee($other->email(), false);
+});
+
+it('links each user to their page, with the initials avatar the Users listing shows', function () {
+    $super = Fixtures::makeSuper();
+    $other = tap(Fixtures::makeUser()->set('name', 'Ada Lovelace'))->save();
+
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client());
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('<inertia-link href="'.$other->editUrl().'"', false)
+        ->assertSee(':user="'.Js::from(['id' => $other->id(), 'name' => 'Ada Lovelace', 'avatar' => null, 'initials' => 'AL']).'"', false);
+});
+
+it("shows a user's avatar image when the site has one for them", function () {
+    config(['statamic.users.avatars' => 'gravatar']);
+
+    $super = Fixtures::makeSuper();
+    $other = Fixtures::makeUser();
+
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client());
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee(':user="'.Js::from(['id' => $other->id(), 'name' => null, 'avatar' => $other->avatar(), 'initials' => '?']).'"', false);
+});
+
+it('keeps the user id, without a link, once the user is deleted', function () {
+    $super = Fixtures::makeSuper();
+    $other = Fixtures::makeUser();
+
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client());
+
+    $other->delete();
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('<span v-pre>'.$other->id().'</span>', false)
+        ->assertDontSee('<inertia-link', false);
+});
+
+it('hands user names to the avatar inertly for the vue runtime compiler', function () {
+    // Users rename themselves, and supers see every connection. The name may
+    // only reach the page as JSON for ui-avatar, never as template text.
+    $super = Fixtures::makeSuper();
+    $other = tap(Fixtures::makeUser()->set('name', '{{ 7*7 }}'))->save();
+
+    OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client());
+
+    $response = $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee(':user="'.Js::from(['id' => $other->id(), 'name' => '{{ 7*7 }}', 'avatar' => null, 'initials' => $other->initials()]).'"', false);
+
+    expect(substr_count($response->getContent(), '{{ 7*7 }}'))->toBe(1);
 });
 
 it('marks dead connections as expired', function () {

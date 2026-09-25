@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 use Symfony\Component\HttpFoundation\Response;
@@ -63,11 +64,11 @@ class McpController extends CpController
      * coalesced so a pruned key can't 500 the page.
      *
      * @param  array<string, array<string, mixed>>  $records
-     * @return Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}>
+     * @return Collection<int, array{id: string, name: mixed, user_id: mixed, user: UserContract|null, created_at: Carbon, expires_at: Carbon|null, expired: bool}>
      */
     protected function presentTokens(array $records, ?string $onlyUserId): Collection
     {
-        /** @var Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}> $presented */
+        /** @var Collection<int, array{id: string, name: mixed, user_id: mixed, user: UserContract|null, created_at: Carbon, expires_at: Carbon|null, expired: bool}> $presented */
         $presented = collect($records)
             ->filter(fn ($record) => $onlyUserId === null || ($record['user'] ?? null) === $onlyUserId)
             ->map(function ($record, $tokenId) {
@@ -77,7 +78,8 @@ class McpController extends CpController
                 return [
                     'id' => $tokenId,
                     'name' => $record['name'] ?? null,
-                    'email' => User::find($userId)?->email() ?? $userId,
+                    'user_id' => $userId,
+                    'user' => User::find($userId),
                     'created_at' => Carbon::parse($record['created_at'] ?? Carbon::now()->toIso8601String()),
                     'expires_at' => $expiresAt,
                     'expired' => $expiresAt?->isPast() ?? false,
@@ -91,18 +93,18 @@ class McpController extends CpController
 
     /**
      * Rows arrive shaped and sorted from the repository — this only filters
-     * visibility and attaches the display email.
+     * visibility and attaches the user.
      *
      * @param  Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool}>  $connections
-     * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}>
+     * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, user: UserContract|null}>
      */
     protected function presentConnections(Collection $connections, ?string $onlyUserId): Collection
     {
-        /** @var Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}> $presented */
+        /** @var Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, user: UserContract|null}> $presented */
         $presented = $connections
             ->filter(fn ($connection) => $onlyUserId === null || $connection['user_id'] === $onlyUserId)
             ->map(fn ($connection) => array_merge($connection, [
-                'email' => User::find($connection['user_id'])?->email() ?? $connection['user_id'],
+                'user' => User::find($connection['user_id']),
             ]))
             ->values();
 
