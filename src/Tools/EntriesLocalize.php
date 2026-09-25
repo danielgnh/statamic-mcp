@@ -42,7 +42,7 @@ class EntriesLocalize extends Tool
             'id' => $schema->string()->description('Id of the entry to localize. The new entry inherits from it.')->required(),
             'site' => $schema->string()->description('Handle of the site to add the entry to.')->required(),
             'data' => $schema->object()->description('Raw values this site gets of its own, keyed by blueprint field handle — localizable fields only; everything else is inherited. May be omitted.'),
-            'slug' => $schema->string()->description("Slug in the target site. Defaults to the origin's slug."),
+            'slug' => $schema->string()->description("Slug in the target site. Defaults to the origin's slug; rejected on a collection with slugs turned off, whose entries have none."),
         ];
     }
 
@@ -108,6 +108,8 @@ class EntriesLocalize extends Tool
         $this->rejectUnknownKeys($blueprint, $data);
 
         $this->rejectUnlocalizableFields($origin, $blueprint, $data);
+
+        $this->rejectSlugWithoutSlugField($validated['slug'] ?? null, $blueprint, $collection);
 
         $this->ensureAuthorUnchanged($user, $origin, $data);
 
@@ -211,10 +213,16 @@ class EntriesLocalize extends Tool
     /**
      * Entry::save() re-normalizes the slug with the site's language, so the
      * blueprint's rules and the URL check run on what will be persisted, as
-     * in entries_create.
+     * in entries_create. An origin without a slug, as in a collection with
+     * slugs turned off, gives its localization none (CP parity,
+     * Entry::makeLocalization).
      */
-    private function resolveSlug(string $slug, string $site): string
+    private function resolveSlug(?string $slug, string $site): ?string
     {
+        if ($slug === null) {
+            return null;
+        }
+
         $normalized = Str::slug($slug, '-', Site::get($site)->lang());
 
         if ($normalized === '') {

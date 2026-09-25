@@ -45,7 +45,7 @@ class EntriesUpdate extends Tool
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
             'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or parent.')->required(),
-            'slug' => $schema->string()->description('New slug.'),
+            'slug' => $schema->string()->description('New slug. Rejected on a collection with slugs turned off, whose entries have none.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted. To add the entry to another site, call entries_localize."),
             'parent' => $schema->string()->description('Entry id to move this entry under, or "" for the top level. Omit it, or send null, to leave the entry where it is.'),
@@ -106,6 +106,8 @@ class EntriesUpdate extends Tool
         if ($entry->hasOrigin()) {
             $this->rejectUnlocalizableFields($entry->origin(), $blueprint, $data);
         }
+
+        $this->rejectSlugWithoutSlugField($validated['slug'] ?? null, $blueprint, $collection);
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
 
