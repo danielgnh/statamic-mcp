@@ -26,3 +26,13 @@ parameters:
             identifier: property.notFound
             message: '#Laravel\\Passport\\Token#'
             path: src/OAuth/ConnectionRepository.php
+
+        # Larastan accepts a view name only when view()->exists() finds it in
+        # the app it boots for analysis, and that app never loads this addon,
+        # so the statamic-mcp:: namespace Statamic registers at boot is unknown
+        # to it. The page tests render the view. Scoped to the controller
+        # that returns it.
+        -
+            identifier: argument.type
+            message: '#^Parameter \#1 \$view of function view expects view-string\|null, string given\.$#'
+            path: src/Http/Controllers/McpController.php

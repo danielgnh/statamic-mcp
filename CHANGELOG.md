@@ -30,9 +30,17 @@ called out here explicitly.
 - `blueprints_get` reports `localizable` on every field of a multisite install:
   only such a field can hold a value of its own in a localization, so an agent
   knows what it can translate before it writes.
+- **Tools → MCP** in the Control Panel, with its pages listed under it in the
+  sidebar the way Utilities lists its own. **Connections** is the page that
+  was the MCP Access utility.
 
 ### Changed
 
+- **Breaking:** the MCP Access utility is gone. Its page is Tools → MCP →
+  Connections, which needs the Access MCP permission instead of the utility's
+  own. Roles with Access MCP alone can now issue their own tokens there, the
+  way OAuth mode already let them connect. Published copies of
+  `utilities/mcp-tokens.blade.php` no longer apply.
 - `entries_update` refuses a value of its own on a localization for a field the
   blueprint does not mark localizable, as the Control Panel does: it shows such
   a field read-only with the origin's value. The error names the origin entry

@@ -69,7 +69,7 @@ php please mcp:token:revoke {id}                          # revoke
 
 The package stores only a SHA-256 hash of each token, in `storage/statamic/mcp/tokens.yaml`, so token mode needs no database. A deleted user's tokens stop working.
 
-Users can manage their own tokens in the Control Panel under Tools → Utilities → MCP Access. Their role needs the MCP Access permission from the Utilities group.
+Users manage their own tokens in the Control Panel under Tools → MCP → Connections, which opens for anyone with the Access MCP permission. Super admins see everyone's tokens and can revoke them.
 
 ## Permissions
 

@@ -2,8 +2,8 @@
 
 namespace Danielgnh\StatamicMcp\Tests;
 
-// The kill switch is read once, in bootAddon() — flipping config inside a test
-// body is too late. getEnvironmentSetUp runs before package providers boot, and
+// The kill switch is read while the app boots, in bootAddon() and routes/cp.php
+// — flipping config inside a test body is too late. getEnvironmentSetUp runs before package providers boot, and
 // a file-level uses(DisablesMcp::class) merges this trait into the test case
 // (Pest v4 forbids overriding the folder-level TestCase binding with a class).
 trait DisablesMcp

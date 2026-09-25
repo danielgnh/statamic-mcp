@@ -10,8 +10,8 @@ use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 
 /**
- * Route-level authorization is Statamic's 'can:access mcp_tokens utility'
- * middleware (applied by the utility registration). store() always issues for
+ * Route-level authorization is the 'can:access mcp' middleware on every
+ * Tools → MCP route (routes/cp.php). store() always issues for
  * the CURRENT user — issuing for someone else stays a console operation.
  */
 class McpTokensController extends CpController
@@ -36,12 +36,12 @@ class McpTokensController extends CpController
         try {
             $plain = $tokens->issue($user, $validated['name'] ?? null, $days);
         } catch (LockTimeoutException) {
-            return redirect()->to(cp_route('utilities.mcp-tokens'))
+            return redirect()->to(cp_route('mcp.connections.index'))
                 ->with('error', __('The token store is busy — please try again.'))
                 ->withInput();
         }
 
-        return redirect()->to(cp_route('utilities.mcp-tokens'))->with('statamic-mcp.plain_token', [
+        return redirect()->to(cp_route('mcp.connections.index'))->with('statamic-mcp.plain_token', [
             'token' => $plain->token,
             'tokenId' => $plain->tokenId,
             'name' => $plain->name,
@@ -69,10 +69,10 @@ class McpTokensController extends CpController
         try {
             $tokens->revoke($tokenId);
         } catch (LockTimeoutException) {
-            return redirect()->to(cp_route('utilities.mcp-tokens'))
+            return redirect()->to(cp_route('mcp.connections.index'))
                 ->with('error', __('The token store is busy — please try again.'));
         }
 
-        return redirect()->to(cp_route('utilities.mcp-tokens'))->with('success', __('Token revoked.'));
+        return redirect()->to(cp_route('mcp.connections.index'))->with('success', __('Token revoked.'));
     }
 }
