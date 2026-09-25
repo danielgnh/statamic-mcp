@@ -31,6 +31,13 @@ called out here explicitly.
   only such a field can hold a value of its own in a localization, so an agent
   knows what it can translate before it writes.
 
+### Changed
+
+- `entries_update` refuses a value of its own on a localization for a field the
+  blueprint does not mark localizable, as the Control Panel does: it shows such
+  a field read-only with the origin's value. The error names the origin entry
+  to change instead and the blueprint to mark the field localizable in.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added
