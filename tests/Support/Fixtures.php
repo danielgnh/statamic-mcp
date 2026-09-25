@@ -86,6 +86,28 @@ class Fixtures
         ])->setHandle('story')->setNamespace('collections.news')->save();
     }
 
+    // Slugs turned off: Statamic injects no slug field into the blueprint,
+    // and names each entry's file by its id.
+    public static function faqs(): void
+    {
+        tap(
+            Collection::make('faqs')
+                ->title('FAQs')
+                ->requiresSlugs(false)
+                ->sites(Site::all()->map->handle()->values()->all())
+        )->save();
+
+        Blueprint::makeFromFields([
+            'title' => ['type' => 'text', 'validate' => 'required', 'localizable' => true],
+        ])->setHandle('faq')->setNamespace('collections.faqs')->save();
+    }
+
+    // An entry of the faqs collection: call faqs() first. Returns its id.
+    public static function faq(string $title, string $site = 'en'): string
+    {
+        return tap(Entry::make()->collection('faqs')->locale($site)->data(['title' => $title]))->save()->id();
+    }
+
     // Revisions need Statamic Pro; the collection must already exist.
     public static function revisions(string $collection = 'blog'): void
     {

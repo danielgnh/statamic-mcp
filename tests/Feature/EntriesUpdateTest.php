@@ -12,6 +12,7 @@ use Statamic\Events\EntrySaving;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Stache;
 
 function makeUpdatableBlogEntry(array $data = []): Statamic\Contracts\Entries\Entry
 {
@@ -393,6 +394,30 @@ it('rejects a slug that normalizes to empty', function () {
         ->assertHasErrors(["slug '🎉🎉🎉' normalizes to an empty string — pass a usable slug"]);
 
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
+it('refuses a slug on a collection with slugs turned off, and updates the rest', function () {
+    Fixtures::site();
+    Fixtures::faqs();
+
+    $faq = Fixtures::faq('Delivery');
+
+    Server::actingAs(Fixtures::makeUser('edit faqs entries'))
+        ->tool(EntriesUpdate::class, ['id' => $faq, 'data' => ['title' => 'Delivery times'], 'slug' => 'delivery'])
+        ->assertHasErrors(["collection 'faqs' has slugs turned off, so its entries have none — omit slug"]);
+
+    Server::actingAs(Fixtures::makeUser('edit faqs entries'))
+        ->tool(EntriesUpdate::class, ['id' => $faq, 'data' => ['title' => 'Delivery times']])
+        ->assertOk()
+        ->assertSee('"slug":null');
+
+    Stache::clear();
+
+    $entry = Entry::find($faq);
+
+    expect($entry->slug())->toBeNull()
+        ->and($entry->get('title'))->toBe('Delivery times')
+        ->and($entry->path())->toEndWith("/faqs/{$faq}.md");
 });
 
 it('rejects the data-key spelling of slug with a targeted remedy', function () {

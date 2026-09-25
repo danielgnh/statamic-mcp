@@ -262,6 +262,49 @@ it('rejects a title that normalizes to an empty slug', function () {
     expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
 });
 
+it('creates an entry without a slug on a collection with slugs turned off, as the CP does', function () {
+    Fixtures::site();
+    Fixtures::faqs();
+
+    Server::actingAs(Fixtures::makeUser('create faqs entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'faqs', 'data' => ['title' => 'How long does delivery take?']])
+        ->assertOk()
+        ->assertSee('"slug":null');
+
+    // Statamic names the file of an entry without a slug by its id.
+    Stache::clear();
+
+    $entry = Entry::query()->where('collection', 'faqs')->first();
+
+    expect($entry->slug())->toBeNull()
+        ->and($entry->path())->toEndWith("/faqs/{$entry->id()}.md");
+});
+
+it('refuses a slug on a collection with slugs turned off', function () {
+    Fixtures::site();
+    Fixtures::faqs();
+
+    Server::actingAs(Fixtures::makeUser('create faqs entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'faqs', 'data' => ['title' => 'Delivery'], 'slug' => 'delivery'])
+        ->assertHasErrors(["collection 'faqs' has slugs turned off, so its entries have none — omit slug"]);
+
+    expect(Entry::query()->where('collection', 'faqs')->count())->toBe(0);
+});
+
+it('makes a slug when the blueprint has a slug field of its own, even with slugs turned off', function () {
+    Fixtures::site();
+    Fixtures::faqs();
+
+    // The CP goes by the blueprint: turning slugs off only stops Statamic
+    // from adding the field.
+    Blueprint::find('collections.faqs.faq')->ensureField('slug', ['type' => 'slug'])->save();
+
+    Server::actingAs(Fixtures::makeUser('create faqs entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'faqs', 'data' => ['title' => 'Delivery Times']])
+        ->assertOk()
+        ->assertSee('"slug":"delivery-times"');
+});
+
 it('reports a listener-cancelled save instead of claiming success', function () {
     Fixtures::site();
     Fixtures::tags();

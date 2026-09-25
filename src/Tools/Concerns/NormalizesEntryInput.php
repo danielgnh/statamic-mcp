@@ -8,6 +8,8 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Laravel\Mcp\Request;
+use Statamic\Contracts\Entries\Collection as CollectionContract;
+use Statamic\Fields\Blueprint;
 
 trait NormalizesEntryInput
 {
@@ -58,6 +60,19 @@ trait NormalizesEntryInput
 
         if (array_key_exists('slug', $data)) {
             throw new ToolException('pass slug as a top-level parameter, not inside data');
+        }
+    }
+
+    /**
+     * CP parity (EntriesController::resolveSlug): an entry whose blueprint has
+     * no slug field gets no slug, and Statamic names its file by id. Turning a
+     * collection's slugs off leaves that field out, and the CP form then has
+     * no field to send a slug through.
+     */
+    protected function rejectSlugWithoutSlugField(?string $slug, Blueprint $blueprint, CollectionContract $collection): void
+    {
+        if ($slug !== null && ! $blueprint->hasField('slug')) {
+            throw new ToolException("collection '{$collection->handle()}' has slugs turned off, so its entries have none — omit slug");
         }
     }
 }

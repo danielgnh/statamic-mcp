@@ -11,6 +11,7 @@ use Statamic\Events\EntryCreating;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Stache;
 
 function makeBlogOrigin(array $data = [], string $slug = 'hello'): Statamic\Contracts\Entries\Entry
 {
@@ -91,6 +92,39 @@ it('takes a slug of its own, normalized for the target site', function () {
         ->assertSee('"url":"/de/blog/ueber-uns"');
 
     expect($origin->in('de')->slug())->toBe('ueber-uns');
+});
+
+it('localizes an entry of a collection with slugs turned off, which has no slug', function () {
+    Fixtures::multisite();
+    Fixtures::faqs();
+
+    $origin = Fixtures::faq('How long does delivery take?');
+
+    Server::actingAs(Fixtures::makeUser('edit faqs entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $origin, 'site' => 'de', 'data' => ['title' => 'Wie lange dauert die Lieferung?']])
+        ->assertOk()
+        ->assertSee('"slug":null');
+
+    // Statamic names the file of an entry without a slug by its id.
+    Stache::clear();
+
+    $localization = Entry::find($origin)->in('de');
+
+    expect($localization->slug())->toBeNull()
+        ->and($localization->path())->toEndWith("/faqs/de/{$localization->id()}.md");
+});
+
+it('refuses a slug on a collection with slugs turned off', function () {
+    Fixtures::multisite();
+    Fixtures::faqs();
+
+    $origin = Fixtures::faq('How long does delivery take?');
+
+    Server::actingAs(Fixtures::makeUser('edit faqs entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $origin, 'site' => 'de', 'slug' => 'lieferzeit'])
+        ->assertHasErrors(["collection 'faqs' has slugs turned off, so its entries have none — omit slug"]);
+
+    expect(Entry::find($origin)->in('de'))->toBeNull();
 });
 
 it('lists the entry in every site of the collection the user can access', function () {

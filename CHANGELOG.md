@@ -30,6 +30,16 @@ called out here explicitly.
   site share the slug, and the error names each one with its id and URL so the
   agent can pass the id. Before, it returned one of them, which could be the
   wrong page. The lookup now checks the collection's view permission first.
+- `entries_localize` no longer fails with an internal server error on a
+  collection whose slugs are turned off. Like the Control Panel's Localize
+  action, it gives the localization the origin's slug, and such an origin has
+  none.
+- `entries_create` gives an entry of a collection with slugs turned off no
+  slug, as the Control Panel does, so Statamic names its file by its id. It
+  used to make a slug from the title. `entries_create`, `entries_update`, and
+  `entries_localize` refuse a `slug` for such an entry, since the Control
+  Panel has no field to set one. A blueprint that adds a slug field of its own
+  keeps slugs, as in the Control Panel.
 
 ## [0.7.0] - 2026-09-25
 
