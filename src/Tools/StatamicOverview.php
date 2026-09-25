@@ -22,7 +22,7 @@ use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 
 #[Name('statamic_overview')]
-#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site\'s guidelines global set has a site text (voice, tone, rules for all content), it comes back in guidelines — follow it in everything you write.')]
+#[Description('Start here — zero parameters. Returns the sites; the collections, taxonomies, global sets, asset containers, and navigations (menus, with their max_depth, and the sites they have a tree in on multisite) exposed to MCP and visible to you; your capability flags per resource (can_create, can_edit, can_publish, can_upload, can_delete — delete flags appear only when deletes are enabled; collections whose blueprint has an author field add can_edit_other_authors, can_publish_other_authors, and can_delete_other_authors, which apply to entries you are not an author of); on dated collections, date_behavior (future/past: public, unlisted, or private — a published entry dated in the future is scheduled only where future is private); on multisite, each collection\'s sites, propagate (whether entries_create makes a localization in every site at once), and origin_behavior (root: entries_localize always localizes from the root entry); the acting user (id, email, roles, is_super — compare id with an entry\'s author); and the server block: read_only, deletes, and timezone (the zone a date without an offset is read in). When the site\'s guidelines global set has a site text (voice, tone, rules for all content), it comes back in guidelines — follow it in everything you write.')]
 #[IsReadOnly]
 #[IsIdempotent]
 class StatamicOverview extends Tool
@@ -105,6 +105,11 @@ class StatamicOverview extends Tool
                     'title' => $collection->title(),
                     'dated' => $collection->dated(),
                     'revisions' => $collection->revisionsEnabled(),
+                    ...(Site::multiEnabled() ? [
+                        'sites' => $collection->sites()->values()->all(),
+                        'propagate' => $collection->propagate(),
+                        'origin_behavior' => $collection->originBehavior(),
+                    ] : []),
                     'blueprints' => $blueprints->map->handle()->values()->all(),
                     'can_create' => $this->can($user, "create {$handle} entries"),
                     'can_edit' => $this->can($user, "edit {$handle} entries"),

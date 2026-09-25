@@ -3,6 +3,8 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Statamic\Facades\Blueprint;
+use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 
 /**
@@ -180,4 +182,61 @@ it('reports a plain not-found for an unexposed entry even with a mismatched site
         ->tool(EntriesGet::class, ['id' => $origin->id(), 'site' => 'de'])
         ->assertHasErrors(["entry '{$origin->id()}' not found"])
         ->assertDontSee('belongs to site');
+});
+
+it('lists the entry in each site of the collection, null where it has none', function () {
+    Fixtures::multisite(withThirdSite: true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    [$origin, $localization] = makeLocalizedBlogEntry();
+
+    $expected = sprintf(
+        '"localizations":{"en":{"id":"%s","status":"published"},"de":{"id":"%s","status":"published"},"at":null}',
+        $origin->id(),
+        $localization->id(),
+    );
+
+    // The same map from either side of the pair.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $origin->id()])
+        ->assertOk()
+        ->assertSee($expected);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $localization->id()])
+        ->assertOk()
+        ->assertSee($expected);
+});
+
+it('lists only the sites the user can access under localizations', function () {
+    Fixtures::multisite(withThirdSite: true);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    [$origin] = makeLocalizedBlogEntry();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'access en site', 'access at site'))
+        ->tool(EntriesGet::class, ['id' => $origin->id()])
+        ->assertOk()
+        ->assertSee(sprintf('"localizations":{"en":{"id":"%s","status":"published"},"at":null}', $origin->id()));
+});
+
+it('leaves localizations out on a collection in one site', function () {
+    Fixtures::multisite();
+
+    tap(
+        Collection::make('docs')->title('Docs')->sites(['en'])->routes('/docs/{slug}')
+    )->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('doc')->setNamespace('collections.docs')->save();
+
+    $doc = tap(Entry::make()->collection('docs')->slug('intro')->locale('en')->data(['title' => 'Intro']))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesGet::class, ['id' => $doc->id()])
+        ->assertOk()
+        ->assertDontSee('"localizations"');
 });

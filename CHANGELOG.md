@@ -21,6 +21,15 @@ called out here explicitly.
   the origin entry and access to the target site, and it is registered on
   multisite installs only. Until now an agent had to send
   people to the Control Panel to add a page to a second language.
+- `entries_get`, `entries_create`, and `entries_localize` return
+  `localizations` on a collection in more than one site: for each site you can
+  access, the id and status of the entry there, or null where it has none.
+- `statamic_overview` lists each collection's `sites`, `propagate`, and
+  `origin_behavior` on multisite, so an agent knows where `entries_create`
+  already makes a localization in every site.
+- `blueprints_get` reports `localizable` on every field of a multisite install:
+  only such a field can hold a value of its own in a localization, so an agent
+  knows what it can translate before it writes.
 
 ## [0.6.0] - 2026-09-25
 

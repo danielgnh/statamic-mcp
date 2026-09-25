@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\PreviewsRichText;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
@@ -18,10 +19,11 @@ use Statamic\Facades\Entry;
 use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the live entry unless working_copy is true: then it is the staged working copy, exactly what entries_publish would promote, and source says which one you got.')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles; no nesting in v1). fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the live entry unless working_copy is true: then it is the staged working copy, exactly what entries_publish would promote, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
+    use LocalizesEntries;
     use PreviewsRichText;
     use ResolvesEntries;
     use ResolvesSites;
@@ -163,6 +165,10 @@ class EntriesGet extends Tool
 
         if ($localization !== null) {
             $response['localization'] = $localization;
+        }
+
+        if ($localizations = $this->localizations($user, $live)) {
+            $response['localizations'] = $localizations;
         }
 
         if ($staged) {
