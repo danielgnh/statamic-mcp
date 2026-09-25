@@ -1,6 +1,6 @@
 ---
 name: statamic-mcp-guidelines
-description: Teach AI agents that edit a Statamic site through the Statamic MCP addon how the site builds its pages — instructions on blueprint fields, sections, and page builder blocks (Replicator and Bard sets), and the guidelines global set for the site's voice and how entries are put together.
+description: Teach AI agents that edit a Statamic site through the Statamic MCP addon how the site builds its pages — instructions on blueprint fields, sections, and page builder blocks (Replicator and Bard sets), and the Guidelines page under Tools → MCP for the site's voice and how entries are put together.
 ---
 
 # Statamic MCP Guidelines
@@ -22,12 +22,12 @@ guidance goes where those tools read it. Each rule lives in exactly one place:
 | What one field holds, its format and limits | the field's `instructions` in the blueprint or fieldset | the Control Panel's blueprint editor, or the YAML |
 | When to use a block and where it goes on a page | the set's `instructions` | the same |
 | How one blueprint's entry is put together, which entry to follow | the `instructions` of the blueprint's first section | the same |
-| How a collection's entries are put together, page shapes, block order | a row in the `guidelines` global set | site admins in the Control Panel, agents through `globals_update` |
-| Voice and tone for the whole site | the `site` field of the `guidelines` global set | the same |
+| How a collection's entries are put together, page shapes, block order | a row on Tools → MCP → Guidelines | super admins in the Control Panel, or the YAML in `resources/addons/statamic-mcp.yaml` |
+| Voice and tone for the whole site | the Site field on Tools → MCP → Guidelines | the same |
 
-Never restate a field, set, or section in the global set. `blueprints_get`
-already returns their instructions, and a copy goes stale the first time the
-blueprint changes.
+Never restate a field, set, or section on the Guidelines page.
+`blueprints_get` already returns their instructions, and a copy goes stale the
+first time the blueprint changes. Agents can't edit the page through MCP.
 
 ## Start with the command
 
@@ -35,9 +35,10 @@ blueprint changes.
 php please mcp:guidelines
 ```
 
-It creates the `guidelines` global set with its blueprint, never a second
-time. Then it lists the blocks that have no instructions, grouped under the
-blueprints that share them, one line per field with the names of its sets.
+It prints where the guidelines are written, then lists the blocks that have
+no instructions, grouped under the blueprints that share them, one line per
+field with the names of its sets. On a site coming from 0.6.0, it first moves
+the old `guidelines` global set to the Guidelines page and deletes it.
 
 ## Write block instructions
 
@@ -76,10 +77,13 @@ Walk the blueprints of the exposed collections and taxonomies:
   it when the blueprint is saved there. A tab's `instructions` works the same
   way but only survives in a blueprint edited as YAML, so prefer sections.
 
-## Fill the guidelines global set
+## Fill the Guidelines page
 
-Open the set in the Control Panel under Globals, or write its YAML under
-`content/globals`:
+Ask a super admin to fill Tools → MCP → Guidelines in the Control Panel, or
+write the YAML in `resources/addons/statamic-mcp.yaml` when the site keeps
+addon settings in files. Both fields sit under a `guidelines:` key, and a row
+has `type: resource`, `enabled: true`, and `collections` or `taxonomies`
+beside its `guidelines` text:
 
 - `site`: voice and tone, words to use or avoid, how formal to be, and rules
   that hold for every collection. `statamic_overview` returns it, so every
@@ -92,7 +96,10 @@ Open the set in the Control Panel under Globals, or write its YAML under
 
 Base the content on the templates and the site's existing entries. Ask the
 developer about anything you can't infer, like tone or brand rules. Keep every
-text short, because agents receive it on every call.
+text short, because agents receive it on every call. Statamic runs addon
+settings through Antlers, so never write `{{`, an Antlers or Blade component
+tag such as `<s:nav>` or `<x-card>`, or `@props` in them; describe such a tag
+in words.
 
 ## Check the result
 
