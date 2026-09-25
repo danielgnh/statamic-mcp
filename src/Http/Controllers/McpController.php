@@ -1,45 +1,36 @@
 <?php
 
-namespace Danielgnh\StatamicMcp\CP;
+namespace Danielgnh\StatamicMcp\Http\Controllers;
 
-use Danielgnh\StatamicMcp\Http\Controllers\McpConnectionsController;
-use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
 use Danielgnh\StatamicMcp\OAuth\ConnectionRepository;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
-use Illuminate\Http\Request;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
 use Statamic\Facades\User;
-use Statamic\Facades\Utility;
+use Statamic\Http\Controllers\CP\CpController;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Registers the "MCP Tokens" CP utility. Statamic supplies the permission
- * ('access mcp_tokens utility', auto-registered) and applies it as `can:`
- * middleware to the GET action and every custom route — no bespoke gate here.
+ * Tools → MCP. Every route sits behind 'can:access mcp' (routes/cp.php);
+ * Guidelines has its own controller, Connections lists tokens and OAuth
+ * connections: a user's own, or everyone's for a super admin.
  */
-class McpTokensUtility
+class McpController extends CpController
 {
-    public static function register(): void
+    /**
+     * The nav item's target: the first page this user may open. The sidebar
+     * links through Inertia, and Inertia::location() sends it straight to the
+     * Blade page instead of rendering that page twice.
+     */
+    public function index(): Response
     {
-        Utility::extend(function () {
-            Utility::register('mcp_tokens')
-                ->title(__('MCP Access'))
-                ->icon('key')
-                ->description(__('Manage MCP access tokens and OAuth connector connections.'))
-                ->view('statamic-mcp::utilities.mcp-tokens', fn (Request $request) => static::viewData($request))
-                ->routes(function ($router) {
-                    $router->post('/', [McpTokensController::class, 'store'])->name('store');
-                    $router->delete('connections/{clientId}/{userId}', [McpConnectionsController::class, 'destroy'])->name('connections.destroy');
-                    $router->delete('{tokenId}', [McpTokensController::class, 'destroy'])->name('destroy');
-                });
-        });
+        return Inertia::location(cp_route(User::current()?->isSuper() ? 'mcp.guidelines.edit' : 'mcp.connections.index'));
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public static function viewData(Request $request): array
+    public function connections(): View
     {
         $user = User::current();
 
@@ -50,22 +41,21 @@ class McpTokensUtility
         $oauthMode = config('statamic.mcp.auth') === 'oauth';
         $connections = app(ConnectionRepository::class);
 
-        return [
-            'tokens' => static::presentTokens(
+        return view('statamic-mcp::mcp.connections', [
+            'tokens' => $this->presentTokens(
                 app(TokenRepository::class)->all(),
                 $isSuper ? null : (string) $user->id()
             ),
             'connections' => $oauthMode
-                ? static::presentConnections($connections->all(), $isSuper ? null : (string) $user->id())
+                ? $this->presentConnections($connections->all(), $isSuper ? null : (string) $user->id())
                 : collect(),
             'oauthReady' => $oauthMode && $connections->ready(),
             'isSuper' => $isSuper,
-            'lacksAccessMcp' => ! $isSuper && ! $user->hasPermission('access mcp'),
             'oauthMode' => $oauthMode,
             'insecureUrl' => ! Str::startsWith($endpoint, 'https://'),
             'endpoint' => $endpoint,
             'plainToken' => session('statamic-mcp.plain_token'),
-        ];
+        ]);
     }
 
     /**
@@ -75,7 +65,7 @@ class McpTokensUtility
      * @param  array<string, array<string, mixed>>  $records
      * @return Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}>
      */
-    protected static function presentTokens(array $records, ?string $onlyUserId): Collection
+    protected function presentTokens(array $records, ?string $onlyUserId): Collection
     {
         /** @var Collection<int, array{id: string, name: mixed, email: mixed, created_at: Carbon, expires_at: Carbon|null, expired: bool}> $presented */
         $presented = collect($records)
@@ -106,7 +96,7 @@ class McpTokensUtility
      * @param  Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool}>  $connections
      * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}>
      */
-    protected static function presentConnections(Collection $connections, ?string $onlyUserId): Collection
+    protected function presentConnections(Collection $connections, ?string $onlyUserId): Collection
     {
         /** @var Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, email: mixed}> $presented */
         $presented = $connections

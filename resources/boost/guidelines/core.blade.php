@@ -25,7 +25,7 @@ php please mcp:setup --token --user=you@site.com --yes
 php please mcp:setup --oauth --yes
 </code-snippet>
 
-<code-snippet name="Create the guidelines global set for agents and list page builder blocks without instructions" lang="shell">
+<code-snippet name="List page builder blocks without instructions, and move a 0.6.0 guidelines set to Tools → MCP" lang="shell">
 php please mcp:guidelines
 </code-snippet>
 @endverbatim
@@ -39,5 +39,5 @@ idempotent — re-running skips satisfied steps.
 - The env flip runs BEFORE the migrate step on purpose: the addon's migration converting Passport's `user_id` columns to strings (Statamic ids are UUIDs) only loads when `STATAMIC_MCP_AUTH=oauth`. If migrations ran too early, set the env var and run `php artisan migrate` again.
 - Passport keys are database-managed: once `php artisan migrate` has created the addon's key table, a pair provisions automatically (encrypted with APP_KEY), is shared across servers, and survives releases — deploys need no key step. Explicit `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars and key files still take precedence; `php please mcp:keys` provisions eagerly or exports the pair as env variables. Never run `passport:keys` per release — regenerating silently invalidates every connected client.
 - The connected user needs the **Access MCP** permission (or super).
-- Guidance for agents about a field, a section, or a page builder block goes in its `instructions` in the blueprint or fieldset YAML, never in a custom key: the Control Panel drops unknown set keys when the field's settings are saved. Guidance about whole collections or the site goes in the `guidelines` global set, which `php please mcp:guidelines` creates and admins edit in the Control Panel; never restate a field's rule there. The `statamic-mcp-guidelines` skill covers all of it.
+- Guidance for agents about a field, a section, or a page builder block goes in its `instructions` in the blueprint or fieldset YAML, never in a custom key: the Control Panel drops unknown set keys when the field's settings are saved. Guidance about whole collections or the site goes on the Guidelines page under Tools → MCP, which only super admins edit, stored under `guidelines:` in `resources/addons/statamic-mcp.yaml`; never restate a field's rule there, and never write `{{`, Antlers or Blade component tags, or `@props` in it, because Statamic runs addon settings through Antlers. The `statamic-mcp-guidelines` skill covers all of it.
 - To add a site-specific MCP tool, extend `Danielgnh\StatamicMcp\Server`, override `tools(ToolRegistry $tools)` and call `$tools->add(...)`, `replace(...)`, or `remove(...)`, then set `'server'` in `config/statamic/mcp.php` to that class. Tools extend `Danielgnh\StatamicMcp\Tools\Tool` and implement `execute()`. Do not mount a second `Mcp::web()` route for Statamic tools; the addon's route already carries the auth middleware and permission gate.

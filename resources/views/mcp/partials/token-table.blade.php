@@ -35,7 +35,7 @@
                         @endif
                     </td>
                     <td class="text-right">
-                        <form method="POST" action="{{ cp_route('utilities.mcp-tokens.destroy', $token['id']) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Revoke this token?')) }})">
+                        <form method="POST" action="{{ cp_route('mcp.connections.tokens.destroy', $token['id']) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Revoke this token?')) }})">
                             @csrf
                             @method('DELETE')
                             <ui-button type="submit" size="sm" variant="danger" text="{{ __('Revoke') }}"></ui-button>

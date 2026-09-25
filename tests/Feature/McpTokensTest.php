@@ -4,7 +4,6 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\File;
-use Inertia\Testing\AssertableInertia;
 
 beforeEach(function () {
     config(['statamic.editions.pro' => true, 'cache.default' => 'array']);
@@ -13,20 +12,20 @@ beforeEach(function () {
 
 // Every CP route sits behind Statamic's Authorize middleware, which requires
 // 'access cp' (supers bypass it) — so each user that makes a request needs it
-// in addition to the utility permission under test.
+// in addition to 'access mcp', which Fixtures::makeUser() adds.
 
-it('403s users without the utility permission', function () {
-    $user = Fixtures::makeUser('access cp'); // can enter the CP, has 'access mcp', but NOT the utility permission
+it('403s users without the access mcp permission', function () {
+    $user = Fixtures::makeBareUser('access cp'); // can enter the CP, but lacks 'access mcp'
 
     // The CP exception handler turns AuthorizationException into a 302
     // redirect for HTML requests; only JSON-expecting requests get the raw 403.
     $this->actingAs($user)
-        ->getJson(cp_route('utilities.mcp-tokens'))
+        ->getJson(cp_route('mcp.connections.index'))
         ->assertForbidden();
 });
 
 it('shows a permitted user only their own tokens', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
     $other = Fixtures::makeUser();
 
     $repository = app(TokenRepository::class);
@@ -34,7 +33,7 @@ it('shows a permitted user only their own tokens', function () {
     $repository->issue($other, 'theirs-beta');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('mine-alpha', false)
         ->assertDontSee('theirs-beta', false);
@@ -47,71 +46,49 @@ it('shows a super admin all tokens with their owners', function () {
     app(TokenRepository::class)->issue($other, 'theirs-beta');
 
     $this->actingAs($super)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('theirs-beta', false)
         ->assertSee($other->email(), false);
 });
 
-// The utility view is compiled as a Vue template at runtime by the CP's
-// dynamic-html-renderer, so Blade's HTML escaping alone is not enough: curly
+// The CP compiles the Connections page as a Vue template at runtime, so
+// Blade's HTML escaping alone is not enough: curly
 // braces in user input survive it and would execute as Vue expressions in the
 // viewer's session (supers see all users' tokens — privilege escalation).
 // Every user-sourced string must render inside a v-pre span.
 it('renders user-controlled token names inertly for the vue runtime compiler', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     app(TokenRepository::class)->issue($user, '{{ 7*7 }}');
 
-    // Assert on the decoded Inertia prop — the raw response JSON-encodes the
-    // HTML with JSON_HEX_TAG, so angle brackets never appear literally in it.
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('utilities/Show')
-            ->where('html', fn ($html) => str_contains((string) $html, '<span v-pre>{{ 7*7 }}</span>')));
+        ->assertSee('<span v-pre>{{ 7*7 }}</span>', false);
 });
 
 it('marks expired tokens as expired', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->travelTo(now()->subDays(60), function () use ($user) {
         app(TokenRepository::class)->issue($user, 'old-token', 30);
     });
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('old-token', false)
         ->assertSee('Expired', false);
 });
 
-it('warns when the user lacks the access mcp permission', function () {
-    $bare = Fixtures::makeBareUser('access cp', 'access mcp_tokens utility');
-
-    $this->actingAs($bare)
-        ->get(cp_route('utilities.mcp-tokens'))
-        ->assertOk()
-        ->assertSee('does not have the', false); // access-mcp warning banner
-});
-
-it('does not warn when the user has the access mcp permission', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
-
-    $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
-        ->assertOk()
-        ->assertDontSee('does not have the', false);
-});
-
 it('hides the token issuing ui in oauth mode', function () {
     config(['statamic.mcp.auth' => 'oauth']);
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertDontSee('Create token', false)
         ->assertDontSee('Authorization: Bearer', false);
@@ -120,10 +97,10 @@ it('hides the token issuing ui in oauth mode', function () {
 it('403s issuance in oauth mode', function () {
     config(['statamic.mcp.auth' => 'oauth']);
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->postJson(cp_route('utilities.mcp-tokens.store'), ['expiry' => 'never'])
+        ->postJson(cp_route('mcp.connections.tokens.store'), ['expiry' => 'never'])
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
@@ -132,14 +109,14 @@ it('403s issuance in oauth mode', function () {
 // Switching a live site to OAuth must not strand the tokens it already issued:
 // they stay listed — and revokable — until they're gone.
 it('lists leftover tokens in oauth mode so they can still be revoked', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     app(TokenRepository::class)->issue($user, 'leftover-alpha');
 
     config(['statamic.mcp.auth' => 'oauth']);
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('leftover-alpha', false)
         ->assertSee('Revoke', false);
@@ -148,38 +125,37 @@ it('lists leftover tokens in oauth mode so they can still be revoked', function 
 it('hides the token panel entirely in oauth mode when no tokens are left', function () {
     config(['statamic.mcp.auth' => 'oauth']);
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertDontSee('leftover tokens', false)
         ->assertDontSee('No tokens yet', false);
 });
 
 it('warns about plain http and shows the endpoint in the help panel', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     // Test requests hit http://localhost, so the insecure warning must show
-    // and the endpoint must be printed for the help panel. The Blade HTML is
-    // JSON-encoded into the Inertia payload, so slashes arrive as \/ escapes.
+    // and the endpoint must be printed for the help panel.
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('unencrypted', false)
-        ->assertSee('http:\/\/localhost\/mcp\/statamic', false)
+        ->assertSee('http://localhost/mcp/statamic', false)
         ->assertSee('mcpServers', false);
 });
 
 it('issues a token for the current user and shows the secret exactly once', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
-    $response = $this->actingAs($user)->post(cp_route('utilities.mcp-tokens.store'), [
+    $response = $this->actingAs($user)->post(cp_route('mcp.connections.tokens.store'), [
         'name' => 'cp-issued',
         'expiry' => '30',
     ]);
 
-    $response->assertRedirect(cp_route('utilities.mcp-tokens'));
+    $response->assertRedirect(cp_route('mcp.connections.index'));
 
     $records = app(TokenRepository::class)->all();
 
@@ -192,69 +168,69 @@ it('issues a token for the current user and shows the secret exactly once', func
         ->and($record['expires_at'])->not->toBeNull();
 
     // First GET after the redirect: the flashed secret is visible.
-    $this->get(cp_route('utilities.mcp-tokens'))
+    $this->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('mcp_'.array_keys($records)[0].'_', false)
         ->assertSee('ONLY time', false);
 
     // Second GET: the flash is gone — the secret never appears again.
-    $this->get(cp_route('utilities.mcp-tokens'))
+    $this->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertDontSee('mcp_'.array_keys($records)[0].'_', false);
 });
 
 it('rejects an expiry outside the presets', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->from(cp_route('utilities.mcp-tokens'))
-        ->post(cp_route('utilities.mcp-tokens.store'), ['expiry' => '7'])
+        ->from(cp_route('mcp.connections.index'))
+        ->post(cp_route('mcp.connections.tokens.store'), ['expiry' => '7'])
         ->assertSessionHasErrors('expiry');
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
 });
 
 it('rejects a name over 100 characters', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->from(cp_route('utilities.mcp-tokens'))
-        ->post(cp_route('utilities.mcp-tokens.store'), ['name' => str_repeat('x', 101), 'expiry' => 'never'])
+        ->from(cp_route('mcp.connections.index'))
+        ->post(cp_route('mcp.connections.tokens.store'), ['name' => str_repeat('x', 101), 'expiry' => 'never'])
         ->assertSessionHasErrors('name');
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
 });
 
-it('403s issuance without the utility permission', function () {
-    $user = Fixtures::makeUser('access cp'); // CP access but no utility permission
+it('403s issuance without the access mcp permission', function () {
+    $user = Fixtures::makeBareUser('access cp');
 
     $this->actingAs($user)
-        ->postJson(cp_route('utilities.mcp-tokens.store'), ['expiry' => 'never'])
+        ->postJson(cp_route('mcp.connections.tokens.store'), ['expiry' => 'never'])
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
 });
 
 it('flashes old input when the store is busy on issuance', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->mock(TokenRepository::class, function ($mock) {
         $mock->shouldReceive('issue')->andThrow(new LockTimeoutException);
     });
 
     $this->actingAs($user)
-        ->from(cp_route('utilities.mcp-tokens'))
-        ->post(cp_route('utilities.mcp-tokens.store'), [
+        ->from(cp_route('mcp.connections.index'))
+        ->post(cp_route('mcp.connections.tokens.store'), [
             'name' => 'typed-name',
             'expiry' => '30',
         ])
-        ->assertRedirect(cp_route('utilities.mcp-tokens'))
+        ->assertRedirect(cp_route('mcp.connections.index'))
         ->assertSessionHas('error')
         ->assertSessionHasInput('name', 'typed-name');
 });
 
 it('flashes an error when the store is busy on revocation', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->mock(TokenRepository::class, function ($mock) use ($user) {
         $mock->shouldReceive('find')->with('busy-token')->andReturn([
@@ -268,32 +244,32 @@ it('flashes an error when the store is busy on revocation', function () {
     });
 
     $this->actingAs($user)
-        ->from(cp_route('utilities.mcp-tokens'))
-        ->delete(cp_route('utilities.mcp-tokens.destroy', 'busy-token'))
-        ->assertRedirect(cp_route('utilities.mcp-tokens'))
+        ->from(cp_route('mcp.connections.index'))
+        ->delete(cp_route('mcp.connections.tokens.destroy', 'busy-token'))
+        ->assertRedirect(cp_route('mcp.connections.index'))
         ->assertSessionHas('error');
 });
 
 it('lets a user revoke their own token', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $plain = app(TokenRepository::class)->issue($user, 'to-revoke');
 
     $this->actingAs($user)
-        ->delete(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
-        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+        ->delete(cp_route('mcp.connections.tokens.destroy', $plain->tokenId))
+        ->assertRedirect(cp_route('mcp.connections.index'));
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
 });
 
 it("403s revoking another user's token and leaves it intact", function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
     $other = Fixtures::makeUser();
 
     $plain = app(TokenRepository::class)->issue($other, 'not-yours');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->deleteJson(cp_route('mcp.connections.tokens.destroy', $plain->tokenId))
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
@@ -306,27 +282,27 @@ it("lets a super admin revoke anyone's token", function () {
     $plain = app(TokenRepository::class)->issue($other, 'audit-revoke');
 
     $this->actingAs($super)
-        ->delete(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
-        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+        ->delete(cp_route('mcp.connections.tokens.destroy', $plain->tokenId))
+        ->assertRedirect(cp_route('mcp.connections.index'));
 
     expect(app(TokenRepository::class)->all())->toBeEmpty();
 });
 
 it('404s revoking an unknown token id', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', 'nosuchtoken'))
+        ->deleteJson(cp_route('mcp.connections.tokens.destroy', 'nosuchtoken'))
         ->assertNotFound();
 });
 
-it('403s revocation without the utility permission, even for own tokens', function () {
-    $user = Fixtures::makeUser('access cp'); // no utility permission
+it('403s revocation without the access mcp permission, even for own tokens', function () {
+    $user = Fixtures::makeBareUser('access cp');
 
     $plain = app(TokenRepository::class)->issue($user, 'own-but-ungated');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.destroy', $plain->tokenId))
+        ->deleteJson(cp_route('mcp.connections.tokens.destroy', $plain->tokenId))
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toHaveCount(1);

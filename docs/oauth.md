@@ -139,12 +139,12 @@ managed copy.
 
 ## Seeing and disconnecting connections
 
-The **MCP Access** utility (Tools → Utilities) shows one row per connected
-user + client pair, derived live from Passport's tables: client name (from
-dynamic client registration), user, first connected, last token refresh, and
-whether the connection is still usable — a live refresh token counts, since
-the connector can come back without re-consent. Users see and disconnect
-their own connections; supers see everyone's.
+Tools → MCP → **Connections** shows one row per connected user + client
+pair, derived live from Passport's tables: client name (from dynamic client
+registration), user, first connected, last token refresh, and whether the
+connection is still usable — a live refresh token counts, since the connector
+can come back without re-consent. The page opens for anyone with Access MCP.
+Users see and disconnect their own connections; supers see everyone's.
 
 **Disconnect** revokes the pair's access tokens *and* their refresh tokens.
 The connector gets a 401 on its next request and must re-run the OAuth flow

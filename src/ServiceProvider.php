@@ -9,7 +9,7 @@ use Danielgnh\StatamicMcp\Console\Keys;
 use Danielgnh\StatamicMcp\Console\ListTokens;
 use Danielgnh\StatamicMcp\Console\RevokeToken;
 use Danielgnh\StatamicMcp\Console\Setup;
-use Danielgnh\StatamicMcp\CP\McpTokensUtility;
+use Danielgnh\StatamicMcp\CP\McpNav;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
@@ -65,7 +65,7 @@ class ServiceProvider extends AddonServiceProvider
             return;
         }
 
-        McpTokensUtility::register();
+        McpNav::register();
 
         try {
             $this->registerMcpRoutes();

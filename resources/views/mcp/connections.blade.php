@@ -1,16 +1,16 @@
+@extends('statamic::layout')
+@section('title', Statamic::crumb(__('Connections'), __('MCP')))
+
+@section('content')
 {{--
-    The CP renders this view through its dynamic-html-renderer, which compiles
-    the output as a Vue template at runtime. That is why <ui-*> components work
-    here without any build step — and why every user-sourced string must sit
-    inside a v-pre span: curly braces survive Blade's HTML escaping and would
-    otherwise execute as Vue expressions in the viewer's session.
+    The CP compiles this page as a Vue template at runtime. That is why <ui-*>
+    components work here without any build step — and why every user-sourced
+    string must sit inside a v-pre span: curly braces survive Blade's HTML
+    escaping and would otherwise execute as Vue expressions in the viewer's
+    session.
 
     Success/error session flashes surface as CP toasts automatically
     (HandleInertiaRequests), so this view renders no flash banners.
-
-    The utilities/Show wrapper only sets the document title — the visible page
-    header and the width wrapper are each page's own job (core's Email/Cache
-    utilities do the same), hence ui-header and the max-w wrapper here.
     Vertical rhythm comes from ui-panel's built-in bottom margin.
 
     The page shows exactly one auth mode: whichever `statamic.mcp.auth` names.
@@ -20,7 +20,7 @@
 --}}
 <div class="max-w-5xl 3xl:max-w-6xl mx-auto" data-max-width-wrapper>
 
-    <ui-header title="{{ __('MCP Access') }}" icon="key">
+    <ui-header title="{{ __('Connections') }}" icon="key">
         <template #actions>
             <ui-modal title="{{ __('How to connect') }}" icon="info">
                 <template #trigger>
@@ -60,7 +60,7 @@
                         <ui-button variant="primary" icon="plus" text="{{ __('Create token') }}"></ui-button>
                     </template>
 
-                    <form method="POST" action="{{ cp_route('utilities.mcp-tokens.store') }}" class="space-y-4">
+                    <form method="POST" action="{{ cp_route('mcp.connections.tokens.store') }}" class="space-y-4">
                         @csrf
                         <ui-field label="{{ __('Name (optional)') }}" @if ($errors->has('name')) error="{{ $errors->first('name') }}" @endif>
                             <ui-input name="name" maxlength="100" placeholder="{{ __('e.g. claude-code laptop') }}" model-value="{{ old('name') }}"></ui-input>
@@ -83,19 +83,9 @@
         </template>
     </ui-header>
 
-    @if ($lacksAccessMcp || $insecureUrl)
-        <div class="space-y-4 mb-8">
-            @if ($lacksAccessMcp)
-                @if ($oauthMode)
-                    <ui-alert variant="warning" text="{{ __('Your account does not have the "Access MCP" permission — you can complete the sign-in flow, but every request will be denied until an administrator grants it to one of your roles.') }}"></ui-alert>
-                @else
-                    <ui-alert variant="warning" text="{{ __('Your account does not have the "Access MCP" permission — tokens you issue will authenticate but every request will be denied until an administrator grants it to one of your roles.') }}"></ui-alert>
-                @endif
-            @endif
-
-            @if ($insecureUrl)
-                <ui-alert variant="warning" text="{{ __('The MCP endpoint is not HTTPS — credentials travel unencrypted. Set APP_URL to your real https:// site URL.') }}"></ui-alert>
-            @endif
+    @if ($insecureUrl)
+        <div class="mb-8">
+            <ui-alert variant="warning" text="{{ __('The MCP endpoint is not HTTPS — credentials travel unencrypted. Set APP_URL to your real https:// site URL.') }}"></ui-alert>
         </div>
     @endif
 
@@ -143,7 +133,7 @@
                                         @endif
                                     </td>
                                     <td class="text-right">
-                                        <form method="POST" action="{{ cp_route('utilities.mcp-tokens.connections.destroy', [$connection['client_id'], $connection['user_id']]) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Disconnect this client? It will have to re-authorize before it can reconnect.')) }})">
+                                        <form method="POST" action="{{ cp_route('mcp.connections.oauth.destroy', [$connection['client_id'], $connection['user_id']]) }}" onsubmit="return confirm({{ \Illuminate\Support\Js::from(__('Disconnect this client? It will have to re-authorize before it can reconnect.')) }})">
                                             @csrf
                                             @method('DELETE')
                                             <ui-button type="submit" size="sm" variant="danger" text="{{ __('Disconnect') }}"></ui-button>
@@ -162,7 +152,7 @@
              they do, and no new ones can be issued from here. --}}
         @if ($tokens->isNotEmpty())
             <ui-panel heading="{{ $isSuper ? __('Leftover tokens') : __('Your leftover tokens') }}" subheading="{{ __('Issued before OAuth mode was turned on. They are no longer accepted — revoke any you do not plan to come back to.') }}">
-                @include('statamic-mcp::utilities.partials.token-table')
+                @include('statamic-mcp::mcp.partials.token-table')
             </ui-panel>
         @endif
 
@@ -197,10 +187,12 @@
                     </div>
                 </ui-card>
             @else
-                @include('statamic-mcp::utilities.partials.token-table')
+                @include('statamic-mcp::mcp.partials.token-table')
             @endif
         </ui-panel>
 
     @endif
 
 </div>
+
+@endsection

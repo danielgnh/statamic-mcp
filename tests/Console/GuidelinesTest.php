@@ -1,8 +1,9 @@
 <?php
 
-use Danielgnh\StatamicMcp\Support\GuidelinesSet;
+use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Fieldset;
@@ -48,51 +49,122 @@ function pageBuilder(): void
     }
 }
 
-it('creates the guidelines global set with its blueprint', function () {
+it('points to the guidelines page', function () {
     Fixtures::site();
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('Created  the guidelines global set.')
-        ->expectsOutputToContain('Open it in the Control Panel under Globals')
-        ->assertExitCode(0);
-
-    expect(GlobalSet::find('guidelines')?->blueprint()?->fields()->all()->keys()->all())->toBe(['site', 'resources']);
+    expect(guidelinesOutput())->toContain('under Tools → MCP → Guidelines.')
+        ->toContain(cp_route('mcp.guidelines.edit'));
 });
 
-it('never recreates the set, so what admins wrote stays', function () {
+it('moves the guidelines out of the 0.6.0 global set and deletes the set', function () {
     Fixtures::site();
 
-    app(GuidelinesSet::class)->create();
+    Fixtures::legacyGuidelinesSet(['en' => [
+        'site' => 'Friendly, never salesy.',
+        'resources' => [['id' => 'a', 'type' => 'resource', 'enabled' => true, 'collections' => ['blog'], 'guidelines' => 'Every post ends with a question.']],
+    ]]);
 
-    GlobalSet::find('guidelines')->makeLocalization('en')->data(['site' => 'Friendly, never salesy.'])->save();
+    expect(guidelinesOutput())->toContain('Moved  the guidelines from the guidelines global set to Tools → MCP → Guidelines.');
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('The guidelines global set already exists.')
-        ->assertExitCode(0);
+    $guidelines = app(AgentGuidelines::class);
 
-    expect(app(GuidelinesSet::class)->site())->toBe('Friendly, never salesy.');
+    expect($guidelines->site())->toBe('Friendly, never salesy.')
+        ->and($guidelines->for('collections', 'blog'))->toBe('Every post ends with a question.')
+        ->and(GlobalSet::find('guidelines'))->toBeNull()
+        ->and(Blueprint::find('globals.guidelines'))->toBeNull();
 });
 
-it('creates the set under the handle in config', function () {
+it('moves the set named by the old guidelines config key', function () {
     Fixtures::site();
 
     config(['statamic.mcp.guidelines' => 'agent_rules']);
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('Created  the agent_rules global set.')
-        ->assertExitCode(0);
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']], 'agent_rules');
 
-    expect(GlobalSet::find('agent_rules'))->not->toBeNull();
+    expect(guidelinesOutput())->toContain('from the agent_rules global set');
+
+    expect(app(AgentGuidelines::class)->site())->toBe('Friendly, never salesy.')
+        ->and(GlobalSet::find('agent_rules'))->toBeNull();
 });
 
-it('does not count the guidelines set itself as a page builder', function () {
+it('leaves a guidelines set with other fields alone, since it is the site content', function () {
     Fixtures::site();
 
-    app(GuidelinesSet::class)->create();
+    Blueprint::make('guidelines')->setNamespace('globals')->setContents(['tabs' => ['main' => ['sections' => [['fields' => [
+        ['handle' => 'site', 'field' => ['type' => 'text']],
+        ['handle' => 'brand_colors', 'field' => ['type' => 'text']],
+    ]]]]]])->save();
+    GlobalSet::make('guidelines')->title('Brand guidelines')->save();
+    GlobalSet::find('guidelines')->makeLocalization('en')->data(['site' => 'Our brand book.'])->save();
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('No page builder blocks found.')
-        ->assertExitCode(0);
+    expect(guidelinesOutput())->not->toContain('global set from 0.6.0');
+
+    expect(GlobalSet::find('guidelines'))->not->toBeNull()
+        ->and(app(AgentGuidelines::class)->values())->toBe([]);
+});
+
+it('still moves the set after a save with nothing in it on the new page', function () {
+    Fixtures::site();
+
+    app(AgentGuidelines::class)->save(['site' => null, 'resources' => []]);
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']]);
+
+    expect(guidelinesOutput())->toContain('Moved  the guidelines');
+
+    expect(app(AgentGuidelines::class)->site())->toBe('Friendly, never salesy.');
+});
+
+it('keeps the set when the guidelines page already has guidelines', function () {
+    Fixtures::site();
+
+    app(AgentGuidelines::class)->save(['site' => 'Written on the new page.']);
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']]);
+
+    expect(Str::squish(guidelinesOutput()))->toContain('already has guidelines, so agents no longer read the guidelines global set from 0.6.0.');
+
+    expect(app(AgentGuidelines::class)->site())->toBe('Written on the new page.')
+        ->and(GlobalSet::find('guidelines'))->not->toBeNull();
+});
+
+it('keeps the set when its text would run as template code in addon settings', function () {
+    Fixtures::site();
+
+    Fixtures::legacyGuidelinesSet(['en' => [
+        'resources' => [['id' => 'a', 'type' => 'resource', 'collections' => ['blog'], 'guidelines' => 'End with {{ partial:cta }}.']],
+    ]]);
+
+    expect(Str::squish(guidelinesOutput()))->toContain('The guidelines global set from 0.6.0 stays, and agents keep reading it: its text contains');
+
+    expect(app(AgentGuidelines::class)->values())->toBe([])
+        ->and(GlobalSet::find('guidelines'))->not->toBeNull();
+});
+
+it('copies the guidelines but keeps the set when its other sites hold text', function () {
+    Fixtures::multisite();
+
+    Fixtures::legacyGuidelinesSet([
+        'en' => ['site' => 'Friendly, never salesy.'],
+        'de' => ['site' => 'Freundlich, nie werblich.'],
+    ]);
+
+    expect(Str::squish(guidelinesOutput()))->toContain('Copied the guidelines from the guidelines global set')
+        ->toContain('The set stays: its other sites hold text too');
+
+    expect(app(AgentGuidelines::class)->site())->toBe('Friendly, never salesy.')
+        ->and(GlobalSet::find('guidelines'))->not->toBeNull();
+});
+
+it('deletes the set when its other sites hold nothing', function () {
+    Fixtures::multisite();
+
+    Fixtures::legacyGuidelinesSet([
+        'en' => ['site' => 'Friendly, never salesy.'],
+        'de' => ['site' => null, 'resources' => []],
+    ]);
+
+    expect(guidelinesOutput())->toContain('Moved  the guidelines');
+
+    expect(GlobalSet::find('guidelines'))->toBeNull();
 });
 
 it('lists blocks without instructions once, under the blueprints that share them', function () {

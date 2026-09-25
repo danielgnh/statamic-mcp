@@ -25,8 +25,6 @@ return [
 
     'per_page' => 25,
 
-    'guidelines' => 'guidelines',
-
     'uploads' => [
         'max_size' => 10240,
         'source_allowlist' => null,

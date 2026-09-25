@@ -2,10 +2,13 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
-use Danielgnh\StatamicMcp\Support\GuidelinesSet;
+use Danielgnh\StatamicMcp\Rules\WithoutTemplateSyntax;
+use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Illuminate\Console\Command;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection as SupportCollection;
+use Illuminate\Support\Facades\Route;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
@@ -15,13 +18,15 @@ use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Globals\GlobalSet as GlobalSetInstance;
+use Statamic\Globals\Variables;
 use Symfony\Component\Console\Terminal;
 
 /**
- * Creates the guidelines global set agents read (never a second time) and
- * lists page builder blocks without instructions, which agents only know by
+ * Lists page builder blocks without instructions, which agents only know by
  * name until they look one up. Only resources exposed in
- * statamic.mcp.resources count.
+ * statamic.mcp.resources count. First it moves the guidelines a 0.6.0 site
+ * kept in a global set to Tools → MCP → Guidelines.
  */
 class Guidelines extends Command
 {
@@ -29,27 +34,87 @@ class Guidelines extends Command
 
     protected $signature = 'statamic:mcp:guidelines';
 
-    protected $description = 'Create the guidelines global set for AI agents and list page builder blocks without instructions';
+    protected $description = 'List page builder blocks without instructions, and move 0.6.0 guidelines to Tools → MCP';
 
-    public function handle(GuidelinesSet $guidelines): int
+    public function handle(AgentGuidelines $guidelines): int
     {
-        if ($guidelines->create()) {
-            $this->line("  <info>Created</info>  the {$guidelines->handle()} global set.");
-            $this->line($this->wrap("Open it in the Control Panel under Globals to write the site's voice and how its entries are put together.", 2));
-        } else {
-            $this->line("  The {$guidelines->handle()} global set already exists.");
+        $this->moveLeftoverSet($guidelines);
+
+        $this->line($this->wrap("Guidelines for agents, the site's voice and how its entries are put together, are written in the Control Panel under Tools → MCP → Guidelines.", 2));
+
+        if (Route::has('statamic.cp.mcp.guidelines.edit')) {
+            $this->line('  '.cp_route('mcp.guidelines.edit'));
         }
 
         $this->line('');
 
-        $this->reportBlocks($guidelines);
+        $this->reportBlocks();
 
         return self::SUCCESS;
     }
 
-    protected function reportBlocks(GuidelinesSet $guidelines): void
+    /**
+     * Moves the values only into empty guidelines, and only when Statamic can
+     * load them from addon settings as written. The set goes after they are
+     * saved, unless another site of it holds text, which 0.6.0 never read.
+     */
+    protected function moveLeftoverSet(AgentGuidelines $guidelines): void
     {
-        $blocks = $this->blueprints($guidelines)
+        $set = $guidelines->leftoverSet();
+
+        if (! $set instanceof GlobalSetInstance) {
+            return;
+        }
+
+        $handle = $set->handle();
+
+        if (! $guidelines->isEmpty()) {
+            $this->line($this->wrap("Tools → MCP → Guidelines already has guidelines, so agents no longer read the {$handle} global set from 0.6.0. Delete it under Globals once nothing in it is missing.", 2));
+            $this->line('');
+
+            return;
+        }
+
+        $values = $guidelines->leftoverValues();
+
+        if (collect(Arr::flatten($values))->contains(fn (mixed $value) => is_string($value) && preg_match(WithoutTemplateSyntax::PATTERN, $value) === 1)) {
+            $this->line($this->wrap("The {$handle} global set from 0.6.0 stays, and agents keep reading it: its text contains {{ }}, an Antlers or Blade component tag, or @props, which Statamic would run as template code in addon settings. Describe those tags in words, then run this command again.", 2));
+            $this->line('');
+
+            return;
+        }
+
+        $guidelines->save($values);
+
+        if ($this->otherSitesHaveText($set)) {
+            $this->line("  <info>Copied</info>  the guidelines from the {$handle} global set to Tools → MCP → Guidelines.");
+            $this->line($this->wrap('The set stays: its other sites hold text too, which 0.6.0 never read. Copy what you need, then delete the set under Globals.', 2));
+            $this->line('');
+
+            return;
+        }
+
+        $blueprint = $set->blueprint();
+        $set->delete();
+        $blueprint?->delete();
+
+        $this->line("  <info>Moved</info>  the guidelines from the {$handle} global set to Tools → MCP → Guidelines.");
+        $this->line($this->wrap('The set and its blueprint are deleted.', 2));
+        $this->line('');
+    }
+
+    protected function otherSitesHaveText(GlobalSetInstance $set): bool
+    {
+        $first = (string) $set->sites()->first();
+
+        return $set->localizations()
+            ->reject(fn (Variables $variables) => $variables->locale() === $first)
+            ->contains(fn (Variables $variables) => $variables->data()->filter(fn (mixed $value) => filled($value))->isNotEmpty());
+    }
+
+    protected function reportBlocks(): void
+    {
+        $blocks = $this->blueprints()
             ->flatMap(fn (Blueprint $blueprint) => collect($this->blocksIn($blueprint->fields()->all()))
                 ->map(fn (array $block) => [...$block, 'blueprint' => (string) $blueprint->fullyQualifiedHandle()]))
             ->reject(fn (array $block) => $block['hidden']);
@@ -156,11 +221,9 @@ class Guidelines extends Command
     }
 
     /**
-     * The guidelines set itself is not content, so its rows are no blocks.
-     *
      * @return SupportCollection<int, Blueprint>
      */
-    protected function blueprints(GuidelinesSet $guidelines): SupportCollection
+    protected function blueprints(): SupportCollection
     {
         $blueprints = [];
 
@@ -177,9 +240,7 @@ class Guidelines extends Command
         }
 
         foreach ($this->exposed('globals', GlobalSet::all()->map->handle()->all()) as $handle) {
-            if ($handle !== $guidelines->handle()) {
-                $blueprints[] = GlobalSet::findByHandle($handle)?->blueprint();
-            }
+            $blueprints[] = GlobalSet::findByHandle($handle)?->blueprint();
         }
 
         return collect($blueprints)->filter()->values();

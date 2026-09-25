@@ -30,13 +30,51 @@ called out here explicitly.
 - `blueprints_get` reports `localizable` on every field of a multisite install:
   only such a field can hold a value of its own in a localization, so an agent
   knows what it can translate before it writes.
+- **Tools → MCP** in the Control Panel, with its pages listed under it in the
+  sidebar the way Utilities lists its own. **Guidelines** holds what 0.6.0
+  kept in a global set: the site's voice and tone, and rows on how a
+  collection's entries are put together. Only super admins can open it.
+  **Connections** is the page that was the MCP Access utility.
 
 ### Changed
 
+- **Breaking:** guidelines for agents moved out of the `guidelines` global set
+  into Statamic's addon settings, which the Guidelines page edits:
+  `resources/addons/statamic-mcp.yaml`, or the database when the site keeps
+  addon settings there. The set sat in Globals next to the site's content, so
+  editors took it for website content, and any agent acting as a super admin
+  could rewrite what every other agent reads through `globals_update`. Agents
+  still read the guidelines through `statamic_overview` and `blueprints_get`,
+  in the same shape, but no tool writes them now. Rows switched off in the
+  page's replicator no longer reach agents. Statamic runs addon settings
+  through Antlers when it loads them, so the page rejects `{{`, Antlers and
+  Blade component tags, and `@props`.
+
+  To upgrade, run `php please mcp:guidelines` once where the content lives:
+  locally on a flat-file site, then commit `resources/addons/statamic-mcp.yaml`
+  and the deleted set files, or in production when globals live in a
+  database. It copies the set to the Guidelines page and deletes the set and
+  its blueprint. Until then, agents keep reading the set and the page shows a
+  notice. The command keeps the set and says why when the page already has
+  guidelines, when the set's text holds template code, or when its other
+  sites hold text, which 0.6.0 never read. Then delete `guidelines` from a
+  published `config/statamic/mcp.php`. See `docs/guidelines.md`.
+- **Breaking:** the MCP Access utility is gone. Its page is Tools → MCP →
+  Connections, which needs the Access MCP permission instead of the utility's
+  own. Roles with Access MCP alone can now issue their own tokens there, the
+  way OAuth mode already let them connect. Published copies of
+  `utilities/mcp-tokens.blade.php` no longer apply.
 - `entries_update` refuses a value of its own on a localization for a field the
   blueprint does not mark localizable, as the Control Panel does: it shows such
   a field read-only with the origin's value. The error names the origin entry
   to change instead and the blueprint to mark the field localizable in.
+- `mcp:guidelines` no longer creates a global set. It moves a 0.6.0 set as
+  described above, prints the Guidelines page's URL, and lists the blocks
+  without instructions as before.
+
+### Removed
+
+- The `guidelines` config key, which named the global set.
 
 ## [0.6.0] - 2026-09-25
 

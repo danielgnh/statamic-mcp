@@ -3,7 +3,6 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Illuminate\Support\Facades\Schema;
-use Inertia\Testing\AssertableInertia;
 use Laravel\Passport\Passport;
 
 beforeEach(function () {
@@ -21,41 +20,41 @@ it('404s disconnecting when oauth is not ready', function () {
     Schema::drop('oauth_refresh_tokens');
     Schema::drop('oauth_access_tokens');
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.connections.destroy', ['client-x', (string) $user->id()]))
+        ->deleteJson(cp_route('mcp.connections.oauth.destroy', ['client-x', (string) $user->id()]))
         ->assertNotFound();
 });
 
-it('403s disconnecting without the utility permission', function () {
-    $user = Fixtures::makeUser('access cp'); // no utility permission
+it('403s disconnecting without the access mcp permission', function () {
+    $user = Fixtures::makeBareUser('access cp');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.connections.destroy', ['client-x', (string) $user->id()]))
+        ->deleteJson(cp_route('mcp.connections.oauth.destroy', ['client-x', (string) $user->id()]))
         ->assertForbidden();
 });
 
 it("403s disconnecting another user's connection before revealing whether it exists", function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.connections.destroy', ['client-x', 'someone-else']))
+        ->deleteJson(cp_route('mcp.connections.oauth.destroy', ['client-x', 'someone-else']))
         ->assertForbidden();
 });
 
 // ── Real disconnect behavior ──
 
 it('lets a user disconnect their own connection, revoking access and refresh tokens', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $client = OAuthFixtures::client();
     $tokenId = OAuthFixtures::accessToken((string) $user->id(), $client);
     $refreshId = OAuthFixtures::refreshToken($tokenId);
 
     $this->actingAs($user)
-        ->delete(cp_route('utilities.mcp-tokens.connections.destroy', [$client, (string) $user->id()]))
-        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+        ->delete(cp_route('mcp.connections.oauth.destroy', [$client, (string) $user->id()]))
+        ->assertRedirect(cp_route('mcp.connections.index'));
 
     $tokenModel = Passport::tokenModel();
     $refreshModel = Passport::refreshTokenModel();
@@ -72,8 +71,8 @@ it("lets a super admin disconnect anyone's connection", function () {
     $tokenId = OAuthFixtures::accessToken((string) $other->id(), $client);
 
     $this->actingAs($super)
-        ->delete(cp_route('utilities.mcp-tokens.connections.destroy', [$client, (string) $other->id()]))
-        ->assertRedirect(cp_route('utilities.mcp-tokens'));
+        ->delete(cp_route('mcp.connections.oauth.destroy', [$client, (string) $other->id()]))
+        ->assertRedirect(cp_route('mcp.connections.index'));
 
     $tokenModel = Passport::tokenModel();
 
@@ -81,14 +80,14 @@ it("lets a super admin disconnect anyone's connection", function () {
 });
 
 it("leaves another user's tokens intact when a non-super is 403d", function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
     $other = Fixtures::makeUser();
 
     $client = OAuthFixtures::client();
     $tokenId = OAuthFixtures::accessToken((string) $other->id(), $client);
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.connections.destroy', [$client, (string) $other->id()]))
+        ->deleteJson(cp_route('mcp.connections.oauth.destroy', [$client, (string) $other->id()]))
         ->assertForbidden();
 
     $tokenModel = Passport::tokenModel();
@@ -97,10 +96,10 @@ it("leaves another user's tokens intact when a non-super is 403d", function () {
 });
 
 it('404s disconnecting a pair with no tokens', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->deleteJson(cp_route('utilities.mcp-tokens.connections.destroy', ['no-such-client', (string) $user->id()]))
+        ->deleteJson(cp_route('mcp.connections.oauth.destroy', ['no-such-client', (string) $user->id()]))
         ->assertNotFound();
 });
 
@@ -109,10 +108,10 @@ it('404s disconnecting a pair with no tokens', function () {
 it('hides the connections panel entirely in token mode', function () {
     config(['statamic.mcp.auth' => 'token']);
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertDontSee('Your connections', false);
 });
@@ -123,16 +122,16 @@ it('shows a doctor remedy instead of the table when oauth mode is not ready', fu
     Schema::drop('oauth_refresh_tokens');
     Schema::drop('oauth_access_tokens');
 
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('mcp:doctor', false);
 });
 
 it('shows a permitted user only their own connections', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
     $other = Fixtures::makeUser();
 
     // Client names must not collide with static page copy ("Claude Code",
@@ -143,7 +142,7 @@ it('shows a permitted user only their own connections', function () {
     OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('Zebra Desktop'));
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('Acme Team Laptop', false)
         ->assertDontSee('Zebra Desktop', false);
@@ -156,21 +155,21 @@ it("shows a super admin everyone's connections with their emails", function () {
     OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('Zebra Desktop'));
 
     $this->actingAs($super)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('Zebra Desktop', false)
         ->assertSee($other->email(), false);
 });
 
 it('marks dead connections as expired', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     OAuthFixtures::accessToken((string) $user->id(), OAuthFixtures::client(), [
         'expires_at' => now()->subHour(),
     ]);
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('Expired', false);
 });
@@ -178,24 +177,22 @@ it('marks dead connections as expired', function () {
 it('renders DCR-supplied client names inertly for the vue runtime compiler', function () {
     // Client names arrive from dynamic client registration — attacker-
     // controlled input rendered in supers' sessions. Same v-pre contract as
-    // token names (see McpTokensUtilityTest).
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    // token names (see McpTokensTest).
+    $user = Fixtures::makeUser('access cp');
 
     OAuthFixtures::accessToken((string) $user->id(), OAuthFixtures::client('{{ 7*7 }}'));
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
-            ->component('utilities/Show')
-            ->where('html', fn ($html) => str_contains((string) $html, '<span v-pre>{{ 7*7 }}</span>')));
+        ->assertSee('<span v-pre>{{ 7*7 }}</span>', false);
 });
 
 it('shows an empty state when oauth is ready but nothing has connected', function () {
-    $user = Fixtures::makeUser('access cp', 'access mcp_tokens utility');
+    $user = Fixtures::makeUser('access cp');
 
     $this->actingAs($user)
-        ->get(cp_route('utilities.mcp-tokens'))
+        ->get(cp_route('mcp.connections.index'))
         ->assertOk()
         ->assertSee('No connections yet', false);
 });

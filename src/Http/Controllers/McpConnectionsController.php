@@ -8,8 +8,8 @@ use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 
 /**
- * Route-level authorization is Statamic's 'can:access mcp_tokens utility'
- * middleware, same as McpTokensController. destroy() is the only action —
+ * Route-level authorization is the 'can:access mcp' middleware, same as
+ * McpTokensController. destroy() is the only action —
  * connections are created solely by the OAuth consent flow itself.
  */
 class McpConnectionsController extends CpController
@@ -26,6 +26,6 @@ class McpConnectionsController extends CpController
 
         abort_unless($connections->disconnect($userId, $clientId), 404);
 
-        return redirect()->to(cp_route('utilities.mcp-tokens'))->with('success', __('Connection disconnected.'));
+        return redirect()->to(cp_route('mcp.connections.index'))->with('success', __('Connection disconnected.'));
     }
 }
