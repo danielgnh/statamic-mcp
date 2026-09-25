@@ -507,3 +507,31 @@ it('refuses a new slug whose URL another entry already has', function () {
 
     expect(Entry::find($team)->slug())->toBe('team');
 });
+
+it('gives a page a slug another page has under a different parent, as the CP does', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $products = Fixtures::page('products', 'Products');
+    $services = Fixtures::page('services', 'Services');
+    $overview = Fixtures::page('overview', 'Overview');
+    $summary = Fixtures::page('summary', 'Summary');
+
+    storePagesTree([
+        ['entry' => $products, 'children' => [['entry' => $overview]]],
+        ['entry' => $services, 'children' => [['entry' => $summary]]],
+    ]);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $summary, 'data' => [], 'slug' => 'overview'])
+        ->assertOk()
+        ->assertSee('"slug":"overview"')
+        ->assertSee('"url":"/services/overview"');
+
+    Stache::clear();
+
+    expect(Entry::find($summary)->slug())->toBe('overview')
+        ->and(Entry::find($summary)->url())->toBe('/services/overview')
+        ->and(Entry::find($overview)->url())->toBe('/products/overview');
+});

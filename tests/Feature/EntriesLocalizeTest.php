@@ -253,7 +253,7 @@ it('validates its own values with the ones it inherits', function () {
     expect($origin->in('de')->data()->has('title'))->toBeFalse();
 });
 
-it('refuses a slug another entry of the target site already has', function () {
+it('refuses a URL another entry of the target site already has', function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
@@ -267,7 +267,30 @@ it('refuses a slug another entry of the target site already has', function () {
 
     Server::actingAs(localizer())
         ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de'])
-        ->assertHasErrors(["slug 'hello' already exists in collection 'blog' (site 'de') as entry '{$taken->id()}', which is not a localization of this entry — pass another slug"]);
+        ->assertHasErrors(["URL '/blog/hello' already belongs to entry '{$taken->id()}' in collection 'blog' — pick another slug"]);
+
+    expect($origin->in('de'))->toBeNull();
+});
+
+it('localizes a page under a parent that has the same slug in the target site', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $rental = Fixtures::page('rental', 'Rental');
+    $delivery = Fixtures::page('delivery', 'Delivery');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $rental, 'children' => [['entry' => $delivery]]]])->save();
+
+    // The German parent's slug happens to be the one its child keeps.
+    $rentalDe = tap(Entry::find($rental)->makeLocalization('de')->slug('delivery'))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $delivery, 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"slug":"delivery"')
+        ->assertSee('"url":"/de/delivery/delivery"')
+        ->assertSee(sprintf('"parent":"%s"', $rentalDe->id()));
 });
 
 it('rejects published and date, which a localization never takes', function () {

@@ -111,7 +111,7 @@ class EntriesLocalize extends Tool
 
         $this->ensureAuthorUnchanged($user, $origin, $data);
 
-        $slug = $this->resolveSlug($validated['slug'] ?? $origin->slug(), $collectionHandle, $site);
+        $slug = $this->resolveSlug($validated['slug'] ?? $origin->slug(), $site);
 
         // The localization validates with the values it inherits under its
         // own, as in the CP's form, so a required field it inherits never
@@ -210,30 +210,15 @@ class EntriesLocalize extends Tool
 
     /**
      * Entry::save() re-normalizes the slug with the site's language, so the
-     * collision check runs on what will be persisted, as entries_create does.
+     * blueprint's rules and the URL check run on what will be persisted, as
+     * in entries_create.
      */
-    private function resolveSlug(string $slug, string $collection, string $site): string
+    private function resolveSlug(string $slug, string $site): string
     {
         $normalized = Str::slug($slug, '-', Site::get($site)->lang());
 
         if ($normalized === '') {
             throw new ToolException(sprintf("slug '%s' normalizes to an empty string — pass a usable slug", $slug));
-        }
-
-        $existing = Entry::query()
-            ->where('collection', $collection)
-            ->where('slug', $normalized)
-            ->where('site', $site)
-            ->first();
-
-        if ($existing) {
-            throw new ToolException(sprintf(
-                "slug '%s' already exists in collection '%s' (site '%s') as entry '%s', which is not a localization of this entry — pass another slug",
-                $normalized,
-                $collection,
-                $site,
-                $existing->id(),
-            ));
         }
 
         return $normalized;

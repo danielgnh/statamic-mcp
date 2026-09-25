@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Term;
 
@@ -54,6 +55,45 @@ it('finds an entry by collection and slug', function () {
         ->tool(EntriesGet::class, ['collection' => 'blog', 'slug' => 'hello-world'])
         ->assertOk()
         ->assertSee($entry->id());
+});
+
+it('lists the entries that share a slug instead of picking one', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $products = Fixtures::page('products', 'Products');
+    $services = Fixtures::page('services', 'Services');
+    $first = Fixtures::page('overview', 'Overview');
+    $second = Fixtures::page('overview', 'Overview');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([
+        ['entry' => $products, 'children' => [['entry' => $first]]],
+        ['entry' => $services, 'children' => [['entry' => $second]]],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['collection' => 'pages', 'slug' => 'overview'])
+        ->assertHasErrors()
+        ->assertSee("2 entries of collection 'pages' have slug 'overview' in site 'en' — pass the id of the one you mean: ")
+        ->assertSee("{$first} (/products/overview)")
+        ->assertSee("{$second} (/services/overview)");
+});
+
+it('checks the view permission before it looks an entry up by slug', function () {
+    Fixtures::site();
+    Fixtures::pages();
+
+    Fixtures::page('overview', 'Overview');
+    Fixtures::page('overview', 'Overview');
+
+    $user = Fixtures::makeUser(); // 'access mcp' only
+
+    // The ambiguity error would list both entries to someone who may not see them.
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['collection' => 'pages', 'slug' => 'overview'])
+        ->assertHasErrors(["requires 'view pages entries' — grant it to a role of {$user->email()} in the Control Panel"])
+        ->assertDontSee('/overview');
 });
 
 it('errors when neither id nor collection + slug is given', function () {

@@ -36,7 +36,7 @@ class EntriesGet extends Tool
         return [
             'id' => $schema->string()->description('Entry id. Either id, or collection + slug, is required.'),
             'collection' => $schema->string()->description('Collection handle — used with slug when id is omitted.'),
-            'slug' => $schema->string()->description('Entry slug — used with collection when id is omitted.'),
+            'slug' => $schema->string()->description('Entry slug — used with collection when id is omitted. When several entries of the site share it, as pages under different parents can, the call fails and lists their ids and URLs.'),
             'site' => $schema->string()->description("Site handle. With an id it must match that entry's own site (omit it otherwise); with collection + slug it selects the localization. Defaults to the default site."),
             'format' => $schema->string()->enum(['raw', 'augmented'])->description('raw (default): $entry->data(), writable. augmented: rendered values, display only — never writable.'),
             'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation.'),
@@ -195,16 +195,32 @@ class EntriesGet extends Tool
 
         $site = $this->resolveSite($request, $user);
 
-        $entry = Entry::query()
+        // Before the lookup: its error can list other entries of the collection.
+        $this->ensurePermission($user, "view {$collection} entries");
+
+        $entries = Entry::query()
             ->where('collection', $collection)
             ->where('slug', $slug)
             ->where('site', $site)
-            ->first();
+            ->get();
 
-        if (! $entry) {
+        if ($entries->isEmpty()) {
             throw new ToolException(sprintf("entry '%s/%s' not found in site '%s'", $collection, $slug, $site));
         }
 
-        return $entry;
+        // CP parity: only the URL is unique, so pages under different parents
+        // can share a slug — never answer with an arbitrary one of them.
+        if ($entries->count() > 1) {
+            throw new ToolException(sprintf(
+                "%d entries of collection '%s' have slug '%s' in site '%s' — pass the id of the one you mean: %s",
+                $entries->count(),
+                $collection,
+                $slug,
+                $site,
+                $entries->map(fn (EntryContract $entry) => sprintf('%s (%s)', $entry->id(), $entry->url() ?? 'no URL'))->implode(', '),
+            ));
+        }
+
+        return $entries->first();
     }
 }

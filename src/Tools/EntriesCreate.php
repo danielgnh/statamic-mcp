@@ -107,7 +107,7 @@ class EntriesCreate extends Tool
 
         $data = $this->withAuthor($user, $blueprint, $collectionHandle, $data);
 
-        $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $collectionHandle, $site);
+        $slug = $this->resolveSlug($validated['slug'] ?? null, $data, $site);
 
         // The injected date field is required — satisfy it with the resolved
         // Carbon, which preProcess() turns into the date picker's shape. Slug
@@ -209,7 +209,7 @@ class EntriesCreate extends Tool
     /**
      * @param  array<string, mixed>  $data
      */
-    private function resolveSlug(?string $slug, array $data, string $collection, string $site): string
+    private function resolveSlug(?string $slug, array $data, string $site): string
     {
         if (! $slug) {
             $title = $data['title'] ?? null;
@@ -222,28 +222,13 @@ class EntriesCreate extends Tool
         }
 
         // Entry::save() re-normalizes through Routable::slug() with the site's
-        // language — run the exact same call here so the collision check sees
-        // what will actually be persisted (and Über → ueber under de, CP parity).
+        // language — run the exact same call here so the blueprint's rules and
+        // the URL check see what will actually be persisted (and Über → ueber
+        // under de, CP parity).
         $slug = Str::slug($slug, '-', Site::get($site)->lang());
 
         if ($slug === '') {
             throw new ToolException('could not derive a slug from the title — pass slug explicitly');
-        }
-
-        $existing = Entry::query()
-            ->where('collection', $collection)
-            ->where('slug', $slug)
-            ->where('site', $site)
-            ->first();
-
-        if ($existing) {
-            throw new ToolException(sprintf(
-                "slug '%s' already exists in collection '%s' (site '%s') as entry '%s' — use entries_update to modify it",
-                $slug,
-                $collection,
-                $site,
-                $existing->id(),
-            ));
         }
 
         return $slug;

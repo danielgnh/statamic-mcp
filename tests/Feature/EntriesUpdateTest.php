@@ -351,7 +351,7 @@ it('still requires the data key to be present', function () {
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });
 
-it('rejects a slug colliding with another entry, but never with itself', function () {
+it('refuses a slug whose URL another entry has, but never its own', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
@@ -363,8 +363,14 @@ it('rejects a slug colliding with another entry, but never with itself', functio
     )->save();
 
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Hello World'], 'slug' => 'taken'])
-        ->assertHasErrors(["slug 'taken' already exists in collection 'blog' (site 'en') as entry '{$other->id()}'"]);
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed'], 'slug' => 'taken'])
+        ->assertHasErrors(["URL '/blog/taken' already belongs to entry '{$other->id()}' in collection 'blog' — pick another slug"]);
+
+    // Refused before the entry changed, in this request's Stache as well.
+    $unchanged = Entry::find($entry->id());
+
+    expect($unchanged->slug())->toBe('hello-world')
+        ->and($unchanged->get('title'))->toBe('Hello World');
 
     // Its own slug (even un-normalized) is not a collision — it's a no-op.
     Server::actingAs(Fixtures::makeUser('edit blog entries'))
@@ -582,7 +588,7 @@ it('creates a local override when re-sending an inherited value', function () {
     expect(Entry::find($localization->id())->data()->has('hero_image'))->toBeTrue();
 });
 
-it('scopes slug collisions to the localization site', function () {
+it('checks the URL of a new slug in the localization site only', function () {
     Fixtures::multisite();
     Fixtures::tags();
     Fixtures::blog();
@@ -601,16 +607,16 @@ it('scopes slug collisions to the localization site', function () {
         Entry::make()->collection('blog')->slug('besetzt')->locale('de')->data(['title' => 'Besetzt'])->published(true)
     )->save();
 
-    // 'greetings' exists only in en — no collision for the de localization.
+    // /blog/greetings is taken only in en — free for the de localization.
     Server::actingAs(Fixtures::makeSuper())
         ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Hallo'], 'slug' => 'greetings'])
         ->assertOk()
         ->assertSee('"slug":"greetings"');
 
-    // 'besetzt' exists in de — collision, naming the de entry.
+    // /blog/besetzt is taken in de — refused, naming the de entry.
     Server::actingAs(Fixtures::makeSuper())
         ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Hallo'], 'slug' => 'besetzt'])
-        ->assertHasErrors(["slug 'besetzt' already exists in collection 'blog' (site 'de') as entry '{$taken->id()}'"]);
+        ->assertHasErrors(["URL '/blog/besetzt' already belongs to entry '{$taken->id()}' in collection 'blog' — pick another slug"]);
 });
 
 it('rejects an empty date instead of silently ignoring it', function () {

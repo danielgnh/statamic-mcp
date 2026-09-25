@@ -15,6 +15,22 @@ called out here explicitly.
   next to their email, which links to the user. Rows of a deleted user still
   show its ID.
 
+### Fixed
+
+- `entries_create`, `entries_update`, and `entries_localize` accept a slug
+  that another entry of the collection already has in that site, as the
+  Control Panel does. Only the URL has to be unique, so a structured
+  collection can hold `/products/overview` and `/services/overview`, and a
+  collection without a route can hold two entries with the same slug. The
+  tools refused the second one before, so an agent had to pick another slug,
+  and that slug ended up in the page's URL. A URL another entry of the site
+  already has is still refused, and a blueprint whose slug field sets
+  `unique_entry_value` still keeps slugs unique.
+- `entries_get` by collection + slug is an error when several entries of the
+  site share the slug, and the error names each one with its id and URL so the
+  agent can pass the id. Before, it returned one of them, which could be the
+  wrong page. The lookup now checks the collection's view permission first.
+
 ## [0.7.0] - 2026-09-25
 
 ### Added
