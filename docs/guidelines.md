@@ -172,6 +172,40 @@ therefore refuses text that contains `{{`, an Antlers or Blade component tag
 such as `<s:nav>` or `<x-card>`, or `@props`, `@aware`, or `@cascade`. Describe
 such a tag in words instead.
 
+## Coming from 0.6.0
+
+0.6.0 kept these guidelines in a global set called `guidelines`. After the
+update, agents keep reading that set until you move it:
+
+```bash
+php please mcp:guidelines
+```
+
+The command copies the set's values to the Guidelines page, then deletes the
+set and its blueprint. Run it where the content lives: locally on a flat-file
+site, then commit the new `resources/addons/statamic-mcp.yaml` along with the
+deleted set files, or in production when globals and addon settings live in a
+database. The command finds the set through the old `guidelines` key in
+`config/statamic/mcp.php`, so delete that key afterwards.
+
+Until you run it, the Guidelines page shows a notice. The command leaves the
+set in place and says why when:
+
+- The Guidelines page already has guidelines. Agents read the page from then
+  on, so delete the set under Globals once nothing in it is missing.
+- The set's text contains template code that Statamic would run. Describe those
+  tags in words in the set, then run the command again.
+- The set's other sites hold text, which 0.6.0 never read. The command still
+  copies the first site's guidelines. Copy what you need from the others, then
+  delete the set.
+
+A `guidelines` set with fields other than `site` and `resources` is the site's
+own content, and the command never touches it.
+
+Coming from 0.5.0, paste `resources/mcp/guidelines/site.md` into the Site field
+and each collection file into a row naming its collection, then delete
+`resources/mcp/guidelines`.
+
 ## `mcp:guidelines`
 
 ```bash
@@ -179,7 +213,8 @@ php please mcp:guidelines
 ```
 
 The command says where the guidelines are written and lists the blocks that
-have no instructions.
+have no instructions. On a site coming from 0.6.0, it moves the old global set
+first, as described above.
 
 ```
   Guidelines for agents, the site's voice and how its entries are put

@@ -49,6 +49,16 @@ called out here explicitly.
   page's replicator no longer reach agents. Statamic runs addon settings
   through Antlers when it loads them, so the page rejects `{{`, Antlers and
   Blade component tags, and `@props`.
+
+  To upgrade, run `php please mcp:guidelines` once where the content lives:
+  locally on a flat-file site, then commit `resources/addons/statamic-mcp.yaml`
+  and the deleted set files, or in production when globals live in a
+  database. It copies the set to the Guidelines page and deletes the set and
+  its blueprint. Until then, agents keep reading the set and the page shows a
+  notice. The command keeps the set and says why when the page already has
+  guidelines, when the set's text holds template code, or when its other
+  sites hold text, which 0.6.0 never read. Then delete `guidelines` from a
+  published `config/statamic/mcp.php`. See `docs/guidelines.md`.
 - **Breaking:** the MCP Access utility is gone. Its page is Tools → MCP →
   Connections, which needs the Access MCP permission instead of the utility's
   own. Roles with Access MCP alone can now issue their own tokens there, the
@@ -58,8 +68,9 @@ called out here explicitly.
   blueprint does not mark localizable, as the Control Panel does: it shows such
   a field read-only with the origin's value. The error names the origin entry
   to change instead and the blueprint to mark the field localizable in.
-- `mcp:guidelines` no longer creates a global set. It prints the Guidelines
-  page's URL and lists the blocks without instructions as before.
+- `mcp:guidelines` no longer creates a global set. It moves a 0.6.0 set as
+  described above, prints the Guidelines page's URL, and lists the blocks
+  without instructions as before.
 
 ### Removed
 

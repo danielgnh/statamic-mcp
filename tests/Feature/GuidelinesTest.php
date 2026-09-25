@@ -131,3 +131,34 @@ it('serves statamic_overview without guidelines when the settings fail to load',
         ->assertOk()
         ->assertDontSee('"guidelines":');
 });
+
+// A 0.6.0 site keeps its guidelines in a global set until mcp:guidelines moves
+// them, and agents must not lose them in between.
+it('serves the guidelines of a 0.6.0 global set until they are moved', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Fixtures::legacyGuidelinesSet(['en' => [
+        'site' => 'Friendly, never salesy.',
+        'resources' => [row(['blog'], 'Every post ends with a question.')],
+    ]]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"guidelines":"Friendly, never salesy."');
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertSee('"guidelines":"Every post ends with a question."');
+
+    guidelines(['site' => 'Written on the new page.']);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"guidelines":"Written on the new page."')
+        ->assertDontSee('never salesy');
+});

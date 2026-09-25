@@ -126,7 +126,7 @@ The server tells agents to call `statamic_overview` first. It lists the sites an
 php please mcp:guidelines
 ```
 
-The command lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
+The command lists the blocks that still have no instructions. On a site coming from 0.6.0, it first moves the guidelines out of the old global set. [docs/guidelines.md](docs/guidelines.md) covers the details.
 
 ## Adding your own tools
 

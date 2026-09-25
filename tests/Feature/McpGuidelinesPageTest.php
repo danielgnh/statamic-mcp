@@ -74,3 +74,31 @@ it('rejects text Statamic would run as template code, on the field that holds it
 
     expect(app(AgentGuidelines::class)->values())->toBe([]);
 });
+
+it('says agents still read the 0.6.0 global set until mcp:guidelines moves it', function () {
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']]);
+
+    $this->actingAs(Fixtures::makeSuper())
+        ->get(cp_route('mcp.guidelines.edit'))
+        ->assertOk()
+        ->assertSee('Agents still read the guidelines in the guidelines global set', false)
+        ->assertSee('php please mcp:guidelines', false);
+});
+
+it('asks to delete the 0.6.0 global set once this page has guidelines', function () {
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']]);
+    app(AgentGuidelines::class)->save(['site' => 'Written here.']);
+
+    $this->actingAs(Fixtures::makeSuper())
+        ->get(cp_route('mcp.guidelines.edit'))
+        ->assertOk()
+        ->assertSee('agents read this page now', false)
+        ->assertDontSee('Agents still read', false);
+});
+
+it('shows no notice without a 0.6.0 global set', function () {
+    $this->actingAs(Fixtures::makeSuper())
+        ->get(cp_route('mcp.guidelines.edit'))
+        ->assertOk()
+        ->assertDontSee('0.6.0', false);
+});

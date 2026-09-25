@@ -26,6 +26,8 @@ class McpGuidelinesController extends CpController
             'blueprint' => $blueprint->toPublishArray(),
             'values' => $fields->values()->all(),
             'meta' => $fields->meta()->all(),
+            'leftoverSet' => $guidelines->leftoverSet()?->handle(),
+            'agentsReadLeftoverSet' => $guidelines->isEmpty(),
         ]);
     }
 

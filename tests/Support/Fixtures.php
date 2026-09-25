@@ -223,6 +223,29 @@ class Fixtures
             ->save();
     }
 
+    /**
+     * The global set 0.6.0 kept guidelines in, with its blueprint.
+     *
+     * @param  array<string, array<string, mixed>>  $localizations  values keyed by site handle
+     */
+    public static function legacyGuidelinesSet(array $localizations, string $handle = 'guidelines'): void
+    {
+        Blueprint::make($handle)->setNamespace('globals')->setContents(['tabs' => ['main' => ['sections' => [['fields' => [
+            ['handle' => 'site', 'field' => ['type' => 'markdown']],
+            ['handle' => 'resources', 'field' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => ['resource' => ['fields' => [
+                ['handle' => 'collections', 'field' => ['type' => 'collections']],
+                ['handle' => 'guidelines', 'field' => ['type' => 'markdown']],
+            ]]]]]]],
+        ]]]]]])->save();
+
+        $set = GlobalSet::make($handle)->title('Guidelines')->sites(array_fill_keys(array_keys($localizations), null));
+        $set->save();
+
+        foreach ($localizations as $site => $data) {
+            $set->makeLocalization($site)->data($data)->save();
+        }
+    }
+
     // Links entries of the pages collection: call pages() first. Every site
     // gets an empty tree, the way the CP creates one.
     public static function nav(string $handle = 'main', ?int $maxDepth = null, bool $root = false): void

@@ -2,8 +2,11 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
+use Danielgnh\StatamicMcp\Rules\WithoutTemplateSyntax;
+use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Illuminate\Console\Command;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\Route;
 use Statamic\Console\RunsInPlease;
@@ -15,12 +18,15 @@ use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Globals\GlobalSet as GlobalSetInstance;
+use Statamic\Globals\Variables;
 use Symfony\Component\Console\Terminal;
 
 /**
  * Lists page builder blocks without instructions, which agents only know by
  * name until they look one up. Only resources exposed in
- * statamic.mcp.resources count.
+ * statamic.mcp.resources count. First it moves the guidelines a 0.6.0 site
+ * kept in a global set to Tools → MCP → Guidelines.
  */
 class Guidelines extends Command
 {
@@ -28,10 +34,12 @@ class Guidelines extends Command
 
     protected $signature = 'statamic:mcp:guidelines';
 
-    protected $description = 'List page builder blocks without instructions, and say where guidelines for agents are written';
+    protected $description = 'List page builder blocks without instructions, and move 0.6.0 guidelines to Tools → MCP';
 
-    public function handle(): int
+    public function handle(AgentGuidelines $guidelines): int
     {
+        $this->moveLeftoverSet($guidelines);
+
         $this->line($this->wrap("Guidelines for agents, the site's voice and how its entries are put together, are written in the Control Panel under Tools → MCP → Guidelines.", 2));
 
         if (Route::has('statamic.cp.mcp.guidelines.edit')) {
@@ -43,6 +51,65 @@ class Guidelines extends Command
         $this->reportBlocks();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Moves the values only into empty guidelines, and only when Statamic can
+     * load them from addon settings as written. The set goes after they are
+     * saved, unless another site of it holds text, which 0.6.0 never read.
+     */
+    protected function moveLeftoverSet(AgentGuidelines $guidelines): void
+    {
+        $set = $guidelines->leftoverSet();
+
+        if (! $set instanceof GlobalSetInstance) {
+            return;
+        }
+
+        $handle = $set->handle();
+
+        if (! $guidelines->isEmpty()) {
+            $this->line($this->wrap("Tools → MCP → Guidelines already has guidelines, so agents no longer read the {$handle} global set from 0.6.0. Delete it under Globals once nothing in it is missing.", 2));
+            $this->line('');
+
+            return;
+        }
+
+        $values = $guidelines->leftoverValues();
+
+        if (collect(Arr::flatten($values))->contains(fn (mixed $value) => is_string($value) && preg_match(WithoutTemplateSyntax::PATTERN, $value) === 1)) {
+            $this->line($this->wrap("The {$handle} global set from 0.6.0 stays, and agents keep reading it: its text contains {{ }}, an Antlers or Blade component tag, or @props, which Statamic would run as template code in addon settings. Describe those tags in words, then run this command again.", 2));
+            $this->line('');
+
+            return;
+        }
+
+        $guidelines->save($values);
+
+        if ($this->otherSitesHaveText($set)) {
+            $this->line("  <info>Copied</info>  the guidelines from the {$handle} global set to Tools → MCP → Guidelines.");
+            $this->line($this->wrap('The set stays: its other sites hold text too, which 0.6.0 never read. Copy what you need, then delete the set under Globals.', 2));
+            $this->line('');
+
+            return;
+        }
+
+        $blueprint = $set->blueprint();
+        $set->delete();
+        $blueprint?->delete();
+
+        $this->line("  <info>Moved</info>  the guidelines from the {$handle} global set to Tools → MCP → Guidelines.");
+        $this->line($this->wrap('The set and its blueprint are deleted.', 2));
+        $this->line('');
+    }
+
+    protected function otherSitesHaveText(GlobalSetInstance $set): bool
+    {
+        $first = (string) $set->sites()->first();
+
+        return $set->localizations()
+            ->reject(fn (Variables $variables) => $variables->locale() === $first)
+            ->contains(fn (Variables $variables) => $variables->data()->filter(fn (mixed $value) => filled($value))->isNotEmpty());
     }
 
     protected function reportBlocks(): void

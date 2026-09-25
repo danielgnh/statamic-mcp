@@ -6,7 +6,9 @@ use Danielgnh\StatamicMcp\Rules\WithoutTemplateSyntax;
 use Statamic\Contracts\Addons\Settings;
 use Statamic\Facades\Addon;
 use Statamic\Facades\Blueprint;
+use Statamic\Facades\GlobalSet;
 use Statamic\Fields\Blueprint as BlueprintInstance;
+use Statamic\Globals\GlobalSet as GlobalSetInstance;
 
 /**
  * Guidelines for agents live in the addon's settings, under the guidelines
@@ -59,9 +61,47 @@ class AgentGuidelines
         $this->settings()->set('guidelines', $values)->save();
     }
 
+    /**
+     * Neither a site text nor a row, even after a Save with nothing in it.
+     */
+    public function isEmpty(): bool
+    {
+        return $this->isBlank($this->values());
+    }
+
     public function blueprint(): BlueprintInstance
     {
         return Blueprint::make('mcp_guidelines')->setContents($this->contents());
+    }
+
+    /**
+     * The global set 0.6.0 kept guidelines in, while one is left: the set the
+     * old config key names, with a blueprint of exactly the two guideline
+     * fields. A set by that name with other fields is the site's own.
+     */
+    public function leftoverSet(): ?GlobalSetInstance
+    {
+        $set = GlobalSet::find((string) config('statamic.mcp.guidelines', 'guidelines'));
+
+        if (! $set instanceof GlobalSetInstance) {
+            return null;
+        }
+
+        $fields = $set->blueprint()?->fields()->all()->keys()->sort()->values()->all();
+
+        return $fields === ['resources', 'site'] ? $set : null;
+    }
+
+    /**
+     * What the 0.6.0 set holds for its first site, the only one 0.6.0 read.
+     *
+     * @return array<string, mixed>
+     */
+    public function leftoverValues(): array
+    {
+        $set = $this->leftoverSet();
+
+        return $set?->in((string) $set->sites()->first())?->data()->only(['site', 'resources'])->all() ?? [];
     }
 
     private function settings(): Settings
@@ -70,6 +110,8 @@ class AgentGuidelines
     }
 
     /**
+     * Until mcp:guidelines moves a 0.6.0 site's guidelines, agents keep
+     * reading them from the global set, so updating never leaves them without.
      * A settings file edited by hand can fail to load; agents then work
      * without guidelines rather than not at all.
      *
@@ -77,7 +119,19 @@ class AgentGuidelines
      */
     private function forAgents(): array
     {
-        return rescue(fn () => $this->values(), []);
+        return rescue(function () {
+            $values = $this->values();
+
+            return $this->isBlank($values) ? $this->leftoverValues() : $values;
+        }, []);
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    private function isBlank(array $values): bool
+    {
+        return blank(data_get($values, 'site')) && blank(data_get($values, 'resources'));
     }
 
     private function text(mixed $value): ?string
