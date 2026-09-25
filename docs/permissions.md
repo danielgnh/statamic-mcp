@@ -14,7 +14,10 @@ always Statamic's native permission system. Four gates, in order:
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Reading a navigation takes
-   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Moving an entry with
+   `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Reading a form's
+   submissions takes `view {form} form submissions` and deleting one takes
+   `delete {form} form submissions`; `configure forms` grants both on every form, as
+   Statamic's form policies do. Moving an entry with
    `parent` on `entries_update` also takes `reorder {handle} entries`. Publish state
    changes only through `entries_publish` and `entries_unpublish`, both gated on
    `publish {handle} entries`, the same permission the CP checks. `entries_preview`
