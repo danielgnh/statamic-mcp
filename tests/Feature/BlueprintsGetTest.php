@@ -520,6 +520,36 @@ it('denies reading a blueprint the user has no permission to view', function () 
         ->assertHasErrors(["requires 'view blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
 });
 
+it('returns the blueprint of a form, the fields its submissions carry', function () {
+    Fixtures::site();
+    Fixtures::form();
+
+    Server::actingAs(Fixtures::makeUser('view contact form submissions'))
+        ->tool(BlueprintsGet::class, ['type' => 'form', 'handle' => 'contact'])
+        ->assertOk()
+        ->assertSee('"type":"form","handle":"contact","blueprint":"contact","available_blueprints":["contact"]')
+        ->assertSee('"handle":"name","type":"text","required":true')
+        ->assertSee('"handle":"email","type":"text","required":false')
+        ->assertSee('"handle":"message","type":"textarea","required":false')
+        ->assertSee('"handle":"newsletter","type":"toggle","required":false');
+});
+
+it("reads a form blueprint with 'configure forms', and denies it without any form permission", function () {
+    Fixtures::site();
+    Fixtures::form();
+
+    Server::actingAs(Fixtures::makeUser('configure forms'))
+        ->tool(BlueprintsGet::class, ['type' => 'form', 'handle' => 'contact'])
+        ->assertOk()
+        ->assertSee('"type":"form","handle":"contact"');
+
+    $user = Fixtures::makeUser();
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'form', 'handle' => 'contact'])
+        ->assertHasErrors(["requires 'view contact form submissions' — grant it to a role of {$user->email()} in the Control Panel"]);
+});
+
 it('rejects an unknown type via validation', function () {
     Fixtures::site();
 

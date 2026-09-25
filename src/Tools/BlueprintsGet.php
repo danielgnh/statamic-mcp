@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Support\Sets;
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesForms;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
 use InvalidArgumentException;
@@ -12,6 +13,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Site;
@@ -26,20 +28,22 @@ use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global|form) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). For a form, the fields are the keys of its submissions\' data; nothing writes a submission. Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
+    use ResolvesForms;
+
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
             'type' => $schema->string()
-                ->enum(['collection', 'taxonomy', 'global'])
+                ->enum(['collection', 'taxonomy', 'global', 'form'])
                 ->description('Resource type the handle belongs to.')
                 ->required(),
             'handle' => $schema->string()
-                ->description('Collection, taxonomy, or global set handle (see statamic_overview).')
+                ->description('Collection, taxonomy, global set, or form handle (see statamic_overview).')
                 ->required(),
             'blueprint' => $schema->string()
                 ->description("Blueprint handle. Defaults to the resource's first blueprint."),
@@ -52,13 +56,13 @@ class BlueprintsGet extends Tool
     {
         $request->validate(
             [
-                'type' => 'required|string|in:collection,taxonomy,global',
+                'type' => 'required|string|in:collection,taxonomy,global,form',
                 'handle' => 'required|string',
                 'blueprint' => 'nullable|string',
                 'set' => 'nullable|string',
             ],
             [
-                'type.in' => 'type must be one of: collection, taxonomy, global.',
+                'type.in' => 'type must be one of: collection, taxonomy, global, form.',
             ],
         );
 
@@ -70,7 +74,7 @@ class BlueprintsGet extends Tool
         // A blueprint is the field schema for a resource — gate reading it on the
         // same native permission the content read tools require, so an exposed
         // handle the user can't view doesn't leak its shape through this tool.
-        $this->ensurePermission($this->user($request), $this->viewPermission($type, $handle));
+        $this->ensureCanRead($this->user($request), $type, $handle);
 
         $blueprints = $this->blueprintsFor($type, $handle);
 
@@ -156,6 +160,22 @@ class BlueprintsGet extends Tool
     }
 
     /**
+     * Viewing a resource's content gates reading its schema. Statamic's form
+     * policies grant 'configure forms' everything, which the concern mirrors
+     * and a plain permission check would miss.
+     */
+    private function ensureCanRead(UserContract $user, string $type, string $handle): void
+    {
+        if ($type === 'form') {
+            $this->ensureCanViewSubmissions($user, $handle);
+
+            return;
+        }
+
+        $this->ensurePermission($user, $this->viewPermission($type, $handle));
+    }
+
+    /**
      * The native permission that gates viewing this resource's content — and
      * therefore its schema. Mirrors statamic_overview / globals_get: v6 has no
      * 'view {handle} globals', so edit is the only per-set gate for globals.
@@ -189,7 +209,7 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * @return 'collections'|'taxonomies'|'globals'
+     * @return 'collections'|'taxonomies'|'globals'|'forms'
      */
     private function configKey(string $type): string
     {
@@ -197,6 +217,7 @@ class BlueprintsGet extends Tool
             'collection' => 'collections',
             'taxonomy' => 'taxonomies',
             'global' => 'globals',
+            'form' => 'forms',
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
     }
@@ -214,6 +235,7 @@ class BlueprintsGet extends Tool
             'collection' => Collection::findByHandle($handle)?->entryBlueprints() ?? [],
             'taxonomy' => Taxonomy::findByHandle($handle)?->termBlueprints() ?? [],
             'global' => array_filter([GlobalSet::findByHandle($handle)?->blueprint()]),
+            'form' => [$this->findExposedForm($handle)->blueprint()],
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
 
