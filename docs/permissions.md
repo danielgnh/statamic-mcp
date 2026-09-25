@@ -25,7 +25,9 @@ always Statamic's native permission system. Four gates, in order:
    `delete other authors {handle} entries` instead, as in Statamic's own entry policy.
    Moving someone else's entry takes `edit other authors {handle} entries` too, next to
    `reorder {handle} entries`, which has no other-authors variant. An entry with no
-   author counts as someone else's. On multi-site installs every site needs
+   author counts as someone else's. `entries_localize` takes `edit {handle} entries`
+   for the origin entry, as the CP's Localize action does, plus `access {site} site`
+   for the target site. On multi-site installs every site needs
    `access {site} site`, the default site included. Denials name the missing permission
    and the remedy.
 4. **Deletes off by default** — delete tools aren't registered unless you opt in.
@@ -111,3 +113,11 @@ deleting other people's entries also needs `Delete other authors blog entries`.
 that site. Every site is gated, the default site included, so an agent with only
 `Access fr site` can't read or write default-site content, and each denial names the
 missing permission. Site permissions only exist on multi-site installs.
+
+**A translation agent:** `Edit pages entries` plus `Access {site} site` for the source
+site and each target site. `entries_localize` adds a page to a site as a draft that
+inherits every field it doesn't override, and `entries_update` on that page changes
+only the fields the blueprint marks localizable. Leave `Publish entries` off the role
+to have a person take each translation live, or add it so the agent can call
+`entries_publish` itself. Fields that must read the same in every site stay
+non-localizable in the blueprint, and the agent can't change them from a localization.

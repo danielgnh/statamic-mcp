@@ -836,3 +836,31 @@ it('validates a localization with the values it inherits', function () {
         ->and($fresh->get('hero_image'))->toBe('hallo.jpg')
         ->and($fresh->value('title'))->toBe('Hello');
 });
+
+it('refuses a value of its own for a field that is not localizable on a localization', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureFieldHasConfig('hero_image', ['localizable' => false])->save();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello', 'hero_image' => 'hero.jpg'])->published(true)
+    )->save();
+
+    $localization = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+
+    // CP parity: the field is read-only on the localization and shows the
+    // origin's value, so an override there is refused, while the origin
+    // takes it as before.
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $localization->id(), 'data' => ['title' => 'Servus', 'hero_image' => 'hallo.jpg']])
+        ->assertHasErrors(["field hero_image is not localizable, so every site shows the value of its origin entry '{$origin->id()}' — change it there, or turn on Localizable for the field in blueprint 'article' to translate it here"]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['hero_image' => 'hallo.jpg']])
+        ->assertOk();
+
+    expect(Entry::find($localization->id())->get('title'))->toBe('Hallo')
+        ->and(Entry::find($localization->id())->value('hero_image'))->toBe('hallo.jpg');
+});

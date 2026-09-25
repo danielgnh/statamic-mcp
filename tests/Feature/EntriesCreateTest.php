@@ -558,3 +558,35 @@ it("requires 'edit other authors blog entries' to name someone else as author", 
 
     expect(Entry::query()->where('collection', 'blog')->first()->authors()->all())->toBe([$someoneElse]);
 });
+
+it('lists the sites of the collection under localizations, filled where propagate created one', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $user = Fixtures::makeUser('create blog entries', 'access en site', 'access de site');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Alone']])
+        ->assertOk()
+        ->assertSee('"status":"draft"},"de":null}');
+
+    // Statamic's own propagate: Entry::save() makes a localization in every
+    // other site of the collection, and the response shows them.
+    Collection::findByHandle('blog')->propagate(true)->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Everywhere']])
+        ->assertOk();
+
+    $origin = Entry::query()->where('collection', 'blog')->where('slug', 'everywhere')->where('site', 'en')->first();
+    $localization = $origin->in('de');
+
+    expect($localization)->not->toBeNull()
+        ->and($localization->origin()->id())->toBe($origin->id())
+        ->and($localization->published())->toBeFalse();
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Alone']])
+        ->assertHasErrors();
+});

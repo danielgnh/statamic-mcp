@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
+use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\PlacesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
@@ -26,12 +27,13 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site and never creates or moves localizations. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site; entries_localize adds an entry to another site. On a localization, data may only name fields the blueprint marks localizable: every other field shows the origin\'s value in every site, so change it on the origin entry. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
     use AuthorizesEntries;
     use ComparesPatchData;
+    use LocalizesEntries;
     use NormalizesEntryInput;
     use PlacesEntries;
     use ResolvesEntries;
@@ -46,7 +48,7 @@ class EntriesUpdate extends Tool
             'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or parent.')->required(),
             'slug' => $schema->string()->description('New slug.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
-            'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted."),
+            'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted. To add the entry to another site, call entries_localize."),
             'parent' => $schema->string()->description('Entry id to move this entry under, or "" for the top level. Omit it, or send null, to leave the entry where it is.'),
         ];
     }
@@ -101,6 +103,10 @@ class EntriesUpdate extends Tool
 
         $blueprint = $entry->blueprint();
         $this->rejectUnknownKeys($blueprint, $data);
+
+        if ($entry->hasOrigin()) {
+            $this->rejectUnlocalizableFields($entry->origin(), $blueprint, $data);
+        }
 
         $date = $this->resolveDate($validated['date'] ?? null, $entry);
 

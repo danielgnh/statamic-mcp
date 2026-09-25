@@ -590,3 +590,28 @@ it('sends no tabs when no tab or section has instructions', function () {
         ->assertOk()
         ->assertDontSee('"tabs"');
 });
+
+it('says which fields are localizable on a multisite install', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureFieldHasConfig('hero_image', ['localizable' => false])->save();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertSee('"handle":"title","type":"text","required":true,"rules":["required"],"localizable":true')
+        ->assertSee('"handle":"hero_image","type":"text","required":false,"rules":["nullable"],"localizable":false');
+});
+
+it('leaves localizable out on a single-site install', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertDontSee('"localizable"');
+});

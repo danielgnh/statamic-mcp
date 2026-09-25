@@ -8,6 +8,36 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- `entries_localize` adds an entry to another site of its collection, the way
+  the Control Panel's Localize action does. The new entry is a draft
+  localization that inherits every field it does not override, `data` holds
+  its own values such as a translated title and content, and `slug` defaults
+  to the origin's. On a structured collection it joins the target site's tree
+  under the localization of the origin's parent, or at the top level. The
+  origin is the entry passed, or the root entry when the collection's origin
+  behavior is root, as in the Control Panel. It needs the edit permission for
+  the origin entry and access to the target site, and it is registered on
+  multisite installs only. Until now an agent had to send
+  people to the Control Panel to add a page to a second language.
+- `entries_get`, `entries_create`, and `entries_localize` return
+  `localizations` on a collection in more than one site: for each site you can
+  access, the id and status of the entry there, or null where it has none.
+- `statamic_overview` lists each collection's `sites`, `propagate`, and
+  `origin_behavior` on multisite, so an agent knows where `entries_create`
+  already makes a localization in every site.
+- `blueprints_get` reports `localizable` on every field of a multisite install:
+  only such a field can hold a value of its own in a localization, so an agent
+  knows what it can translate before it writes.
+
+### Changed
+
+- `entries_update` refuses a value of its own on a localization for a field the
+  blueprint does not mark localizable, as the Control Panel does: it shows such
+  a field read-only with the origin's value. The error names the origin entry
+  to change instead and the blueprint to mark the field localizable in.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added

@@ -56,11 +56,13 @@ class Fixtures
                 ->routes('/blog/{slug}')
         )->save();
 
+        // Localizable, as the CP's multisite blueprints are: a localization
+        // can only hold its own value for a field marked so.
         Blueprint::makeFromFields([
-            'title' => ['type' => 'text', 'validate' => 'required'],
-            'content' => ['type' => 'bard'],
-            'hero_image' => ['type' => 'text'],
-            'topic' => ['type' => 'terms', 'taxonomies' => ['tags'], 'max_items' => 1],
+            'title' => ['type' => 'text', 'validate' => 'required', 'localizable' => true],
+            'content' => ['type' => 'bard', 'localizable' => true],
+            'hero_image' => ['type' => 'text', 'localizable' => true],
+            'topic' => ['type' => 'terms', 'taxonomies' => ['tags'], 'max_items' => 1, 'localizable' => true],
         ])->setHandle('article')->setNamespace('collections.blog')->save();
     }
 
@@ -118,8 +120,8 @@ class Fixtures
         )->save();
 
         Blueprint::makeFromFields([
-            'title' => ['type' => 'text', 'validate' => 'required'],
-            'slug' => ['type' => 'slug', 'validate' => 'required|max:200'],
+            'title' => ['type' => 'text', 'validate' => 'required', 'localizable' => true],
+            'slug' => ['type' => 'slug', 'validate' => 'required|max:200', 'localizable' => true],
         ])->setHandle('page')->setNamespace('collections.pages')->save();
     }
 

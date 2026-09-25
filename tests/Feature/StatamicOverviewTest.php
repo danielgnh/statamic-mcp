@@ -301,3 +301,21 @@ it('reports date behavior on dated collections and the timezone dates are read i
         ->assertSee('{"handle":"news","title":"News","dated":true,"revisions":false,"blueprints":["story"],"can_create":true,"can_edit":true,"can_publish":true,"date_behavior":{"future":"private","past":"unlisted"}}')
         ->assertSee('"server":{"read_only":false,"deletes":false,"timezone":"Europe/Berlin"}');
 });
+
+it("lists each collection's sites and propagate under multisite", function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"handle":"blog","title":"Blog","dated":false,"revisions":false,"sites":["en","de"],"propagate":false,"origin_behavior":"select","blueprints":["article"]');
+
+    Collection::findByHandle('blog')->propagate(true)->originBehavior('root')->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertSee('"sites":["en","de"],"propagate":true,"origin_behavior":"root","blueprints":["article"]');
+});

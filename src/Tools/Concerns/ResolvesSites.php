@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Collection;
 use Laravel\Mcp\Request;
 use Statamic\Contracts\Auth\User as UserContract;
+use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Facades\Site;
 
 trait ResolvesSites
@@ -52,6 +53,24 @@ trait ResolvesSites
         $this->ensureSiteAccess($user, $site);
 
         return $site;
+    }
+
+    /**
+     * resolveSite() only checks the site exists and is accessible — the
+     * collection itself may not be configured for it.
+     */
+    protected function ensureCollectionInSite(CollectionContract $collection, string $site): void
+    {
+        if ($collection->sites()->contains($site)) {
+            return;
+        }
+
+        throw new ToolException(sprintf(
+            "collection '%s' is not available in site '%s' — available sites: %s",
+            $collection->handle(),
+            $site,
+            $collection->sites()->sort()->implode(', '),
+        ));
     }
 
     /**

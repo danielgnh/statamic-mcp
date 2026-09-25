@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
+use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\PlacesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
@@ -21,10 +22,11 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'. On a collection in more than one site the entry exists in site only: add it to another site with entries_localize. When the collection\'s propagate is on (see statamic_overview), every site gets a localization at once, and the response lists them under localizations.')]
 class EntriesCreate extends Tool
 {
     use AuthorizesEntries;
+    use LocalizesEntries;
     use NormalizesEntryInput;
     use PlacesEntries;
     use ResolvesSites;
@@ -38,7 +40,7 @@ class EntriesCreate extends Tool
             'data' => $schema->object()->description('Raw field values keyed by blueprint field handle. Unknown keys are rejected.')->required(),
             'slug' => $schema->string()->description('URL slug. Generated from data.title when omitted.'),
             'parent' => $schema->string()->description('Entry id of the page to nest the new entry under, on a structured collection. Omit it, or pass "", for the top level.'),
-            'site' => $schema->string()->description('Site handle. Defaults to the default site.'),
+            'site' => $schema->string()->description('Site handle. Defaults to the default site. The entry exists in this site only; entries_localize adds it to others.'),
             'date' => $schema->string()->description('Entry date: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview. Required for dated collections; rejected otherwise.'),
         ];
     }
@@ -86,16 +88,7 @@ class EntriesCreate extends Tool
 
         $revisions = $collection->revisionsEnabled();
 
-        // resolveSite() only checks the site exists and is accessible — the
-        // collection itself may not be configured for it.
-        if (! $collection->sites()->contains($site)) {
-            throw new ToolException(sprintf(
-                "collection '%s' is not available in site '%s' — available sites: %s",
-                $collectionHandle,
-                $site,
-                $collection->sites()->sort()->implode(', '),
-            ));
-        }
+        $this->ensureCollectionInSite($collection, $site);
 
         $tree = $this->placementTree($collection, $site);
 
@@ -184,6 +177,10 @@ class EntriesCreate extends Tool
 
         if ($tree) {
             $payload['parent'] = $parent?->id();
+        }
+
+        if ($localizations = $this->localizations($user, $entry)) {
+            $payload['localizations'] = $localizations;
         }
 
         return $this->json($payload);
