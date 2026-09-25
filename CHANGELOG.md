@@ -8,6 +8,8 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-25
+
 ### Added
 
 - `entries_localize` adds an entry to another site of its collection, the way
@@ -561,7 +563,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.4.1...v0.4.2
