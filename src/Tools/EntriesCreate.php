@@ -86,16 +86,7 @@ class EntriesCreate extends Tool
 
         $revisions = $collection->revisionsEnabled();
 
-        // resolveSite() only checks the site exists and is accessible — the
-        // collection itself may not be configured for it.
-        if (! $collection->sites()->contains($site)) {
-            throw new ToolException(sprintf(
-                "collection '%s' is not available in site '%s' — available sites: %s",
-                $collectionHandle,
-                $site,
-                $collection->sites()->sort()->implode(', '),
-            ));
-        }
+        $this->ensureCollectionInSite($collection, $site);
 
         $tree = $this->placementTree($collection, $site);
 
