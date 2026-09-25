@@ -14,20 +14,20 @@ use Statamic\Http\Controllers\CP\CpController;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Tools → MCP. Every route sits behind 'can:access mcp' (routes/cp.php).
- * Connections lists tokens and OAuth connections: a user's own, or
- * everyone's for a super admin.
+ * Tools → MCP. Every route sits behind 'can:access mcp' (routes/cp.php);
+ * Guidelines has its own controller, Connections lists tokens and OAuth
+ * connections: a user's own, or everyone's for a super admin.
  */
 class McpController extends CpController
 {
     /**
-     * The nav item's target. The sidebar links through Inertia, and
-     * Inertia::location() sends it straight to the Blade page instead of
-     * rendering that page twice.
+     * The nav item's target: the first page this user may open. The sidebar
+     * links through Inertia, and Inertia::location() sends it straight to the
+     * Blade page instead of rendering that page twice.
      */
     public function index(): Response
     {
-        return Inertia::location(cp_route('mcp.connections.index'));
+        return Inertia::location(cp_route(User::current()?->isSuper() ? 'mcp.guidelines.edit' : 'mcp.connections.index'));
     }
 
     public function connections(): View

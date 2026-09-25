@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Http\Controllers\McpConnectionsController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpController;
+use Danielgnh\StatamicMcp\Http\Controllers\McpGuidelinesController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +14,9 @@ if (! config('statamic.mcp.enabled')) {
 
 Route::prefix('mcp')->name('mcp.')->middleware('can:access mcp')->group(function () {
     Route::get('/', [McpController::class, 'index'])->name('index');
+
+    Route::get('guidelines', [McpGuidelinesController::class, 'edit'])->name('guidelines.edit');
+    Route::patch('guidelines', [McpGuidelinesController::class, 'update'])->name('guidelines.update');
 
     Route::get('connections', [McpController::class, 'connections'])->name('connections.index');
     Route::post('connections/tokens', [McpTokensController::class, 'store'])->name('connections.tokens.store');

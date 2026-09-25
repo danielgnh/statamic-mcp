@@ -3,7 +3,8 @@
 `blueprints_get` tells an agent which fields a blueprint has. Guidelines tell it
 how your site uses them: which block opens a page, which never repeats, how
 formal the copy is. Each rule lives in one place: on the block, field, or
-section it is about, or in a global set for everything wider than a blueprint.
+section it is about, or on the Guidelines page for everything wider than a
+blueprint.
 
 ## Block instructions
 
@@ -123,13 +124,11 @@ existing entry to follow, what its page builder usually holds. The Control
 Panel keeps section instructions when someone saves the blueprint there; a
 tab's only survive in a blueprint you edit as YAML.
 
-## The guidelines global set
+## The Guidelines page
 
-Anything that isn't about one field, block, or blueprint goes in a global set
-called `guidelines`, which `mcp:guidelines` creates. The people who run the
-site edit it in the Control Panel under Globals, with no deploy, and an agent
-whose user may edit the set can change it through `globals_update`: an admin
-can ask an agent to rewrite the voice after a week of use. It has two fields:
+Anything that isn't about one field, block, or blueprint goes on Tools → MCP →
+Guidelines in the Control Panel. Only super admins can open it, because what
+agents read there shapes everything they write. It has two fields:
 
 - `site`: voice and tone, words to use or avoid, how formal to be, rules that
   hold for every collection. `statamic_overview` returns it, so every agent
@@ -138,20 +137,40 @@ can ask an agent to rewrite the voice after a week of use. It has two fields:
   entries are put together: which blocks come first, which never repeat, how
   many a page usually has, page shapes to copy with a named entry for each.
   `blueprints_get` returns the rows naming the requested collection or
-  taxonomy, in their order, with every blueprint of it.
+  taxonomy, in their order, with every blueprint of it. A row switched off is
+  left out.
 
 Never restate a field, block, or section there. A rule about one field belongs
 in that field's `instructions`, which agents already get and editors already
-see, and a copy in the global set goes stale the first time the blueprint
+see, and a copy on the Guidelines page goes stale the first time the blueprint
 changes.
 
-The set is read from its first site. Agents get the rows for a collection only
-when they may read that collection's blueprint; `site` goes to every agent.
-Keep both short, because agents receive them each time they read the overview
-or a whole blueprint.
+Agents get the rows for a collection only when they may read that collection's
+blueprint; `site` goes to every agent. Keep both short, because agents receive
+them each time they read the overview or a whole blueprint. No tool writes
+them: agents read the page, and super admins edit it.
 
-To keep the guidelines in a set with another handle, set `guidelines` in
-`config/statamic/mcp.php`.
+The page saves to Statamic's addon settings, which is
+`resources/addons/statamic-mcp.yaml`, or the database when the site keeps addon
+settings there. In the file, both fields sit under a `guidelines` key:
+
+```yaml
+guidelines:
+  site: 'Friendly and plain. Never salesy.'
+  resources:
+    -
+      id: t7CijX3yyRNtAzC69ygDW
+      type: resource
+      enabled: true
+      collections:
+        - pages
+      guidelines: 'Open every page with a Hero block, then one Text block. Follow bike-rental-nazare.'
+```
+
+Statamic runs addon settings through Antlers each time it loads them. The page
+therefore refuses text that contains `{{`, an Antlers or Blade component tag
+such as `<s:nav>` or `<x-card>`, or `@props`, `@aware`, or `@cascade`. Describe
+such a tag in words instead.
 
 ## `mcp:guidelines`
 
@@ -159,13 +178,13 @@ To keep the guidelines in a set with another handle, set `guidelines` in
 php please mcp:guidelines
 ```
 
-The command creates the `guidelines` global set with its blueprint, never a
-second time, then lists the blocks that have no instructions:
+The command says where the guidelines are written and lists the blocks that
+have no instructions.
 
 ```
-  Created  the guidelines global set.
-  Open it in the Control Panel under Globals to write the site's voice and how
-  its entries are put together.
+  Guidelines for agents, the site's voice and how its entries are put
+  together, are written in the Control Panel under Tools → MCP → Guidelines.
+  https://example.com/cp/mcp/guidelines
 
   11 of 14 blocks have instructions. Agents see only the name of the rest
   until they look one up, so add instructions to each set in its blueprint or
@@ -179,4 +198,4 @@ second time, then lists the blocks that have no instructions:
 ```
 
 A block that several blueprints share through a fieldset is listed once. Hidden
-sets don't count, and neither do the rows of the guidelines set itself.
+sets don't count.

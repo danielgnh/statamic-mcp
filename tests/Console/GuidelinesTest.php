@@ -1,6 +1,5 @@
 <?php
 
-use Danielgnh\StatamicMcp\Support\GuidelinesSet;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Illuminate\Support\Facades\Artisan;
 use Statamic\Facades\Blueprint;
@@ -48,51 +47,11 @@ function pageBuilder(): void
     }
 }
 
-it('creates the guidelines global set with its blueprint', function () {
+it('points to the guidelines page', function () {
     Fixtures::site();
 
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('Created  the guidelines global set.')
-        ->expectsOutputToContain('Open it in the Control Panel under Globals')
-        ->assertExitCode(0);
-
-    expect(GlobalSet::find('guidelines')?->blueprint()?->fields()->all()->keys()->all())->toBe(['site', 'resources']);
-});
-
-it('never recreates the set, so what admins wrote stays', function () {
-    Fixtures::site();
-
-    app(GuidelinesSet::class)->create();
-
-    GlobalSet::find('guidelines')->makeLocalization('en')->data(['site' => 'Friendly, never salesy.'])->save();
-
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('The guidelines global set already exists.')
-        ->assertExitCode(0);
-
-    expect(app(GuidelinesSet::class)->site())->toBe('Friendly, never salesy.');
-});
-
-it('creates the set under the handle in config', function () {
-    Fixtures::site();
-
-    config(['statamic.mcp.guidelines' => 'agent_rules']);
-
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('Created  the agent_rules global set.')
-        ->assertExitCode(0);
-
-    expect(GlobalSet::find('agent_rules'))->not->toBeNull();
-});
-
-it('does not count the guidelines set itself as a page builder', function () {
-    Fixtures::site();
-
-    app(GuidelinesSet::class)->create();
-
-    $this->artisan('statamic:mcp:guidelines')
-        ->expectsOutputToContain('No page builder blocks found.')
-        ->assertExitCode(0);
+    expect(guidelinesOutput())->toContain('under Tools → MCP → Guidelines.')
+        ->toContain(cp_route('mcp.guidelines.edit'));
 });
 
 it('lists blocks without instructions once, under the blueprints that share them', function () {

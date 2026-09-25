@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Tests;
 
 use Danielgnh\StatamicMcp\ServiceProvider;
 use Illuminate\Encryption\Encrypter;
+use Illuminate\Support\Facades\File;
 use Laravel\Mcp\Server\McpServiceProvider;
 use Statamic\Testing\AddonTestCase;
 use Statamic\Testing\Concerns\PreventsSavingStacheItemsToDisk;
@@ -14,6 +15,16 @@ abstract class TestCase extends AddonTestCase
     use PreventsSavingStacheItemsToDisk;
 
     protected string $addonServiceProvider = ServiceProvider::class;
+
+    #[\Override]
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Addon settings (the guidelines) live under resource_path(), inside
+        // testbench's shared skeleton, where the dev-null sandbox doesn't reach.
+        File::delete(resource_path('addons/statamic-mcp.yaml'));
+    }
 
     #[\Override]
     protected function getPackageProviders($app)

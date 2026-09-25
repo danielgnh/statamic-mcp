@@ -117,16 +117,16 @@ The server tells agents to call `statamic_overview` first. It lists the sites an
 
 ## Guidelines for agents
 
-`blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions in the blueprint and, for everything that isn't about one field, in a global set:
+`blueprints_get` tells an agent which fields a blueprint has. To teach it how your site uses them, write instructions in the blueprint and, for everything that isn't about one field, on the Guidelines page:
 
 - Each field, section, and page builder set has an `instructions` key. `blueprints_get` returns it, and editors see the same text in the Control Panel.
-- A `guidelines` global set holds the site's voice and tone, which `statamic_overview` returns, and rows on how a collection's entries are put together, which `blueprints_get` returns with the collection's blueprints. Admins edit it in the Control Panel, and an agent may through `globals_update`.
+- Tools → MCP → Guidelines holds the site's voice and tone, which `statamic_overview` returns, and rows on how a collection's entries are put together, which `blueprints_get` returns with the collection's blueprints. Only super admins can open it.
 
 ```bash
 php please mcp:guidelines
 ```
 
-The command creates the global set once, then lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
+The command lists the blocks that still have no instructions. [docs/guidelines.md](docs/guidelines.md) covers the details.
 
 ## Adding your own tools
 
@@ -183,7 +183,6 @@ This creates `config/statamic/mcp.php`.
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
-| `guidelines` | `guidelines` | The handle of the global set that holds guidelines for agents. |
 
 ## Troubleshooting
 

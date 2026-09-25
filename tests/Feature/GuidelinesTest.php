@@ -3,22 +3,18 @@
 declare(strict_types=1);
 
 use Danielgnh\StatamicMcp\Server;
-use Danielgnh\StatamicMcp\Support\GuidelinesSet;
+use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
-use Statamic\Facades\GlobalSet;
+use Illuminate\Support\Facades\File;
 
 /**
- * @param  array<string, mixed>  $data
+ * @param  array<string, mixed>  $values
  */
-function guidelines(array $data): void
+function guidelines(array $values): void
 {
-    $set = app(GuidelinesSet::class);
-
-    $set->create();
-
-    GlobalSet::find($set->handle())->makeLocalization('en')->data($data)->save();
+    app(AgentGuidelines::class)->save($values);
 }
 
 /**
@@ -28,7 +24,7 @@ function guidelines(array $data): void
  */
 function row(array $collections, string $guidelines, array $taxonomies = []): array
 {
-    return ['type' => 'resource', 'collections' => $collections, 'taxonomies' => $taxonomies, 'guidelines' => $guidelines];
+    return ['type' => 'resource', 'enabled' => true, 'collections' => $collections, 'taxonomies' => $taxonomies, 'guidelines' => $guidelines];
 }
 
 it('returns the site guidelines from statamic_overview', function () {
@@ -52,11 +48,9 @@ it('leaves guidelines out of statamic_overview when the site has none', function
 
     guidelines(['site' => "  \n"]);
 
-    // the set itself is listed under globals; only the guidelines key must be missing
     Server::actingAs(Fixtures::makeSuper())
         ->tool(StatamicOverview::class, [])
         ->assertOk()
-        ->assertSee('"handle":"guidelines"')
         ->assertDontSee('"guidelines":');
 });
 
@@ -93,19 +87,21 @@ it('returns the rows naming the taxonomy from blueprints_get', function () {
         ->assertSee('"guidelines":"Tags are lowercase nouns."');
 });
 
-it('reads the global set named in config', function () {
+it('skips rows that are switched off', function () {
     Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
 
-    config(['statamic.mcp.guidelines' => 'agent_rules']);
+    guidelines(['resources' => [
+        [...row(['blog'], 'An old rule nobody follows any more.'), 'enabled' => false],
+        row(['blog'], 'Every post ends with a question.'),
+    ]]);
 
-    guidelines(['site' => 'Friendly, never salesy.']);
-
-    expect(GlobalSet::find('agent_rules'))->not->toBeNull();
-
-    Server::actingAs(Fixtures::makeSuper())
-        ->tool(StatamicOverview::class, [])
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertOk()
-        ->assertSee('"guidelines":"Friendly, never salesy."');
+        ->assertSee('"guidelines":"Every post ends with a question."')
+        ->assertDontSee('An old rule');
 });
 
 it('keeps guidelines behind the same permission as the blueprint', function () {
@@ -119,4 +115,19 @@ it('keeps guidelines behind the same permission as the blueprint', function () {
         ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
         ->assertHasErrors()
         ->assertDontSee('Secret editorial plan.');
+});
+
+// Statamic renders addon settings through Antlers as it loads them, so a
+// hand-edited file with a broken tag throws. Agents carry on without
+// guidelines rather than losing statamic_overview.
+it('serves statamic_overview without guidelines when the settings fail to load', function () {
+    Fixtures::site();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  site: 'Never type {{ in copy.'\n");
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(StatamicOverview::class, [])
+        ->assertOk()
+        ->assertDontSee('"guidelines":');
 });

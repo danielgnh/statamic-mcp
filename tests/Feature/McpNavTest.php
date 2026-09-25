@@ -28,7 +28,13 @@ function mcpNavChildren(): ?array
     return $item?->children()->map->display()->values()->all();
 }
 
-it('lists connections under tools → mcp for users with access mcp', function () {
+it('lists guidelines and connections under tools → mcp for super admins', function () {
+    $this->actingAs(Fixtures::makeSuper());
+
+    expect(mcpNavChildren())->toBe(['Guidelines', 'Connections']);
+});
+
+it('lists only connections for users with access mcp', function () {
     $this->actingAs(Fixtures::makeUser('access cp'));
 
     expect(mcpNavChildren())->toBe(['Connections']);

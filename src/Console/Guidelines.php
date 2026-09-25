@@ -2,10 +2,10 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
-use Danielgnh\StatamicMcp\Support\GuidelinesSet;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection as SupportCollection;
+use Illuminate\Support\Facades\Route;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\Collection;
 use Statamic\Facades\GlobalSet;
@@ -18,8 +18,7 @@ use Statamic\Fieldtypes\Group;
 use Symfony\Component\Console\Terminal;
 
 /**
- * Creates the guidelines global set agents read (never a second time) and
- * lists page builder blocks without instructions, which agents only know by
+ * Lists page builder blocks without instructions, which agents only know by
  * name until they look one up. Only resources exposed in
  * statamic.mcp.resources count.
  */
@@ -29,27 +28,26 @@ class Guidelines extends Command
 
     protected $signature = 'statamic:mcp:guidelines';
 
-    protected $description = 'Create the guidelines global set for AI agents and list page builder blocks without instructions';
+    protected $description = 'List page builder blocks without instructions, and say where guidelines for agents are written';
 
-    public function handle(GuidelinesSet $guidelines): int
+    public function handle(): int
     {
-        if ($guidelines->create()) {
-            $this->line("  <info>Created</info>  the {$guidelines->handle()} global set.");
-            $this->line($this->wrap("Open it in the Control Panel under Globals to write the site's voice and how its entries are put together.", 2));
-        } else {
-            $this->line("  The {$guidelines->handle()} global set already exists.");
+        $this->line($this->wrap("Guidelines for agents, the site's voice and how its entries are put together, are written in the Control Panel under Tools → MCP → Guidelines.", 2));
+
+        if (Route::has('statamic.cp.mcp.guidelines.edit')) {
+            $this->line('  '.cp_route('mcp.guidelines.edit'));
         }
 
         $this->line('');
 
-        $this->reportBlocks($guidelines);
+        $this->reportBlocks();
 
         return self::SUCCESS;
     }
 
-    protected function reportBlocks(GuidelinesSet $guidelines): void
+    protected function reportBlocks(): void
     {
-        $blocks = $this->blueprints($guidelines)
+        $blocks = $this->blueprints()
             ->flatMap(fn (Blueprint $blueprint) => collect($this->blocksIn($blueprint->fields()->all()))
                 ->map(fn (array $block) => [...$block, 'blueprint' => (string) $blueprint->fullyQualifiedHandle()]))
             ->reject(fn (array $block) => $block['hidden']);
@@ -156,11 +154,9 @@ class Guidelines extends Command
     }
 
     /**
-     * The guidelines set itself is not content, so its rows are no blocks.
-     *
      * @return SupportCollection<int, Blueprint>
      */
-    protected function blueprints(GuidelinesSet $guidelines): SupportCollection
+    protected function blueprints(): SupportCollection
     {
         $blueprints = [];
 
@@ -177,9 +173,7 @@ class Guidelines extends Command
         }
 
         foreach ($this->exposed('globals', GlobalSet::all()->map->handle()->all()) as $handle) {
-            if ($handle !== $guidelines->handle()) {
-                $blueprints[] = GlobalSet::findByHandle($handle)?->blueprint();
-            }
+            $blueprints[] = GlobalSet::findByHandle($handle)?->blueprint();
         }
 
         return collect($blueprints)->filter()->values();

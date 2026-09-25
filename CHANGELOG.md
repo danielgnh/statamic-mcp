@@ -31,11 +31,24 @@ called out here explicitly.
   only such a field can hold a value of its own in a localization, so an agent
   knows what it can translate before it writes.
 - **Tools → MCP** in the Control Panel, with its pages listed under it in the
-  sidebar the way Utilities lists its own. **Connections** is the page that
-  was the MCP Access utility.
+  sidebar the way Utilities lists its own. **Guidelines** holds what 0.6.0
+  kept in a global set: the site's voice and tone, and rows on how a
+  collection's entries are put together. Only super admins can open it.
+  **Connections** is the page that was the MCP Access utility.
 
 ### Changed
 
+- **Breaking:** guidelines for agents moved out of the `guidelines` global set
+  into Statamic's addon settings, which the Guidelines page edits:
+  `resources/addons/statamic-mcp.yaml`, or the database when the site keeps
+  addon settings there. The set sat in Globals next to the site's content, so
+  editors took it for website content, and any agent acting as a super admin
+  could rewrite what every other agent reads through `globals_update`. Agents
+  still read the guidelines through `statamic_overview` and `blueprints_get`,
+  in the same shape, but no tool writes them now. Rows switched off in the
+  page's replicator no longer reach agents. Statamic runs addon settings
+  through Antlers when it loads them, so the page rejects `{{`, Antlers and
+  Blade component tags, and `@props`.
 - **Breaking:** the MCP Access utility is gone. Its page is Tools → MCP →
   Connections, which needs the Access MCP permission instead of the utility's
   own. Roles with Access MCP alone can now issue their own tokens there, the
@@ -45,6 +58,12 @@ called out here explicitly.
   blueprint does not mark localizable, as the Control Panel does: it shows such
   a field read-only with the origin's value. The error names the origin entry
   to change instead and the blueprint to mark the field localizable in.
+- `mcp:guidelines` no longer creates a global set. It prints the Guidelines
+  page's URL and lists the blocks without instructions as before.
+
+### Removed
+
+- The `guidelines` config key, which named the global set.
 
 ## [0.6.0] - 2026-09-25
 
