@@ -15,6 +15,13 @@ called out here explicitly.
   next to their email, which links to the user. Rows of a deleted user still
   show its ID.
 
+### Fixed
+
+- `entries_get` by collection + slug is an error when several entries of the
+  site share the slug, and the error names each one with its id and URL so the
+  agent can pass the id. Before, it returned one of them, which could be the
+  wrong page. The lookup now checks the collection's view permission first.
+
 ## [0.7.0] - 2026-09-25
 
 ### Added
