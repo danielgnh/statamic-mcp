@@ -48,12 +48,13 @@ abstract class TestCase extends AddonTestCase
         $cipher = $app['config']->get('app.cipher', 'AES-256-CBC');
         $app['config']->set('app.key', 'base64:'.base64_encode(Encrypter::generateKey($cipher)));
 
-        // Blueprints and roles/groups are not Stache stores, so PreventsSavingStacheItemsToDisk
+        // Blueprints, form YAML, and roles/groups are not Stache stores, so PreventsSavingStacheItemsToDisk
         // does not redirect them. Point them into the per-test dev-null sandbox too, otherwise
         // fixture saves leak into the shared testbench skeleton in vendor/.
         $fixtures = __DIR__.'/__fixtures__/dev-null';
         $app['config']->set('statamic.system.blueprints_path', $fixtures.'/blueprints');
         $app['config']->set('statamic.system.fieldsets_path', $fixtures.'/fieldsets');
+        $app['config']->set('statamic.forms.forms', $fixtures.'/forms');
         $app['config']->set('statamic.users.repositories.file.paths.roles', $fixtures.'/users/roles.yaml');
         $app['config']->set('statamic.users.repositories.file.paths.groups', $fixtures.'/users/groups.yaml');
     }

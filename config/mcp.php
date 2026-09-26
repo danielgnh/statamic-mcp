@@ -21,6 +21,7 @@ return [
         'globals' => true,
         'asset_containers' => true,
         'navigations' => true,
+        'forms' => true,
     ],
 
     'per_page' => 25,

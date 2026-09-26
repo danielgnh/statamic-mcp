@@ -24,6 +24,9 @@ use Danielgnh\StatamicMcp\Tools\GlobalsUpdate;
 use Danielgnh\StatamicMcp\Tools\NavigationsGet;
 use Danielgnh\StatamicMcp\Tools\NavigationsUpdate;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
+use Danielgnh\StatamicMcp\Tools\SubmissionsDelete;
+use Danielgnh\StatamicMcp\Tools\SubmissionsGet;
+use Danielgnh\StatamicMcp\Tools\SubmissionsList;
 use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Danielgnh\StatamicMcp\Tools\TermsDelete;
 use Danielgnh\StatamicMcp\Tools\TermsGet;
@@ -39,7 +42,7 @@ use Laravel\Mcp\Server\Tool;
  * config('statamic.mcp.server').
  */
 #[Name('Statamic')]
-#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, and navigations you can work with, plus your own permission flags per resource, and the site\'s guidelines for agents when it has them. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). It also lists page builder blocks with their instructions, and the collection\'s guidelines when written; follow both. Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. On multisite an entry belongs to one site: entries_localize adds it to another site as a localization that inherits every field it does not override, and entries_get lists the sites under localizations. To check how a draft or working copy renders, call entries_preview and fetch its URL. To schedule a post, give it a future date and publish it: on collections whose date_behavior.future is private it stays scheduled and Statamic takes it live on that date. Asset uploads are live immediately — set alt text with assets_update after uploading.')]
+#[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, navigations, and forms you can work with, plus your own permission flags per resource, and the site\'s guidelines for agents when it has them. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). It also lists page builder blocks with their instructions, and the collection\'s guidelines when written; follow both. Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. On multisite an entry belongs to one site: entries_localize adds it to another site as a localization that inherits every field it does not override, and entries_get lists the sites under localizations. To check how a draft or working copy renders, call entries_preview and fetch its URL. To schedule a post, give it a future date and publish it: on collections whose date_behavior.future is private it stays scheduled and Statamic takes it live on that date. Asset uploads are live immediately — set alt text with assets_update after uploading. Form submissions come from submissions_list, newest first with each one\'s full data, and submissions_get; blueprints_get with type form names their fields. Nothing edits a submission, as in the Control Panel.')]
 class Server extends McpServer
 {
     /** @var array<int, class-string<Tool>> */
@@ -69,6 +72,9 @@ class Server extends McpServer
         AssetsUpload::class,
         AssetsUpdate::class,
         AssetsDelete::class,
+        SubmissionsList::class,
+        SubmissionsGet::class,
+        SubmissionsDelete::class,
     ];
 
     public int $defaultPaginationLength = 50;

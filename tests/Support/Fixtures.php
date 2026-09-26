@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tests\Support;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
@@ -10,6 +11,7 @@ use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Role;
@@ -288,6 +290,43 @@ class Fixtures
             'icon' => ['type' => 'text', 'validate' => 'max:30'],
             'new_tab' => ['type' => 'toggle'],
         ])->setHandle($handle)->setNamespace('navigation')->save();
+    }
+
+    /**
+     * A form with the blueprint a default install's contact form has.
+     * store: false makes it email and keep nothing, as the CP's toggle does.
+     */
+    public static function form(string $handle = 'contact', bool $store = true): void
+    {
+        $form = Form::make($handle)->title(Str::headline($handle));
+
+        $form->store($store);
+
+        $form->save();
+
+        Blueprint::makeFromFields([
+            'name' => ['type' => 'text', 'validate' => 'required'],
+            'email' => ['type' => 'text', 'input_type' => 'email'],
+            'message' => ['type' => 'textarea'],
+            'newsletter' => ['type' => 'toggle'],
+        ])->setHandle($handle)->setNamespace('forms')->save();
+    }
+
+    /**
+     * A stored submission. Its id is the timestamp Statamic derives the
+     * date from, so two submissions need different seconds. Returns the id.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function submission(string $form, array $data, string $date = '2026-09-25 10:00:00'): string
+    {
+        $submission = Form::find($form)->makeSubmission()
+            ->id((string) Carbon::parse($date, 'UTC')->timestamp)
+            ->data($data);
+
+        $submission->save();
+
+        return (string) $submission->id();
     }
 
     /**

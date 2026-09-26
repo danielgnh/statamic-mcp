@@ -8,6 +8,24 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **Form submissions.** `submissions_list` returns a form's submissions newest
+  first, each with its full data, so a week of contact requests is one call.
+  `search` is the Control Panel's search, a substring match over the text,
+  textarea, and integer fields where `%` and `_` are wildcards, and `since`
+  and `before` bound the date. `submissions_get` returns one submission by form and id, and
+  `submissions_delete` removes one; like the other delete tools it exists
+  only when `deletes` is on. Nothing creates or edits a submission, as in the
+  Control Panel. Reading takes `view {form} form submissions` and deleting
+  takes `delete {form} form submissions`; `configure forms` grants both, the
+  way Statamic's form policies do. `statamic_overview` lists the forms you may
+  read with `stores_submissions` and their submission count, and
+  `blueprints_get` takes `type: form`. The new `resources.forms` config key
+  exposes forms and defaults to `true`. A config you published before this
+  release has no such key, so it exposes no forms until you add
+  `'forms' => true`.
+
 ## [0.7.1] - 2026-09-25
 
 ### Changed

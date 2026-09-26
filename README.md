@@ -4,7 +4,7 @@
 [![Tests](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/danielgnh/statamic-mcp/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
+Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus, and read the submissions your forms collect. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
 
 It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package and works with its 0.8, 0.9, and 1.x releases. This addon is still pre-1.0, so a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
 
@@ -83,7 +83,7 @@ To restrict an agent, give it its own user and role. A drafting agent for the bl
 
 That agent can create blog drafts and edit blog entries. It can't publish, delete, or see any other collection. If the blog blueprint has an author field, it can only edit entries it's an author of, which includes the ones it creates. That's the same rule the Control Panel applies.
 
-Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, asset containers, and navigations MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
+Three config options restrict every user at once. `read_only` hides all write tools. `resources` limits which collections, taxonomies, global sets, asset containers, navigations, and forms MCP can reach. The delete tools don't exist until you set `deletes` to `true`, and the user still needs the matching delete permission.
 
 [docs/permissions.md](docs/permissions.md) has more recipes, including read-only, publishing, and multi-site agents.
 
@@ -110,8 +110,11 @@ Terms, globals, assets, and navigations have no draft state. Writes to them go l
 | Globals | `globals_get`, `globals_update` |
 | Navigation | `navigations_get`, `navigations_update` |
 | Assets | `assets_list`, `assets_get`, `assets_upload`, `assets_update`, `assets_delete` |
+| Forms | `submissions_list`, `submissions_get`, `submissions_delete` |
 
-The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The three delete tools only exist when `deletes` is on, and `entries_localize` only on a multisite install.
+The server tells agents to call `statamic_overview` first. It lists the sites and resources the user can reach and what they may do in each. `blueprints_get` returns a blueprint's fields, the blocks of each page builder field, and a valid example payload. The four delete tools only exist when `deletes` is on, and `entries_localize` only on a multisite install.
+
+Form submissions are read-only, as they are in the Control Panel. `submissions_list` returns a form's submissions newest first with their data, so an agent can summarize a week of contact requests in one call, and `submissions_delete` removes spam or honors an erasure request. Nothing creates or edits a submission through MCP.
 
 [docs/tools.md](docs/tools.md) documents every tool, the upload limits, and how URL uploads block private network addresses.
 
@@ -179,7 +182,7 @@ This creates `config/statamic/mcp.php`.
 | `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. |
 | `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. |
 | `deletes` | `false` | Registers the delete tools. Set with `STATAMIC_MCP_DELETES`. |
-| `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, `asset_containers`, and `navigations`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
+| `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, `asset_containers`, `navigations`, and `forms`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
