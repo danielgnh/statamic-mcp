@@ -466,8 +466,7 @@ called out here explicitly.
 - Documentation only: the changelog history was rebuilt against the real
   release tags (the package never shipped a `v1.0.0`; the old section under
   that name is now `[0.1.0]`, and later work is attributed to the tag that
-  actually contained it), and `RELEASING.md` became a version-agnostic,
-  repeatable checklist with current tool counts and CI shape.
+  actually contained it).
 
 ## [0.3.0] - 2026-07-15
 
@@ -508,14 +507,6 @@ called out here explicitly.
   `PASSPORT_PRIVATE_KEY` / `PASSPORT_PUBLIC_KEY` env vars — the deploy-friendly
   path `mcp:doctor` now recognizes.
 
-### Changed
-
-- `laravel/passport` is now a dev dependency at `^13.0` (previously
-  suggest-only, with a dedicated CI leg installing it) — the separate Passport
-  CI leg is gone; every matrix leg runs the full OAuth coverage, including
-  real signed tokens. For host apps Passport remains an opt-in `suggest`
-  dependency, required only for OAuth mode.
-
 ## [0.1.1] - 2026-07-14
 
 ### Fixed
@@ -530,11 +521,6 @@ called out here explicitly.
   there (null localization guarded on both the single and listing paths).
 - Out-of-range dates in `entries_create` / `entries_update` surface as a clean
   tool error instead of a 500.
-
-### Changed
-
-- Internal refactors: rich-text preview logic extracted into a shared concern;
-  comments that restated the code trimmed.
 
 ## [0.1.0] - 2026-07-13
 
@@ -603,8 +589,6 @@ Initial release.
 - Config: kill switch, route, auth mode, extra middleware (default
   `throttle:60,1`), `read_only`, `deletes` (off by default), per-type
   resource exposure allowlists, `per_page`.
-- CI runs the suite twice: the main leg and a leg with `laravel/passport`
-  installed, activating the OAuth-connection tests that skip in the main leg.
 
 ### Known caveats
 

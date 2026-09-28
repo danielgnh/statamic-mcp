@@ -1,3 +1,5 @@
+![Statamic MCP](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/banner.jpg)
+
 # Statamic MCP
 
 [![Latest Version](https://img.shields.io/packagist/v/danielgnh/statamic-mcp)](https://packagist.org/packages/danielgnh/statamic-mcp)
