@@ -53,7 +53,9 @@ Start Claude Code and ask which collections your site has.
 php please mcp:setup --oauth
 ```
 
-The wizard installs Laravel Passport, sets `STATAMIC_MCP_AUTH=oauth`, runs the migrations, and creates Passport's keys. It asks before each step and finishes by running `mcp:doctor`. Then add `https://example.com/mcp/statamic` as a connector in your client. The client registers itself and sends you through a Statamic login and a consent screen.
+The wizard installs Laravel Passport, sets `STATAMIC_MCP_AUTH=oauth`, runs the migrations, and creates Passport's keys. It asks before each step and finishes by running `mcp:doctor`. Then add `https://example.com/mcp/statamic` as a connector in your client. The client registers itself and sends you through a Statamic login and a consent screen. Tools → MCP → Connections then lists the connection, and Disconnect revokes it.
+
+![Tools → MCP → Connections in the Control Panel](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/connections.png)
 
 Your users stay where they are. File-based users work, and the wizard never touches your user model or `config/auth.php`. Passport only needs a database for its own tables, and SQLite is fine. Connector clients reach your site from the internet, so it needs a public HTTPS URL.
 
@@ -126,6 +128,8 @@ Form submissions are read-only, as they are in the Control Panel. `submissions_l
 
 - Each field, section, and page builder set has an `instructions` key. `blueprints_get` returns it, and editors see the same text in the Control Panel.
 - Tools → MCP → Guidelines holds the site's voice and tone, which `statamic_overview` returns, and rows on how a collection's entries are put together, which `blueprints_get` returns with the collection's blueprints. Only super admins can open it.
+
+![Tools → MCP → Guidelines in the Control Panel](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/guidelines.png)
 
 ```bash
 php please mcp:guidelines
