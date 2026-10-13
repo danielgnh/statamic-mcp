@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Validation\ValidationException;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
@@ -101,7 +102,7 @@ trait ValidatesBlueprintData
             $fields->validator()->withReplacements($replacements)->validate();
         } catch (ValidationException $e) {
             throw new ToolException('validation failed: '.json_encode(
-                $e->errors(),
+                $this->keyedBySetId($e->errors(), $values),
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
             ), $e->getCode(), $e);
         }
@@ -115,6 +116,33 @@ trait ValidatesBlueprintData
             }
 
             return [$handle => rescue(fn () => $field->process()->value(), fn () => throw $this->unprocessable($field), report: false)];
+        })->all();
+    }
+
+    /**
+     * Statamic's validator names a set by its index, page_builder.0.heading;
+     * the agent addresses it by id, so name it page_builder.wKJQXf2s.heading
+     * wherever the item carries one.
+     *
+     * @param  array<string, list<string>>  $errors
+     * @param  array<string, mixed>  $values
+     * @return array<string, list<string>>
+     */
+    private function keyedBySetId(array $errors, array $values): array
+    {
+        $idHandle = Sets::idHandle();
+
+        return collect($errors)->mapWithKeys(function (array $messages, string $key) use ($values, $idHandle) {
+            $lookup = [];
+            $named = [];
+
+            foreach (explode('.', $key) as $segment) {
+                $lookup[] = $segment;
+                $id = ctype_digit($segment) ? data_get($values, implode('.', [...$lookup, $idHandle])) : null;
+                $named[] = is_string($id) && $id !== '' ? $id : $segment;
+            }
+
+            return [implode('.', $named) => $messages];
         })->all();
     }
 
@@ -162,12 +190,23 @@ trait ValidatesBlueprintData
     private function rejectInvalidSets(Replicator $fieldtype, mixed $sets, string $path): void
     {
         if (! is_array($sets) || ! array_is_list($sets)) {
-            throw new ToolException("{$path} must be a list of sets, each an object with a type");
+            throw new ToolException("{$path} must be a list of sets, each an object with a type — an object keyed by set id merges into stored sets only through an update that addresses each enclosing set by id");
         }
 
         foreach ($sets as $index => $set) {
-            $this->rejectInvalidSet($fieldtype, $set, "{$path}.{$index}");
+            $this->rejectInvalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index));
         }
+    }
+
+    /**
+     * Sets are named by their id where they carry one, as the agent and the
+     * validation errors address them, by position otherwise.
+     */
+    private function setLabel(mixed $set, int $index): string
+    {
+        $id = is_array($set) ? data_get($set, Sets::idHandle()) : null;
+
+        return is_string($id) && $id !== '' ? $id : (string) $index;
     }
 
     private function rejectInvalidSet(Replicator $fieldtype, mixed $set, string $path): void
@@ -183,6 +222,10 @@ trait ValidatesBlueprintData
             $message = sprintf("unknown set type '%s' in %s — valid set types: %s", $type, $path, implode(', ', $types));
 
             throw new ToolException(($closest = $this->closest($type, $types)) ? "{$message} — did you mean '{$closest}'?" : $message);
+        }
+
+        if (array_key_exists('enabled', $set) && ! is_bool($set['enabled'])) {
+            throw new ToolException("{$path}.enabled must be true or false");
         }
 
         $this->rejectUnknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', app(RowId::class)->handle()]);
@@ -213,7 +256,7 @@ trait ValidatesBlueprintData
     private function rejectInvalidRows(Grid $fieldtype, mixed $rows, string $path): void
     {
         if (! is_array($rows) || ! array_is_list($rows)) {
-            throw new ToolException("{$path} must be a list of rows");
+            throw new ToolException("{$path} must be a list of rows — an object keyed by row id merges into stored rows only through an update that addresses each enclosing set by id");
         }
 
         foreach ($rows as $index => $row) {
@@ -221,7 +264,7 @@ trait ValidatesBlueprintData
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $this->rejectUnknownFields($fieldtype->fields($index), $row, "{$path}.{$index}", allowed: [app(RowId::class)->handle()]);
+            $this->rejectUnknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [app(RowId::class)->handle()]);
         }
     }
 

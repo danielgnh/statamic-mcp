@@ -2,8 +2,8 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Tools\Concerns\PreviewsRichText;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
+use Danielgnh\StatamicMcp\Tools\Concerns\SelectsFields;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Carbon;
 use Laravel\Mcp\Request;
@@ -15,12 +15,12 @@ use Statamic\Facades\Term;
 use Statamic\Fields\Value;
 
 #[Name('terms_get')]
-#[Description('Get one taxonomy term by id ("{taxonomy}::{slug}") or by taxonomy + slug. format=raw (default) returns the round-trippable data shape for terms_update; format=augmented is read-only — never send augmented values back into terms_update. With site, data holds that site\'s local overrides and inherited holds what comes from the term\'s origin site (the taxonomy\'s first configured site — a term\'s localizations are data overrides within one term). Terms have no publish state, so there is no status. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles).')]
+#[Description('Get one taxonomy term by id ("{taxonomy}::{slug}") or by taxonomy + slug. format=raw (default) returns the round-trippable data shape for terms_update; format=augmented is read-only — never send augmented values back into terms_update. With site, data holds that site\'s local overrides and inherited holds what comes from the term\'s origin site (the taxonomy\'s first configured site — a term\'s localizations are data overrides within one term). Terms have no publish state, so there is no status. Long Bard/rich-text values are truncated to preview objects, and a large Replicator field to an index of its sets, unless requested via fields (an array of top-level field handles, or handle.id for one set, as in entries_get).')]
 #[IsReadOnly]
 class TermsGet extends Tool
 {
-    use PreviewsRichText;
     use ResolvesSites;
+    use SelectsFields;
 
     #[\Override]
     public function schema(JsonSchema $schema): array
@@ -31,7 +31,7 @@ class TermsGet extends Tool
             'slug' => $schema->string()->description('Term slug — use together with taxonomy when id is not passed.'),
             'site' => $schema->string()->description('Site handle — selects the localization view of the term (term ids are the same in every site). Defaults to the default site.'),
             'format' => $schema->string()->enum(['raw', 'augmented'])->description('raw (default): local data overrides, writable. augmented: rendered values, display only — never writable.'),
-            'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation.'),
+            'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation. handle.id, with a set id from the field\'s index, returns one set of a Replicator or Grid field as an object keyed by its id: the shape the update tool merges by id.'),
         ];
     }
 
@@ -80,10 +80,9 @@ class TermsGet extends Tool
         // (Term::defaultLocale()), not necessarily the global default site.
         $originSite = $term->taxonomy()->sites()->first();
         $format = $validated['format'] ?? 'raw';
-        $requestedFields = array_values($validated['fields'] ?? []);
         $blueprint = $localized->blueprint();
 
-        $this->assertKnownFields($requestedFields, $blueprint);
+        [$requestedFields, $selectedSets] = $this->parseFieldSelection(array_values($validated['fields'] ?? []), $blueprint);
 
         $response = [
             'id' => $term->id(),
@@ -124,12 +123,15 @@ class TermsGet extends Tool
             $data = array_intersect_key($data, array_flip($requestedFields));
         }
 
+        $data = $this->withSelectedSets($data, $selectedSets, $blueprint);
         $response['data'] = $this->withRichTextPreviews($data, $blueprint, $requestedFields);
 
         if ($inherited !== null) {
             if ($requestedFields !== []) {
                 $inherited = array_intersect_key($inherited, array_flip($requestedFields));
             }
+
+            $inherited = $this->withSelectedSets($inherited, $selectedSets, $blueprint);
 
             $response['origin_site'] = $originSite;
             $response['inherited'] = $this->withRichTextPreviews($inherited, $blueprint, $requestedFields);

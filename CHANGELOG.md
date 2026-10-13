@@ -8,6 +8,54 @@ called out here explicitly.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-13
+
+### Added
+
+- **Set-scoped writes for page builders.** Editing one block of a long page
+  no longer costs the whole page. `entries_update`, `terms_update`, and
+  `globals_update` take a Replicator or Grid field as an object keyed by set
+  id, the id Statamic stores on every set and row, and merge into just those
+  sets: `{"page_builder": {"wKJQXf2s": {"variant": "centered"}}}` changes
+  one field of one block, and the page is then validated and saved the way
+  the Control Panel saves it, so the other blocks keep their content, blocks
+  someone edited in the Control Panel in between included. Send only the
+  fields you change; a set fetched by id can go back whole, a key its
+  blueprint no longer defines included, as long as that key is unchanged.
+  Inside a set the merge is shallow too: each named field is replaced
+  whole, a Group included. `null` removes a set, a Replicator or Grid nested
+  in a set merges by id the same way, and an unknown id is an error that
+  lists the existing sets with their types. A list still replaces the field
+  wholesale, which is how sets are added, reordered, or given another type.
+  Only what the agent sends is checked for unknown keys; a block that no
+  longer passes its blueprint's rules still blocks the write, as it would in
+  the Control Panel, and the error names it by id. Validation errors name a
+  set by its id, `page_builder.wKJQXf2s.heading`, on every write that sends
+  sets, and `enabled` must be a boolean. `null` clears a page builder; an
+  empty list or object is refused, since PHP cannot tell `{}` from `[]` and
+  `{}` would wipe the page. Bard sets keep their place inside the Bard value
+  and are not addressable this way, and a global set without a blueprint
+  refuses the object form, since nothing says which variable holds sets.
+- **One set at a time from `entries_get` and `terms_get`.** `fields` takes
+  `handle.<id>` and returns that set of a Replicator or Grid field as an
+  object keyed by its id, the shape the update tools merge by id, so a round
+  trip can never drop a sibling block. A blank id, the id `0`, which PHP
+  reads as a list index, or an id that several sets share is an error that
+  points at the whole field.
+
+### Changed
+
+- **Large page builders are read as an index.** `entries_get` and `terms_get`
+  return a Replicator field over 4 KB of JSON as an index of its sets, each
+  with `id`, `type`, `enabled` when it is off, and a short `preview` taken
+  from the set's first text field, under the same `__preview` marker as a
+  long Bard value. Sending the index back is refused with the by-id patch as
+  the remedy. `fields: ["page_builder"]` fetches the whole field as before.
+  Grid fields stay inline whatever their size: their rows read like a table,
+  where an index of ids saves little. Agents that fetched a long page builder
+  and sent it back whole get the index instead and one error that names the
+  cheaper path.
+
 ## [0.7.2] - 2026-09-26
 
 ### Added
@@ -602,7 +650,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.6.0...v0.7.0

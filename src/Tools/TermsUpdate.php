@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
+use Danielgnh\StatamicMcp\Tools\Concerns\MergesSets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -15,11 +16,12 @@ use Statamic\Facades\Term;
 use Statamic\Support\Str;
 
 #[Name('terms_update')]
-#[Description("Update a taxonomy term with a shallow top-level-key merge of raw field data onto that site's local overrides (the terms_get raw shape) — nested structures are replaced wholesale; explicit null clears a field. With site, writes that site's localized data override, creating it transparently on first write. slug renames the term: on the default site this changes the term id (\"{taxonomy}::{slug}\") and moves the yaml file; on other sites it stores a localized slug override. An update that changes nothing is a no-op. Terms have no draft state — changes are live immediately. Never send augmented data.")]
+#[Description("Update a taxonomy term with a shallow top-level-key merge of raw field data onto that site's local overrides (the terms_get raw shape) — nested structures are replaced wholesale; explicit null clears a field. A Replicator or Grid field also takes an object keyed by set id that merges into just those sets, as in entries_update. With site, writes that site's localized data override, creating it transparently on first write. slug renames the term: on the default site this changes the term id (\"{taxonomy}::{slug}\") and moves the yaml file; on other sites it stores a localized slug override. An update that changes nothing is a no-op. Terms have no draft state — changes are live immediately. Never send augmented data.")]
 #[IsIdempotent]
 class TermsUpdate extends Tool
 {
     use ComparesPatchData;
+    use MergesSets;
     use ResolvesSites;
     use ValidatesBlueprintData;
 
@@ -28,7 +30,7 @@ class TermsUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Term id: "{taxonomy}::{slug}", e.g. "tags::php".')->required(),
-            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. May be empty when only changing the slug.')->required(),
+            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets. May be empty when only changing the slug.')->required(),
             'slug' => $schema->string()->description('New slug. On the default site this changes the term id; on other sites it stores a localized slug override.'),
             'site' => $schema->string()->description("Site handle. Defaults to the default site. Writes that site's data override."),
         ];
@@ -106,12 +108,19 @@ class TermsUpdate extends Tool
             unset($patch['slug']);
         }
 
-        $this->rejectUnknownKeys($blueprint, $patch);
-
         // The merge basis is the SITE's local override bucket — the exact
         // round-trippable shape terms_get returns for that site (globals
         // rule: localizations are data overrides within one term).
         $existingLocal = $localized->data()->all();
+
+        // Sets merge into the EFFECTIVE values (origin-site data under the
+        // local overrides), the same values the patch validates against.
+        $effective = [
+            ...$term->in($defaultSite)->data()->all(),
+            ...$existingLocal,
+        ];
+
+        $patch = $this->mergeSetPatches($blueprint, $patch, $effective);
 
         $newSlug = $this->resolveSlug($validated['slug'] ?? null);
         $slugChanged = $newSlug !== null && $newSlug !== $localized->slug();
@@ -130,8 +139,7 @@ class TermsUpdate extends Tool
         // same way the CP does. Terms need no rule replacements (the CP's
         // term update path passes none; the id is the uniqueness key).
         $newLocal = array_merge($existingLocal, $this->processAgainstBlueprint($blueprint, [
-            ...$term->in($defaultSite)->data()->all(),
-            ...$existingLocal,
+            ...$effective,
             ...$patch,
             'slug' => $newSlug ?? $localized->slug(),
         ], array_keys($patch)));

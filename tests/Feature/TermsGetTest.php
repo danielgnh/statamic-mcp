@@ -267,3 +267,35 @@ it('reports updated_at with default-locale fallback and strips it from raw data'
         ->assertDontSee('"updated_at":1700000000')
         ->assertDontSee('"updated_by"');
 });
+
+it('indexes a large replicator field and selects one set by id', function () {
+    Fixtures::site();
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'text' => ['fields' => [['handle' => 'text', 'field' => ['type' => 'textarea']]]],
+        ]]]],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha', 'blocks' => [
+        ['id' => 'text0001', 'type' => 'text', 'enabled' => true, 'text' => str_repeat('lorem ipsum ', 400)],
+        ['id' => 'text0002', 'type' => 'text', 'enabled' => true, 'text' => 'Short'],
+    ]])->save();
+
+    $user = Fixtures::makeUser('view topics terms');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'topics::alpha'])
+        ->assertOk()
+        ->assertSee('"__preview":"2 sets"')
+        ->assertSee('{"id":"text0002","type":"text","preview":"Short"}');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'topics::alpha', 'fields' => ['blocks.text0002']])
+        ->assertOk()
+        ->assertSee('"blocks":{"text0002":{"id":"text0002","type":"text","enabled":true,"text":"Short"}}')
+        ->assertDontSee('text0001');
+});
