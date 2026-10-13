@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="296" viewBox="0 0 760 296" role="img" aria-labelledby="t d" font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
-<title id="t">What one page builder edit costs, before and after set-scoped updates</title>
-<desc id="d">Two bars. Before, fetching the whole field and sending it back, one edit cost 37.8 KB, about 9,450 tokens. After, fetching one set and merging it by id, 5.0 KB, about 1,250 tokens. That is 7.5 times less, averaged over four real pages.</desc>
+<title id="t">What one page builder edit costs: the usual whole-field round trip versus Statamic MCP 0.8</title>
+<desc id="d">Two bars. The usual way, fetching the whole field and sending it back, one edit cost 37.8 KB, about 9,450 tokens. With Statamic MCP 0.8, fetching one set and merging it by id, 5.0 KB, about 1,250 tokens. That is 7.5 times less, averaged over four real pages.</desc>
 <rect x="0.5" y="0.5" width="759" height="295" rx="12" fill="#ffffff" stroke="rgba(11,11,11,0.10)"/>
 <text x="32" y="46" font-size="17" font-weight="600" fill="#0b0b0b">What one page builder edit costs</text>
 <text x="32" y="68" font-size="13" fill="#52514e">Changing one field of one block, averaged over four real pages</text>
-<text x="32" y="120" font-size="13" fill="#52514e">Before, the whole field fetched and sent back</text>
+<text x="32" y="120" font-size="13" fill="#52514e">The usual way, any tool that fetches the whole field and sends it back</text>
 <path d="M32 130 H466.0 a4 4 0 0 1 4 4 V148 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
 <text x="480.0" y="145.5" font-size="13" font-weight="600" fill="#0b0b0b">37.8 KB</text>
 <text x="542.0" y="145.5" font-size="13" fill="#898781">about 9,450 tokens</text>
-<text x="32" y="192" font-size="13" fill="#52514e">After, one set fetched and merged by id</text>
+<text x="32" y="192" font-size="13" fill="#52514e">Statamic MCP 0.8, one set fetched and merged by id</text>
 <path d="M32 202 H86.01737025228539 a4 4 0 0 1 4 4 V220 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
 <text x="100.01737025228539" y="217.5" font-size="13" font-weight="600" fill="#0b0b0b">5.0 KB</text>
 <text x="152.0173702522854" y="217.5" font-size="13" fill="#898781">about 1,250 tokens</text>
 <line x1="32" y1="116" x2="32" y2="230" stroke="#c3c2b7" stroke-width="1"/>
 <text x="728" y="58" font-size="44" font-weight="600" fill="#0b0b0b" text-anchor="end">7.5×</text>
 <text x="728" y="80" font-size="13" fill="#52514e" text-anchor="end">less per edit</text>
-<text x="32" y="272" font-size="11.5" fill="#898781">Measured over HTTP on three Statamic sites. Tokens are an estimate at 4 bytes each; the exact count depends on the model.</text>
+<text x="32" y="272" font-size="11.5" fill="#898781">Measured over HTTP on three Statamic sites, the usual way through release 0.7 of this package. Tokens at 4 bytes each.</text>
 </svg>
