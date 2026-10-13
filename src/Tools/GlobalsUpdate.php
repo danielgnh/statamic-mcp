@@ -29,7 +29,7 @@ class GlobalsUpdate extends Tool
     {
         return [
             'handle' => $schema->string()->description('Global set handle, e.g. "settings".')->required(),
-            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle.')->required(),
+            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle. A Replicator or Grid variable also takes {"<set id>": {...}} to merge into single sets.')->required(),
             'site' => $schema->string()->description('Site handle. Defaults to the default site. A missing localization is created on first write.'),
         ];
     }

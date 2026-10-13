@@ -30,7 +30,7 @@ class TermsUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Term id: "{taxonomy}::{slug}", e.g. "tags::php".')->required(),
-            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. May be empty when only changing the slug.')->required(),
+            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets. May be empty when only changing the slug.')->required(),
             'slug' => $schema->string()->description('New slug. On the default site this changes the term id; on other sites it stores a localized slug override.'),
             'site' => $schema->string()->description("Site handle. Defaults to the default site. Writes that site's data override."),
         ];

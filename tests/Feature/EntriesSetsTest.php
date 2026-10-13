@@ -61,6 +61,10 @@ function makeSectionsCollection(): void
                         ['handle' => 'title', 'field' => ['type' => 'text']],
                     ]]],
                 ]],
+                'quote' => ['fields' => [
+                    ['handle' => 'eyebrow', 'field' => ['type' => 'text']],
+                    ['handle' => 'heading', 'field' => ['type' => 'text']],
+                ]],
             ]],
         ]],
     ])->setHandle('section')->setNamespace('collections.sections')->save();
@@ -214,7 +218,7 @@ it('is a no-op when the merged set equals the stored one', function () {
     Event::assertNotDispatched(EntrySaved::class);
 });
 
-it('still replaces the field wholesale when given a list, and clears it with an empty one', function () {
+it('still replaces the field wholesale when given a list, refuses an empty one, and clears it with null', function () {
     Fixtures::site();
 
     $entry = makePageWithBlocks();
@@ -229,11 +233,18 @@ it('still replaces the field wholesale when given a list, and clears it with an 
         ->and($sets[0]['text'])->toBe('Only')
         ->and($sets[0]['id'])->toBeString()->toHaveLength(8);
 
+    // PHP decodes {} and [] alike, and {} under the by-id contract must never wipe a page.
     Server::actingAs(Fixtures::makeUser('edit landing entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => []]])
+        ->assertHasErrors(['page_builder is empty — send null to clear the field, its complete list to replace it, or an object keyed by set id to merge']);
+
+    expect(Entry::find($entry->id())->get('page_builder'))->toHaveCount(1);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => null]])
         ->assertOk();
 
-    expect(Entry::find($entry->id())->get('page_builder'))->toBe([]);
+    expect(Entry::find($entry->id())->get('page_builder'))->toBeNull();
 });
 
 it('merges into a grid nested inside a set', function () {
@@ -254,6 +265,12 @@ it('merges into a grid nested inside a set', function () {
     Server::actingAs(Fixtures::makeUser('edit sections entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => ['card0001' => ['items' => ['nope0000' => ['title' => 'x']]]]]])
         ->assertHasErrors(["no row with id 'nope0000' in blocks.card0001.items — existing rows: item0001, item0002"]);
+
+    Server::actingAs(Fixtures::makeUser('edit sections entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => ['card0001' => ['items' => []]]]])
+        ->assertHasErrors(['blocks.card0001.items is empty — send null to clear the field']);
+
+    expect(Entry::find($entry->id())->get('blocks')[1]['items'])->toHaveCount(2);
 });
 
 it('merges into the staged working copy, never the live entry', function () {
@@ -400,7 +417,7 @@ it('rejects a set selector on a field without sets, and a field mixed with its o
 
     Server::actingAs(Fixtures::makeUser('view landing entries'))
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['body.abc']])
-        ->assertHasErrors(['body is a bard field']);
+        ->assertHasErrors(['body.abc selects a set by id, but Bard sets live inside the Bard value and can\'t be addressed that way — fetch the whole field with fields: ["body"]']);
 
     Server::actingAs(Fixtures::makeUser('view landing entries'))
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder', 'page_builder.text0001']])
@@ -430,10 +447,33 @@ it('keeps sets the blueprint no longer describes, as a Control Panel save does',
         ->and($sets[1]['type'])->toBe('section_removed')
         ->and($sets[2]['text'])->toBe('Edited');
 
-    // What the agent sends stays strict: the stale key can't be written back by id.
+    // A set fetched by id round-trips with its stale key, unchanged.
+    $payload = entriesGetPayload(Fixtures::makeSuper(), ['id' => $entry->id(), 'fields' => ['page_builder.hero0001']]);
+
+    expect($payload['data']['page_builder']['hero0001']['old_subtitle'])->toBe('Renamed since');
+
+    $payload['data']['page_builder']['hero0001']['heading'] = 'Welcome back';
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => $payload['data']])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('page_builder')[0])->toMatchArray(['heading' => 'Welcome back', 'old_subtitle' => 'Renamed since']);
+
+    // Changing the stale key, or a set of a removed type, needs the complete list.
     Server::actingAs(Fixtures::makeUser('edit landing entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['hero0001' => ['old_subtitle' => 'x']]]])
-        ->assertHasErrors(['unknown field old_subtitle in page_builder.hero0001']);
+        ->assertHasErrors(["page_builder.hero0001 stores old_subtitle, which its blueprint no longer defines — it can't be changed by id; send the complete list to replace or drop it"]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['gone0001' => ['text' => 'x']]]])
+        ->assertHasErrors(["page_builder.gone0001 is a set of type 'section_removed', which the blueprint no longer defines — send the complete list to replace or drop it"]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['gone0001' => null]]])
+        ->assertOk();
+
+    expect(array_column(Entry::find($entry->id())->get('page_builder'), 'id'))->toBe(['hero0001', 'text0001']);
 });
 
 it('reports a typo on a localization as an unknown field, not as unlocalizable', function () {
@@ -452,13 +492,14 @@ it('reports a typo on a localization as an unknown field, not as unlocalizable',
         ->assertHasErrors(['field published is reserved']);
 });
 
-it('refuses ids it cannot address: shared, blank, or all digits', function () {
+it('refuses ids it cannot address, shared, blank, or 0, and takes digit-only ids', function () {
     Fixtures::site();
 
     $entry = makePageWithBlocks(['page_builder' => [
         ['id' => 'dupe0001', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'A'],
         ['id' => 'dupe0001', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'B'],
-        ['id' => '7', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'C'],
+        ['id' => '90385650', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'C'],
+        ['id' => '0', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'D'],
         ['type' => 'section_text_block', 'enabled' => true, 'text' => 'No id yet'],
     ]]);
 
@@ -466,21 +507,78 @@ it('refuses ids it cannot address: shared, blank, or all digits', function () {
 
     Server::actingAs($user)
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['dupe0001' => ['text' => 'x']]]])
-        ->assertHasErrors(["id 'dupe0001' is shared by 2 sets in page_builder — send the complete list"]);
+        ->assertHasErrors(["id 'dupe0001' is shared by 2 sets in page_builder — fetch or send the whole field"]);
 
     Server::actingAs($user)
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder.dupe0001']])
         ->assertHasErrors(["id 'dupe0001' is shared by 2 sets"]);
 
     Server::actingAs($user)
-        ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder.7']])
-        ->assertHasErrors(["an id made only of digits can't be — send the complete list"]);
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder.0']])
+        ->assertHasErrors(["the set id 0 can't be addressed, PHP reads it as a list index — fetch or send the whole page_builder"]);
 
     Server::actingAs($user)
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder.']])
-        ->assertHasErrors(['Set ids are addressed as page_builder.<id>']);
+        ->assertHasErrors(['pass page_builder.<id> with a set id — the index of page_builder lists them']);
 
-    expect(array_column(Entry::find($entry->id())->get('page_builder'), 'text'))->toBe(['A', 'B', 'C', 'No id yet']);
+    // Hex ids from other tooling are digits only about 2% of the time; they stay addressable.
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['page_builder.90385650']])
+        ->assertOk()
+        ->assertSee('"page_builder":{"90385650":{"id":"90385650"');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['90385650' => ['text' => 'C, edited']]]])
+        ->assertOk();
+
+    expect(array_column(Entry::find($entry->id())->get('page_builder'), 'text'))->toBe(['A', 'B', 'C, edited', 'D', 'No id yet']);
+});
+
+it('requires enabled to be a boolean, by id and in a list', function () {
+    Fixtures::site();
+
+    $entry = makePageWithBlocks();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['text0001' => ['enabled' => 'no']]]])
+        ->assertHasErrors(['page_builder.text0001.enabled must be true or false']);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [['id' => 'text0001', 'type' => 'section_text_block', 'enabled' => 'no', 'text' => 'First']]]])
+        ->assertHasErrors(['page_builder.text0001.enabled must be true or false']);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => ['text0001' => ['enabled' => false]]]])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('page_builder')[1]['enabled'])->toBeFalse();
+});
+
+it('names sets by id in list errors too, when they carry one', function () {
+    Fixtures::site();
+
+    $entry = makePageWithBlocks();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['id' => 'hero0001', 'type' => 'section_hero', 'headline' => 'x'],
+        ]]])
+        ->assertHasErrors(['unknown field headline in page_builder.hero0001', "did you mean 'heading'"]);
+});
+
+it('prefers a title-like field for the preview over the first text field', function () {
+    Fixtures::site();
+    makeSectionsCollection();
+
+    $entry = tap(Entry::make()->collection('sections')->slug('home')->data(['title' => 'Home', 'blocks' => [
+        ['id' => 'quot0001', 'type' => 'quote', 'enabled' => true, 'eyebrow' => 'Kunden', 'heading' => 'Was Kunden sagen'],
+        ['id' => 'hero0001', 'type' => 'hero', 'enabled' => true, 'heading' => str_repeat('Welcome ', 600)],
+    ]]))->save();
+
+    Server::actingAs(Fixtures::makeUser('view sections entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('{"id":"quot0001","type":"quote","preview":"Was Kunden sagen"}');
 });
 
 it('replaces a group inside a set whole, as documented', function () {

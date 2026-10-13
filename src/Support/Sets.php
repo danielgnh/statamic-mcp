@@ -100,6 +100,20 @@ class Sets
     }
 
     /**
+     * Whether the blueprint still defines the set's type. Content outlives
+     * blueprints; a set of a removed type is kept as stored but can't be
+     * edited by id, since nothing says which fields it has.
+     *
+     * @param  array<string, mixed>  $set
+     */
+    public static function hasType(Field $field, array $set): bool
+    {
+        $fieldtype = $field->fieldtype();
+
+        return ! $fieldtype instanceof Replicator || $fieldtype->flattenedSetsConfig()->has((string) data_get($set, 'type', ''));
+    }
+
+    /**
      * The set's own fields, which a Replicator keys by set type.
      *
      * @param  array<string, mixed>  $set
@@ -114,9 +128,10 @@ class Sets
     }
 
     /**
-     * The position of the set with that id. A blank or all-digit id is
-     * refused: PHP reads digit keys as list indexes, so such an id could
-     * never round-trip as an object key.
+     * The position of the set with that id. The id 0 is refused: an object
+     * whose keys start at 0 is a list to PHP, so {"0": {...}} could never
+     * round-trip as a set patch. Every other id, digits included, is a
+     * string key.
      *
      * @param  array<int, mixed>  $sets
      */
@@ -124,12 +139,12 @@ class Sets
     {
         $noun = self::noun($field);
 
-        if ($id === '' || ctype_digit($id)) {
-            throw new ToolException(sprintf(
-                "%s ids are addressed as %s.<id>, and an id made only of digits can't be — send the complete list",
-                ucfirst($noun),
-                $path,
-            ));
+        if ($id === '') {
+            throw new ToolException(sprintf('pass %s.<id> with a %s id — the index of %s lists them', $path, $noun, $path));
+        }
+
+        if ($id === '0') {
+            throw new ToolException(sprintf("the %s id 0 can't be addressed, PHP reads it as a list index — fetch or send the whole %s", $noun, $path));
         }
 
         $idHandle = self::idHandle();
@@ -137,7 +152,7 @@ class Sets
         $matches = collect($sets)->keys()->filter(fn (int $index) => is_array($sets[$index]) && (string) data_get($sets[$index], $idHandle) === $id)->values();
 
         if ($matches->count() > 1) {
-            throw new ToolException(sprintf("id '%s' is shared by %d %ss in %s — send the complete list", $id, $matches->count(), $noun, $path));
+            throw new ToolException(sprintf("id '%s' is shared by %d %ss in %s — fetch or send the whole field", $id, $matches->count(), $noun, $path));
         }
 
         return $matches->first() ?? throw self::unknown($field, $sets, $id, $path);
@@ -159,7 +174,7 @@ class Sets
             ->implode(', ');
 
         return new ToolException($known === ''
-            ? sprintf("no %s with id '%s' in %s — it has no %ss with an id; send the complete list", $noun, $id, $path, $noun)
+            ? sprintf("no %s with id '%s' in %s — it has no %ss with an id; fetch or send the whole field", $noun, $id, $path, $noun)
             : sprintf("no %s with id '%s' in %s — existing %ss: %s", $noun, $id, $path, $noun, $known));
     }
 }

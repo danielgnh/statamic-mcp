@@ -15,25 +15,31 @@ called out here explicitly.
   `globals_update` take a Replicator or Grid field as an object keyed by set
   id, the id Statamic stores on every set and row, and merge into just those
   sets: `{"page_builder": {"wKJQXf2s": {"variant": "centered"}}}` changes
-  one field of one block and saves the other blocks as they are stored, the
-  way a Control Panel save keeps them, blocks someone edited in the Control
-  Panel in between included. Inside a set the merge is shallow too: each
-  named field is replaced whole, a Group included. `null` removes a set, a
-  Replicator or Grid nested in a set merges by id the same way, and an
-  unknown id is an error that lists the existing sets with their types. A
-  list still replaces the field wholesale, which is how sets are added,
-  reordered, or given another type. Only what the agent sends is validated;
-  the other sets are kept as they are, stale keys and removed set types
-  included. Validation errors name a set by its id, `page_builder.wKJQXf2s.heading`,
-  on every write that sends sets. Bard sets keep their place inside the Bard
-  value and are not addressable this way, and a global set without a
-  blueprint refuses the object form, since nothing says which variable
-  holds sets.
+  one field of one block, and the page is then validated and saved the way
+  the Control Panel saves it, so the other blocks keep their content, blocks
+  someone edited in the Control Panel in between included. Send only the
+  fields you change; a set fetched by id can go back whole, a key its
+  blueprint no longer defines included, as long as that key is unchanged.
+  Inside a set the merge is shallow too: each named field is replaced
+  whole, a Group included. `null` removes a set, a Replicator or Grid nested
+  in a set merges by id the same way, and an unknown id is an error that
+  lists the existing sets with their types. A list still replaces the field
+  wholesale, which is how sets are added, reordered, or given another type.
+  Only what the agent sends is checked for unknown keys; a block that no
+  longer passes its blueprint's rules still blocks the write, as it would in
+  the Control Panel, and the error names it by id. Validation errors name a
+  set by its id, `page_builder.wKJQXf2s.heading`, on every write that sends
+  sets, and `enabled` must be a boolean. `null` clears a page builder; an
+  empty list or object is refused, since PHP cannot tell `{}` from `[]` and
+  `{}` would wipe the page. Bard sets keep their place inside the Bard value
+  and are not addressable this way, and a global set without a blueprint
+  refuses the object form, since nothing says which variable holds sets.
 - **One set at a time from `entries_get` and `terms_get`.** `fields` takes
   `handle.<id>` and returns that set of a Replicator or Grid field as an
   object keyed by its id, the shape the update tools merge by id, so a round
-  trip can never drop a sibling block. A blank or all-digit id, or one that
-  several sets share, is an error that asks for the complete list.
+  trip can never drop a sibling block. A blank id, the id `0`, which PHP
+  reads as a list index, or an id that several sets share is an error that
+  points at the whole field.
 
 ### Changed
 

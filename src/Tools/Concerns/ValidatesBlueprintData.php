@@ -194,8 +194,19 @@ trait ValidatesBlueprintData
         }
 
         foreach ($sets as $index => $set) {
-            $this->rejectInvalidSet($fieldtype, $set, "{$path}.{$index}");
+            $this->rejectInvalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index));
         }
+    }
+
+    /**
+     * Sets are named by their id where they carry one, as the agent and the
+     * validation errors address them, by position otherwise.
+     */
+    private function setLabel(mixed $set, int $index): string
+    {
+        $id = is_array($set) ? data_get($set, Sets::idHandle()) : null;
+
+        return is_string($id) && $id !== '' ? $id : (string) $index;
     }
 
     private function rejectInvalidSet(Replicator $fieldtype, mixed $set, string $path): void
@@ -211,6 +222,10 @@ trait ValidatesBlueprintData
             $message = sprintf("unknown set type '%s' in %s — valid set types: %s", $type, $path, implode(', ', $types));
 
             throw new ToolException(($closest = $this->closest($type, $types)) ? "{$message} — did you mean '{$closest}'?" : $message);
+        }
+
+        if (array_key_exists('enabled', $set) && ! is_bool($set['enabled'])) {
+            throw new ToolException("{$path}.enabled must be true or false");
         }
 
         $this->rejectUnknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', app(RowId::class)->handle()]);
@@ -249,7 +264,7 @@ trait ValidatesBlueprintData
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $this->rejectUnknownFields($fieldtype->fields($index), $row, "{$path}.{$index}", allowed: [app(RowId::class)->handle()]);
+            $this->rejectUnknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [app(RowId::class)->handle()]);
         }
     }
 

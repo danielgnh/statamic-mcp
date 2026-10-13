@@ -63,13 +63,9 @@ trait SelectsFields
             $field = $blueprint->field($handle);
 
             if (! Sets::addressable($field)) {
-                throw new ToolException(sprintf(
-                    '%s.%s selects a set by id, which only Replicator and Grid fields have — %s is a %s field',
-                    $handle,
-                    $ids[0],
-                    $handle,
-                    $field?->type(),
-                ));
+                throw new ToolException($field?->type() === 'bard'
+                    ? sprintf('%s.%s selects a set by id, but Bard sets live inside the Bard value and can\'t be addressed that way — fetch the whole field with fields: ["%s"]', $handle, $ids[0], $handle)
+                    : sprintf('%s.%s selects a set by id, which only Replicator and Grid fields have — %s is a %s field', $handle, $ids[0], $handle, $field?->type()));
             }
         }
 
@@ -217,15 +213,18 @@ trait SelectsFields
     }
 
     /**
-     * The set's first text, so an agent can tell blocks of one type apart:
-     * its first filled text-like field, else its first string of any kind.
+     * The set's own text, so an agent can tell blocks of one type apart:
+     * its title-like field, else its first filled text-like field, else
+     * its first string of any kind.
      *
      * @param  array<string, mixed>  $set
      */
     private function setPreview(Field $field, array $set): string
     {
-        $text = Sets::fieldsOf($field, $set)->all()
-            ->first(fn (Field $own) => in_array($own->type(), ['text', 'textarea', 'markdown', 'bard'], true) && filled(data_get($set, $own->handle())));
+        $texts = Sets::fieldsOf($field, $set)->all()
+            ->filter(fn (Field $own) => in_array($own->type(), ['text', 'textarea', 'markdown', 'bard'], true) && filled(data_get($set, $own->handle())));
+
+        $text = $texts->first(fn (Field $own) => in_array($own->handle(), ['title', 'heading', 'headline', 'name', 'label'], true)) ?? $texts->first();
 
         $value = $text
             ? data_get($set, $text->handle())

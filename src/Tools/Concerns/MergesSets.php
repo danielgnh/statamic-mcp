@@ -28,6 +28,8 @@ trait MergesSets
      */
     abstract protected function rejectReservedKeys(array $data): void;
 
+    abstract protected function normalize(mixed $value): mixed;
+
     /**
      * Validates a patch and merges its set patches. A Replicator or Grid
      * field takes its complete list, or an object keyed by the id Statamic
@@ -62,14 +64,22 @@ trait MergesSets
         $merged = [];
 
         foreach ($data as $handle => $patch) {
-            // [] (and {}, which PHP can't tell apart) clears the field as it always has.
-            if (! is_array($patch) || array_is_list($patch)) {
+            $field = $fields->get($handle);
+
+            if (! is_array($patch) || ! Sets::addressable($field)) {
                 continue;
             }
 
-            $field = $fields->get($handle);
+            // PHP can't tell {} from [], and {} would wipe the field, so neither clears it: null does.
+            if ($patch === []) {
+                throw new ToolException(sprintf(
+                    '%s is empty — send null to clear the field, its complete list to replace it, or an object keyed by %s id to merge',
+                    ltrim("{$path}.{$handle}", '.'),
+                    Sets::noun($field),
+                ));
+            }
 
-            if (! Sets::addressable($field)) {
+            if (array_is_list($patch)) {
                 continue;
             }
 
@@ -117,11 +127,51 @@ trait MergesSets
                 throw new ToolException(sprintf("%s.%s is a %s set — changing a set's type takes the complete list", $path, $id, data_get($set, 'type')));
             }
 
-            $patch = $this->mergeSetPatchesIn(Sets::fieldsOf($field, $set), $patch, $set, "{$path}.{$id}", allowed: Sets::reservedKeys($field));
+            if (! Sets::hasType($field, $set)) {
+                throw new ToolException(sprintf("%s.%s is a set of type '%s', which the blueprint no longer defines — send the complete list to replace or drop it", $path, $id, data_get($set, 'type')));
+            }
+
+            if (array_key_exists('enabled', $patch) && ! is_bool($patch['enabled'])) {
+                throw new ToolException("{$path}.{$id}.enabled must be true or false");
+            }
+
+            $fields = Sets::fieldsOf($field, $set);
+
+            $patch = $this->withoutUnchangedStaleKeys($patch, $set, $fields, $field, "{$path}.{$id}");
+
+            $patch = $this->mergeSetPatchesIn($fields, $patch, $set, "{$path}.{$id}", allowed: Sets::reservedKeys($field));
 
             $sets[$index] = array_merge($set, $patch);
         }
 
         return array_values($sets);
+    }
+
+    /**
+     * A set fetched from the get tools can be sent back whole, also when it
+     * stores a key its blueprint no longer defines, as long as that key is
+     * unchanged. Changing or adding such a key stays an error.
+     *
+     * @param  array<array-key, mixed>  $patch
+     * @param  array<string, mixed>  $set
+     * @return array<array-key, mixed>
+     */
+    private function withoutUnchangedStaleKeys(array $patch, array $set, Fields $fields, Field $field, string $path): array
+    {
+        $known = [...$fields->all()->keys()->all(), ...Sets::reservedKeys($field)];
+
+        foreach ($patch as $key => $value) {
+            if (in_array($key, $known, true) || ! array_key_exists($key, $set)) {
+                continue;
+            }
+
+            if ($this->normalize($value) !== $this->normalize($set[$key])) {
+                throw new ToolException("{$path} stores {$key}, which its blueprint no longer defines — it can't be changed by id; send the complete list to replace or drop it");
+            }
+
+            unset($patch[$key]);
+        }
+
+        return $patch;
     }
 }

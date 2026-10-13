@@ -104,7 +104,7 @@ To see how a draft or working copy looks, an agent calls `entries_preview`. It r
 
 Terms, globals, assets, and navigations have no draft state. Writes to them go live immediately.
 
-Page builders don't cost the whole page per edit. When a Replicator field is large, `entries_get` returns an index of its sets, each with the id Statamic stores on it, its type, and a short preview. The agent then fetches the one set it needs with `fields: ["page_builder.<id>"]` and sends back only the changed field, as `{"page_builder": {"<id>": {"variant": "centered"}}}`. `entries_update` merges that into the set and saves the other blocks as they are, including blocks someone changed in the Control Panel in the meantime.
+Page builders don't cost the whole page per edit. When a Replicator field is large, `entries_get` returns an index of its sets, each with the id Statamic stores on it, its type, and a short preview. The agent then fetches the one set it needs with `fields: ["page_builder.<id>"]` and sends back only the changed field, as `{"page_builder": {"<id>": {"variant": "centered"}}}`. `entries_update` merges that into the set and saves the page the way the Control Panel does, so the other blocks keep their content, including changes someone made in the Control Panel in the meantime.
 
 ## Tools
 
