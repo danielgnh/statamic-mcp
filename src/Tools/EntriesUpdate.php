@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
+use Danielgnh\StatamicMcp\Tools\Concerns\MergesSets;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\PlacesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
@@ -26,13 +27,14 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site; entries_localize adds an entry to another site. On a localization, data may only name fields the blueprint marks localizable: every other field shows the origin\'s value in every site, so change it on the origin entry. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. The exception is a Replicator or Grid field (a page builder): besides its complete list, it takes an object keyed by set id, as entries_get returns them, that merges into just those sets — e.g. {"page_builder": {"wKJQXf2s": {"variant": "centered"}}} changes one field of one block and saves the other blocks as they are. Inside a set the merge is shallow too: each named field is replaced whole, a Group included, null removes the set, and a Replicator or Grid nested in the set merges by id the same way. Adding or reordering sets, or changing a set\'s type, takes the complete list. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site; entries_localize adds an entry to another site. On a localization, data may only name fields the blueprint marks localizable: every other field shows the origin\'s value in every site, so change it on the origin entry. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
     use AuthorizesEntries;
     use ComparesPatchData;
     use LocalizesEntries;
+    use MergesSets;
     use NormalizesEntryInput;
     use PlacesEntries;
     use ResolvesEntries;
@@ -44,7 +46,7 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. May be an empty object when only changing slug, date, or parent.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets. May be an empty object when only changing slug, date, or parent.')->required(),
             'slug' => $schema->string()->description('New slug. Rejected on a collection with slugs turned off, whose entries have none.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted. To add the entry to another site, call entries_localize."),
@@ -101,17 +103,6 @@ class EntriesUpdate extends Tool
         $this->rejectAmbiguousDataKeys($data, $collection->dated());
 
         $blueprint = $entry->blueprint();
-        $this->rejectUnknownKeys($blueprint, $data);
-
-        if ($entry->hasOrigin()) {
-            $this->rejectUnlocalizableFields($entry->origin(), $blueprint, $data);
-        }
-
-        $this->rejectSlugWithoutSlugField($validated['slug'] ?? null, $blueprint, $collection);
-
-        $date = $this->resolveDate($validated['date'] ?? null, $entry);
-
-        $move = $this->resolveMove($validated['parent'] ?? null, $entry, $user);
 
         // Routing is snapshotted from the LIVE entry BEFORE any rebase:
         // fromWorkingCopy() restores the staged published attribute into the
@@ -125,9 +116,29 @@ class EntriesUpdate extends Tool
         // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
-        $this->ensureAuthorUnchanged($user, $basis, $data);
-
         $current = $basis->data()->all();
+
+        // A localization validates with, and merges sets into, the values it
+        // inherits under its own, as in the CP's form, so a partial patch
+        // never false-fails a required field — only its data is stored.
+        $effective = [
+            ...($basis->hasOrigin() ? $basis->origin()->values()->all() : []),
+            ...$current,
+        ];
+
+        $data = $this->mergeSetPatches($blueprint, $data, $effective);
+
+        if ($entry->hasOrigin()) {
+            $this->rejectUnlocalizableFields($entry->origin(), $blueprint, $data);
+        }
+
+        $this->rejectSlugWithoutSlugField($validated['slug'] ?? null, $blueprint, $collection);
+
+        $date = $this->resolveDate($validated['date'] ?? null, $entry);
+
+        $move = $this->resolveMove($validated['parent'] ?? null, $entry, $user);
+
+        $this->ensureAuthorUnchanged($user, $basis, $data);
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
 
@@ -137,12 +148,9 @@ class EntriesUpdate extends Tool
         // data, so a blueprint that marks slug required must be fed the
         // effective value (the new slug, or the entry's current one).
         // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself. A localization validates with the
-        // values it inherits under its own, as in the CP's form, so a partial
-        // patch never false-fails a required field — only its data is stored.
+        // excludes this entry itself.
         $values = [
-            ...($basis->hasOrigin() ? $basis->origin()->values()->all() : []),
-            ...$current,
+            ...$effective,
             ...$data,
             'slug' => $slug ?? $basis->slug(),
         ];

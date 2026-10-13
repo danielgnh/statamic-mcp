@@ -344,3 +344,51 @@ it('rejects an asset that does not exist in the field container', function () {
 
     expect(GlobalSet::findByHandle('theme')->in('en')->get('logo'))->toBe('logo.svg');
 });
+
+it('merges into one set of a replicator variable by id', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    Blueprint::makeFromFields([
+        'site_name' => ['type' => 'text'],
+        'footer_blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'links' => ['fields' => [['handle' => 'heading', 'field' => ['type' => 'text']]]],
+        ]]]],
+    ])->setHandle('settings')->setNamespace('globals')->save();
+
+    GlobalSet::findByHandle('settings')->in('en')->data([
+        'site_name' => 'Acme',
+        'footer_blocks' => [
+            ['id' => 'link0001', 'type' => 'links', 'enabled' => true, 'heading' => 'Company'],
+            ['id' => 'link0002', 'type' => 'links', 'enabled' => true, 'heading' => 'Legal'],
+        ],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit settings globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'settings', 'data' => ['footer_blocks' => ['link0002' => ['heading' => 'Imprint']]]])
+        ->assertOk()
+        ->assertSee('"heading":"Company"')
+        ->assertSee('"heading":"Imprint"');
+
+    Stache::clear();
+
+    expect(array_column(GlobalSet::findByHandle('settings')->in('en')->get('footer_blocks'), 'heading'))->toBe(['Company', 'Imprint']);
+
+    Server::actingAs(Fixtures::makeUser('edit settings globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'settings', 'data' => ['footer_blocks' => ['nope0000' => ['heading' => 'x']]]])
+        ->assertHasErrors(["no set with id 'nope0000' in footer_blocks — existing sets: link0001 (links), link0002 (links)"]);
+});
+
+it('refuses a by-id patch on a set without a blueprint instead of storing it as is', function () {
+    Fixtures::site();
+
+    $footer = GlobalSet::make('footer')->title('Footer');
+    $footer->save();
+    $footer->in('en')->data(['links' => [['id' => 'link0001', 'type' => 'link', 'label' => 'Imprint']]])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit footer globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'footer', 'data' => ['links' => ['link0001' => ['label' => 'Legal']]]])
+        ->assertHasErrors(['variable links is a list, and without a blueprint nothing says it holds sets to merge into by id — send the complete list']);
+
+    expect(GlobalSet::findByHandle('footer')->in('en')->get('links'))->toBe([['id' => 'link0001', 'type' => 'link', 'label' => 'Imprint']]);
+});

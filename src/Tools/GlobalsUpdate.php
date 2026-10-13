@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
+use Danielgnh\StatamicMcp\Tools\Concerns\MergesSets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -14,11 +15,12 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Statamic\Facades\GlobalSet;
 
 #[Name('globals_update')]
-#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
+#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. A Replicator or Grid field also takes an object keyed by set id that merges into just those sets, as in entries_update. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
 #[IsIdempotent]
 class GlobalsUpdate extends Tool
 {
     use ComparesPatchData;
+    use MergesSets;
     use ResolvesSites;
     use ValidatesBlueprintData;
 
@@ -97,24 +99,25 @@ class GlobalsUpdate extends Tool
         // be used to reject new keys); with one, unknown keys are rejected.
         $blueprint = $set->blueprint();
 
-        if ($blueprint) {
-            $this->rejectUnknownKeys($blueprint, $patch);
-        }
-
         // The merge basis is the SITE's own data bucket — the exact
         // round-trippable shape globals_get returns for that site.
         $existing = $variables->data()->all();
 
-        // Validate the EFFECTIVE values (origin-site values under the local
-        // overrides, mirroring the CP's full-form submit) so a partial
-        // localized patch never false-fails required fields — only the local
-        // bucket is stored.
+        // Sets merge into, and the patch validates against, the EFFECTIVE
+        // values (origin-site values under the local overrides, mirroring
+        // the CP's full-form submit) so a partial localized patch never
+        // false-fails required fields — only the local bucket is stored.
+        $effective = [
+            ...($variables->hasOrigin() ? $variables->origin()->values()->all() : []),
+            ...$existing,
+        ];
+
         if ($blueprint) {
-            $patch = $this->processAgainstBlueprint($blueprint, [
-                ...($variables->hasOrigin() ? $variables->origin()->values()->all() : []),
-                ...$existing,
-                ...$patch,
-            ], array_keys($patch));
+            $patch = $this->mergeSetPatches($blueprint, $patch, $effective);
+
+            $patch = $this->processAgainstBlueprint($blueprint, [...$effective, ...$patch], array_keys($patch));
+        } else {
+            $this->rejectSetPatchesWithoutBlueprint($patch, $effective);
         }
 
         $merged = array_merge($existing, $patch);
@@ -145,5 +148,22 @@ class GlobalsUpdate extends Tool
             'data' => $variables->data()->all(),
             ...$this->liveness($variables, self::LIVENESS_LIVE),
         ]);
+    }
+
+    /**
+     * Without a blueprint there are no fieldtypes, so nothing says which
+     * variable is a Replicator — an object sent for a stored list would be
+     * saved as is, and the agent's merge silently turned into a replacement.
+     *
+     * @param  array<string, mixed>  $patch
+     * @param  array<string, mixed>  $current
+     */
+    private function rejectSetPatchesWithoutBlueprint(array $patch, array $current): void
+    {
+        foreach ($patch as $handle => $value) {
+            if (is_array($value) && ! array_is_list($value) && is_array($current[$handle] ?? null) && array_is_list($current[$handle])) {
+                throw new ToolException("variable {$handle} is a list, and without a blueprint nothing says it holds sets to merge into by id — send the complete list");
+            }
+        }
     }
 }

@@ -416,3 +416,27 @@ it('takes back what terms_get returned in a taxonomy with several blueprints', f
         ->assertOk()
         ->assertSee('no-op');
 });
+
+it('merges into one set of a replicator field by id', function () {
+    Fixtures::site();
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'text' => ['fields' => [['handle' => 'text', 'field' => ['type' => 'textarea']]]],
+        ]]]],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha', 'blocks' => [
+        ['id' => 'text0001', 'type' => 'text', 'enabled' => true, 'text' => 'First'],
+        ['id' => 'text0002', 'type' => 'text', 'enabled' => true, 'text' => 'Second'],
+    ]])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit topics terms'))
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['blocks' => ['text0002' => ['text' => 'Second, edited']]]])
+        ->assertOk();
+
+    expect(array_column(Term::find('topics::alpha')->in('en')->get('blocks'), 'text'))->toBe(['First', 'Second, edited']);
+});
