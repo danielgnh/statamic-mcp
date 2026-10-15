@@ -8,8 +8,27 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **Find and replace in long text.** `entries_update`, `terms_update`, and
+  `globals_update` take `{"find": "...", "replace": "..."}` for a Bard,
+  Markdown, text, or textarea field, at the top level or inside a set
+  addressed by id, and change only that piece of the stored text. Fixing a sentence no
+  longer means sending the whole article back. `find` must match exactly
+  once; in Bard it must sit inside one formatting run, so a link or bold
+  mark is never lost, and the replacement keeps the run's marks. No match,
+  several matches, or a match across formatting is an error that quotes the
+  nearby text, so the agent can fix `find` without reading the field again.
+  A text someone changed in the meantime no longer matches, so nothing is
+  overwritten. Sent anywhere it can't reach, inside a Group or a new set, or
+  to a global set without a blueprint, the object is refused instead of
+  being stored.
+
 ### Changed
 
+- **`entries_update`, `terms_update`, and `globals_update` are no longer
+  marked idempotent.** Retrying a call that adds a set or inserts text
+  applies it twice, so clients shouldn't retry them blindly.
 - **Adding, removing, and reordering page builder blocks no longer costs the
   whole page.** A list sent for a Replicator or Grid field now merges by id:
   an item carrying a stored id merges into that set as the keyed object

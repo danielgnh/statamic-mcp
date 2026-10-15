@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Danielgnh\StatamicMcp\Support\Sets;
+use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Arr;
 use Statamic\Fields\Blueprint;
@@ -81,12 +82,17 @@ trait MergesSets
     {
         foreach ($data as $handle => $patch) {
             $field = $fields->get($handle);
+            $at = ltrim("{$path}.{$handle}", '.');
+
+            if (TextEdit::accepts($field, $patch)) {
+                $data[$handle] = TextEdit::apply($field, $current[$handle] ?? null, $patch, $at);
+
+                continue;
+            }
 
             if (! is_array($patch) || ! Sets::addressable($field)) {
                 continue;
             }
-
-            $at = ltrim("{$path}.{$handle}", '.');
 
             // PHP can't tell {} from [], and {} would wipe the field, so neither clears it: null does.
             if ($patch === []) {

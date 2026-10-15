@@ -11,13 +11,11 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
-use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Statamic\Facades\Term;
 use Statamic\Support\Str;
 
 #[Name('terms_update')]
-#[Description("Update a taxonomy term with a shallow top-level-key merge of raw field data onto that site's local overrides (the terms_get raw shape) — nested structures are replaced wholesale; explicit null clears a field. A Replicator or Grid field takes an object keyed by set id that merges into just those sets, or a list of sets in their order where an item with a stored id merges into that set, as in entries_update. With site, writes that site's localized data override, creating it transparently on first write. slug renames the term: on the default site this changes the term id (\"{taxonomy}::{slug}\") and moves the yaml file; on other sites it stores a localized slug override. An update that changes nothing is a no-op. Terms have no draft state — changes are live immediately. Never send augmented data.")]
-#[IsIdempotent]
+#[Description("Update a taxonomy term with a shallow top-level-key merge of raw field data onto that site's local overrides (the terms_get raw shape) — nested structures are replaced wholesale; explicit null clears a field. A Replicator or Grid field takes an object keyed by set id that merges into just those sets, or a list of sets in their order where an item with a stored id merges into that set, and a Bard, Markdown, text, or textarea field takes {\"find\": \"...\", \"replace\": \"...\"} to change one piece of its text, as in entries_update. With site, writes that site's localized data override, creating it transparently on first write. slug renames the term: on the default site this changes the term id (\"{taxonomy}::{slug}\") and moves the yaml file; on other sites it stores a localized slug override. An update that changes nothing is a no-op. Terms have no draft state — changes are live immediately. Never send augmented data.")]
 class TermsUpdate extends Tool
 {
     use ComparesPatchData;
@@ -30,7 +28,7 @@ class TermsUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Term id: "{taxonomy}::{slug}", e.g. "tags::php".')->required(),
-            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go. May be empty when only changing the slug.')->required(),
+            'data' => $schema->object()->description('Raw field data to merge, keyed by blueprint field handle. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go. A Bard, Markdown, text, or textarea field also takes {"find": "...", "replace": "..."} to change one piece of its text. May be empty when only changing the slug.')->required(),
             'slug' => $schema->string()->description('New slug. On the default site this changes the term id; on other sites it stores a localized slug override.'),
             'site' => $schema->string()->description("Site handle. Defaults to the default site. Writes that site's data override."),
         ];
