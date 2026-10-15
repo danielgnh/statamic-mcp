@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="604" viewBox="0 0 760 604" role="img" aria-labelledby="t d" font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
+<title id="t">How an agent edits one block of a page builder</title>
+<desc id="d">On a page with 16 blocks: entries_get returns an index of the blocks, 1,241 tokens. entries_get with fields page_builder.id returns that one block, 584 tokens. entries_update with the block id and the changed field writes 43 tokens; the server merges it into the stored page by id, validates the whole field like the Control Panel, and saves. Adding a block sends the list of ids with the new block, 572 tokens. Reading and resending the whole page builder costs about 14,000 tokens.</desc>
+<rect x="0.5" y="0.5" width="759" height="603" rx="12" fill="#ffffff" stroke="rgba(11,11,11,0.10)"/>
+<text x="32" y="46" font-size="17" fill="#0b0b0b" font-weight="600">How an agent edits one block</text>
+<text x="32" y="68" font-size="13" fill="#52514e">A page with 16 blocks, one title changed. The agent never holds the whole page.</text>
+<rect x="32" y="96" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="120" r="11" fill="#1c5cab"/>
+<text x="56" y="124.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">1</text>
+<text x="76" y="125" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>entries_get</text>
+<text x="76" y="148" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>{&quot;collection&quot;: &quot;pages&quot;, &quot;slug&quot;: &quot;…&quot;}</text>
+<line x1="428" y1="132" x2="452" y2="132" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 128 L458 132 L452 136 Z" fill="#898781"/>
+<text x="470" y="122" font-size="13" fill="#52514e">An index of the blocks: id, type,</text>
+<text x="470" y="140" font-size="13" fill="#52514e">and a short preview each</text>
+<text x="470" y="160" font-size="12.5" fill="#0b0b0b" font-weight="600">1,241 tokens read</text>
+<rect x="32" y="184" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="208" r="11" fill="#1c5cab"/>
+<text x="56" y="212.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">2</text>
+<text x="76" y="213" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>entries_get</text>
+<text x="76" y="236" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>{&quot;fields&quot;: [&quot;page_builder.&lt;id&gt;&quot;]}</text>
+<line x1="428" y1="220" x2="452" y2="220" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 216 L458 220 L452 224 Z" fill="#898781"/>
+<text x="470" y="210" font-size="13" fill="#52514e">That one block, in the shape</text>
+<text x="470" y="228" font-size="13" fill="#52514e">the update merges back</text>
+<text x="470" y="248" font-size="12.5" fill="#0b0b0b" font-weight="600">584 tokens read</text>
+<rect x="32" y="272" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="296" r="11" fill="#1c5cab"/>
+<text x="56" y="300.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">3</text>
+<text x="76" y="301" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>entries_update</text>
+<text x="76" y="324" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>{&quot;page_builder&quot;: {&quot;&lt;id&gt;&quot;: {&quot;title&quot;: &quot;…&quot;}}}</text>
+<line x1="428" y1="308" x2="452" y2="308" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 304 L458 308 L452 312 Z" fill="#898781"/>
+<text x="470" y="298" font-size="13" fill="#52514e">Merged into the stored page by id,</text>
+<text x="470" y="316" font-size="13" fill="#52514e">validated like the Control Panel, saved</text>
+<text x="470" y="336" font-size="12.5" fill="#0b0b0b" font-weight="600">43 tokens written</text>
+<line x1="32" y1="364" x2="728" y2="364" stroke="#e1e0d9" stroke-width="1"/>
+<text x="32" y="392" font-size="13" fill="#0b0b0b" font-weight="600">Adding, removing, or reordering blocks</text>
+<rect x="32" y="406" width="388" height="48" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<text x="48" y="435" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>[{&quot;id&quot;: &quot;…&quot;}, …, {&quot;type&quot;: &quot;faq&quot;, …}]</text>
+<line x1="428" y1="430" x2="452" y2="430" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 426 L458 430 L452 434 Z" fill="#898781"/>
+<text x="470" y="422" font-size="13" fill="#52514e">Listed blocks kept as stored, the new one</text>
+<text x="470" y="440" font-size="13" fill="#52514e">added, its id returned: 572 tokens written</text>
+<line x1="32" y1="472" x2="728" y2="472" stroke="#e1e0d9" stroke-width="1"/>
+<text x="32" y="500" font-size="13" fill="#52514e">The same title change, whole page builder in and out</text>
+<path d="M32 510 H498.0 a4 4 0 0 1 4 4 V518 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="510.0" y="520.5" font-size="12" fill="#52514e">14,050 tokens</text>
+<text x="32" y="548" font-size="13" fill="#52514e">By id, steps 1 to 3</text>
+<path d="M32 558 H93.83345195729538 a4 4 0 0 1 4 4 V566 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="105.83345195729538" y="568.5" font-size="12" fill="#0b0b0b" font-weight="600">1,968 tokens</text>
+</svg>
