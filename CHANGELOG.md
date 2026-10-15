@@ -8,6 +8,35 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Changed
+
+- **Adding, removing, and reordering page builder blocks no longer costs the
+  whole page.** A list sent for a Replicator or Grid field now merges by id:
+  an item carrying a stored id merges into that set as the keyed object
+  does, so `{"id": "wKJQXf2s"}` keeps it as it is, an item in another type
+  replaces its set, any other item is a new set, and the sets left out are
+  removed. Adding a block is the list of ids with the new block where it
+  goes, about 1 KB on a page that took 29 KB to read and 29 KB to send back.
+  `entries_update` returns the ids of new sets under `added`, so the next
+  edit can address them without reading the page again. **Breaking:** a
+  list item with a stored id no longer replaces that set whole, so a key
+  left out of it stays; send `null` to clear one. A bare `{"id": ...}` the
+  field doesn't store is refused, so a block someone removed in the
+  meantime never comes back empty, and a list that names one set twice is
+  refused.
+
+### Fixed
+
+- **Writes take back whatever a field already stores, as the Control Panel
+  does.** A key counts as unknown only when the blueprint doesn't define it
+  and the stored value doesn't hold it, at every level: page builder sets,
+  Grid rows, Bard sets, and Groups. Stored keys a blueprint no longer
+  defines, sets of removed types, and asset paths whose file is gone no
+  longer block a write that leaves them as they are, and a set's stale key
+  can now be changed or cleared by id.
+- **Every unknown key is reported in one error**, instead of one set per
+  attempt.
+
 ## [0.8.0] - 2026-10-13
 
 ### Added

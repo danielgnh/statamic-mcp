@@ -100,20 +100,6 @@ class Sets
     }
 
     /**
-     * Whether the blueprint still defines the set's type. Content outlives
-     * blueprints; a set of a removed type is kept as stored but can't be
-     * edited by id, since nothing says which fields it has.
-     *
-     * @param  array<string, mixed>  $set
-     */
-    public static function hasType(Field $field, array $set): bool
-    {
-        $fieldtype = $field->fieldtype();
-
-        return ! $fieldtype instanceof Replicator || $fieldtype->flattenedSetsConfig()->has((string) data_get($set, 'type', ''));
-    }
-
-    /**
      * The set's own fields, which a Replicator keys by set type.
      *
      * @param  array<string, mixed>  $set
@@ -147,15 +133,24 @@ class Sets
             throw new ToolException(sprintf("the %s id 0 can't be addressed, PHP reads it as a list index — fetch or send the whole %s", $noun, $path));
         }
 
-        $idHandle = self::idHandle();
+        $matches = self::positions($sets, $id);
 
-        $matches = collect($sets)->keys()->filter(fn (int $index) => is_array($sets[$index]) && (string) data_get($sets[$index], $idHandle) === $id)->values();
-
-        if ($matches->count() > 1) {
-            throw new ToolException(sprintf("id '%s' is shared by %d %ss in %s — fetch or send the whole field", $id, $matches->count(), $noun, $path));
+        if (count($matches) > 1) {
+            throw new ToolException(sprintf("id '%s' is shared by %d %ss in %s — fetch or send the whole field", $id, count($matches), $noun, $path));
         }
 
-        return $matches->first() ?? throw self::unknown($field, $sets, $id, $path);
+        return $matches[0] ?? throw self::unknown($field, $sets, $id, $path);
+    }
+
+    /**
+     * @param  array<int, mixed>  $sets
+     * @return list<int>
+     */
+    public static function positions(array $sets, string $id): array
+    {
+        $idHandle = self::idHandle();
+
+        return array_keys(array_filter($sets, fn (mixed $set) => is_array($set) && (string) data_get($set, $idHandle) === $id));
     }
 
     /**

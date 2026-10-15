@@ -10,9 +10,8 @@ use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 
 /**
- * Needs ValidatesBlueprintData in the same tool: the patch is checked
- * level by level here, so an untouched set is never held to the strictness
- * meant for what the agent sent.
+ * Needs ValidatesBlueprintData in the same tool: the merged data is checked
+ * against the blueprint and against the stored values it merges over.
  */
 trait MergesSets
 {
@@ -21,24 +20,23 @@ trait MergesSets
      * @param  list<string>  $except
      * @param  list<string>  $allowed
      */
-    abstract private function rejectUnknownFields(Fields $fields, array $data, string $path = '', array $except = [], array $allowed = []): void;
+    abstract private function rejectUnknownFields(Fields $fields, array $data, string $path = '', array $except = [], array $allowed = [], mixed $stored = null): void;
 
     /**
      * @param  array<string, mixed>  $data
      */
     abstract protected function rejectReservedKeys(array $data): void;
 
-    abstract protected function normalize(mixed $value): mixed;
-
     /**
      * Validates a patch and merges its set patches. A Replicator or Grid
-     * field takes its complete list, or an object keyed by the id Statamic
-     * stamps on every set and row, which merges into just those sets — so
-     * changing one field of one page builder block never costs the whole
-     * page. A null set is removed, and a nested Replicator or Grid inside a
-     * set merges the same way. The result is the complete list everything
-     * downstream always saw; the other sets are saved as they are stored,
-     * the way a Control Panel save keeps them.
+     * field is addressed set by set through the id Statamic stamps on every
+     * set and row, so changing one page builder block never costs the whole
+     * page: an object keyed by id merges into just those sets, and null
+     * removes one. A list sets the order as well: an item carrying a stored
+     * id merges into that set the same way, any other item is a new set,
+     * and the sets it leaves out are removed. A Replicator or Grid nested
+     * in a set merges the same way. The result is the complete list
+     * everything downstream always saw.
      *
      * @param  array<string, mixed>  $data  the patch
      * @param  array<string, mixed>  $current  the values the patch merges over
@@ -48,21 +46,39 @@ trait MergesSets
     {
         $this->rejectReservedKeys($data);
 
+        $data = $this->mergeSetPatchesIn($blueprint->fields(), $data, $current, '');
+
         // 'slug' is v6's auto-injected blueprint field, a tool parameter, never a data key.
-        return $this->mergeSetPatchesIn($blueprint->fields(), $data, $current, '', except: ['slug']);
+        $this->rejectUnknownFields($blueprint->fields(), $data, except: ['slug'], stored: $current);
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $saved
+     * @param  array<string, mixed>  $before
+     * @return array<string, list<string>>
+     */
+    protected function addedSets(Blueprint $blueprint, array $saved, array $before): array
+    {
+        $ids = fn (mixed $sets): array => is_array($sets)
+            ? array_filter(array_map(fn (mixed $set) => is_array($set) ? data_get($set, Sets::idHandle()) : null, $sets), is_string(...))
+            : [];
+
+        return collect($saved)
+            ->filter(fn (mixed $value, int|string $handle) => Sets::addressable($blueprint->field((string) $handle)))
+            ->map(fn (mixed $sets, int|string $handle) => array_values(array_diff($ids($sets), $ids($before[$handle] ?? null))))
+            ->filter()
+            ->all();
     }
 
     /**
      * @param  array<array-key, mixed>  $data
-     * @param  array<string, mixed>  $current
-     * @param  list<string>  $except
-     * @param  list<string>  $allowed
+     * @param  array<array-key, mixed>  $current
      * @return array<array-key, mixed>
      */
-    private function mergeSetPatchesIn(Fields $fields, array $data, array $current, string $path, array $except = [], array $allowed = []): array
+    private function mergeSetPatchesIn(Fields $fields, array $data, array $current, string $path): array
     {
-        $merged = [];
-
         foreach ($data as $handle => $patch) {
             $field = $fields->get($handle);
 
@@ -70,32 +86,29 @@ trait MergesSets
                 continue;
             }
 
+            $at = ltrim("{$path}.{$handle}", '.');
+
             // PHP can't tell {} from [], and {} would wipe the field, so neither clears it: null does.
             if ($patch === []) {
                 throw new ToolException(sprintf(
-                    '%s is empty — send null to clear the field, its complete list to replace it, or an object keyed by %s id to merge',
-                    ltrim("{$path}.{$handle}", '.'),
+                    '%s is empty — send null to clear the field, the list of its %ss to replace it, or an object keyed by %s id to merge',
+                    $at,
+                    Sets::noun($field),
                     Sets::noun($field),
                 ));
             }
 
-            if (array_is_list($patch)) {
-                continue;
-            }
-
-            $data[$handle] = $this->mergeSets($field, $patch, data_get($current, $handle), ltrim("{$path}.{$handle}", '.'));
-            $merged[] = $handle;
+            $data[$handle] = array_is_list($patch)
+                ? $this->mergeList($field, $patch, $current[$handle] ?? null, $at)
+                : $this->mergeSets($field, $patch, $current[$handle] ?? null, $at);
         }
-
-        // What the agent sent is checked strictly, set patches above per set.
-        $this->rejectUnknownFields($fields, Arr::except($data, $merged), $path, $except, $allowed);
 
         return $data;
     }
 
     /**
      * @param  array<array-key, mixed>  $patches  set patches keyed by id
-     * @return list<array<string, mixed>>
+     * @return list<mixed>
      */
     private function mergeSets(Field $field, array $patches, mixed $sets, string $path): array
     {
@@ -117,61 +130,72 @@ trait MergesSets
                 throw new ToolException("{$path}.{$id} must be an object of field values to merge into that {$noun}, or null to remove it");
             }
 
-            $set = $sets[$index];
-
             if (array_key_exists($idHandle, $patch) && (! is_scalar($patch[$idHandle]) || (string) $patch[$idHandle] !== $id)) {
                 throw new ToolException(sprintf("%s.%s carries %s %s — a %s's id is its key and never changes", $path, $id, $idHandle, json_encode($patch[$idHandle]), $noun));
             }
 
-            if (array_key_exists('type', $patch) && $patch['type'] !== data_get($set, 'type')) {
-                throw new ToolException(sprintf("%s.%s is a %s set — changing a set's type takes the complete list", $path, $id, data_get($set, 'type')));
+            if (array_key_exists('type', $patch) && $patch['type'] !== data_get($sets[$index], 'type')) {
+                throw new ToolException(sprintf('%s.%s is a %s set — to change its type, send the list of sets with this one in its new type, which replaces it', $path, $id, data_get($sets[$index], 'type')));
             }
 
-            if (! Sets::hasType($field, $set)) {
-                throw new ToolException(sprintf("%s.%s is a set of type '%s', which the blueprint no longer defines — send the complete list to replace or drop it", $path, $id, data_get($set, 'type')));
-            }
-
-            if (array_key_exists('enabled', $patch) && ! is_bool($patch['enabled'])) {
-                throw new ToolException("{$path}.{$id}.enabled must be true or false");
-            }
-
-            $fields = Sets::fieldsOf($field, $set);
-
-            $patch = $this->withoutUnchangedStaleKeys($patch, $set, $fields, $field, "{$path}.{$id}");
-
-            $patch = $this->mergeSetPatchesIn($fields, $patch, $set, "{$path}.{$id}", allowed: Sets::reservedKeys($field));
-
-            $sets[$index] = array_merge($set, $patch);
+            $sets[$index] = $this->mergeSet($field, $sets[$index], $patch, "{$path}.{$id}");
         }
 
         return array_values($sets);
     }
 
     /**
-     * A set fetched from the get tools can be sent back whole, also when it
-     * stores a key its blueprint no longer defines, as long as that key is
-     * unchanged. Changing or adding such a key stays an error.
-     *
-     * @param  array<array-key, mixed>  $patch
-     * @param  array<string, mixed>  $set
-     * @return array<array-key, mixed>
+     * @param  list<mixed>  $items
+     * @return list<mixed>
      */
-    private function withoutUnchangedStaleKeys(array $patch, array $set, Fields $fields, Field $field, string $path): array
+    private function mergeList(Field $field, array $items, mixed $sets, string $path): array
     {
-        $known = [...$fields->all()->keys()->all(), ...Sets::reservedKeys($field)];
+        $idHandle = Sets::idHandle();
+        $sets = is_array($sets) ? array_values($sets) : [];
+        $kept = [];
 
-        foreach ($patch as $key => $value) {
-            if (in_array($key, $known, true) || ! array_key_exists($key, $set)) {
+        foreach ($items as $position => $item) {
+            $id = is_array($item) ? ($item[$idHandle] ?? null) : null;
+
+            if (! is_scalar($id) || (string) $id === '') {
                 continue;
             }
 
-            if ($this->normalize($value) !== $this->normalize($set[$key])) {
-                throw new ToolException("{$path} stores {$key}, which its blueprint no longer defines — it can't be changed by id; send the complete list to replace or drop it");
+            $id = (string) $id;
+            $matches = Sets::positions($sets, $id);
+
+            if ($matches === [] && Arr::except($item, Sets::reservedKeys($field)) === []) {
+                throw Sets::unknown($field, $sets, $id, $path);
             }
 
-            unset($patch[$key]);
+            if (count($matches) !== 1) {
+                continue;
+            }
+
+            if (in_array($id, $kept, true)) {
+                throw new ToolException(sprintf("%s lists the %s with id '%s' twice", $path, Sets::noun($field), $id));
+            }
+
+            $kept[] = $id;
+            $set = $sets[$matches[0]];
+
+            if (array_key_exists('type', $item) && $item['type'] !== data_get($set, 'type')) {
+                continue;
+            }
+
+            $items[$position] = $this->mergeSet($field, $set, $item, "{$path}.{$id}");
         }
 
-        return $patch;
+        return $items;
+    }
+
+    /**
+     * @param  array<string, mixed>  $set
+     * @param  array<array-key, mixed>  $patch
+     * @return array<string, mixed>
+     */
+    private function mergeSet(Field $field, array $set, array $patch, string $path): array
+    {
+        return array_merge($set, $this->mergeSetPatchesIn(Sets::fieldsOf($field, $set), $patch, $set, $path));
     }
 }

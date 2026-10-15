@@ -27,7 +27,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_update')]
-#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. The exception is a Replicator or Grid field (a page builder): besides its complete list, it takes an object keyed by set id, as entries_get returns them, that merges into just those sets — e.g. {"page_builder": {"wKJQXf2s": {"variant": "centered"}}} changes one field of one block; send only the fields you change. Inside a set the merge is shallow too: each named field is replaced whole, a Group included, null removes the set, and a Replicator or Grid nested in the set merges by id the same way. The whole field is then validated and saved as the Control Panel saves it, so the other blocks keep their content, but one that no longer passes its blueprint\'s rules blocks the write and is named by id in the error. Adding or reordering sets, changing a set\'s type, or dropping a key the blueprint no longer defines takes the complete list; null clears the field, and an empty list or object is refused. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site; entries_localize adds an entry to another site. On a localization, data may only name fields the blueprint marks localizable: every other field shows the origin\'s value in every site, so change it on the origin entry. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
+#[Description('Update an entry with a shallow top-level merge of raw field data: nested structures (Bard, arrays) are replaced wholesale, never deep-merged — always send the complete new value for a nested field. The exception is a Replicator or Grid field (a page builder), whose sets are addressed by the id entries_get shows: an object keyed by set id merges into just those sets — e.g. {"page_builder": {"wKJQXf2s": {"variant": "centered"}}} changes one field of one block; send only the fields you change, and null to remove a set. A list sets the order: an item with a stored id merges into that set the same way, so {"id": "wKJQXf2s"} keeps it as it is, an item in another type replaces its set, an item without an id is a new set, and the sets you leave out are removed — add a block by sending the ids in order with the new set where it goes, never the whole page. Inside a set the merge is shallow: each named field is replaced whole, a Group included, null clears it, and a Replicator or Grid nested in the set merges by id the same way. The whole field is then validated and saved as the Control Panel saves it: keys a set already stores pass, also ones its blueprint no longer defines, but a block that no longer passes its blueprint\'s rules blocks the write and is named by id in the error. The result lists the ids of new sets under added. null clears the field, and an empty list or object is refused. Explicit null clears a field (stores a local null); resetting a field to inherit from its origin localization is not supported in v1. Publish state is never changed here — that is entries_publish / entries_unpublish. Without revisions, re-dating a published entry on a collection whose date_behavior is private (see statamic_overview) can schedule or expire it; status and result report the outcome. On revision-enabled collections, edits to a published entry are staged as a working copy attributed to you (the live entry stays unchanged — promote it with entries_publish); when a working copy already exists the edit rebases onto it (created vs amended is stated in the result), and unpublished drafts are saved directly. site is a selector only — it must match the entry\'s own site; entries_localize adds an entry to another site. On a localization, data may only name fields the blueprint marks localizable: every other field shows the origin\'s value in every site, so change it on the origin entry. If the merged result equals the current entry, nothing is saved. When the blueprint has an author field, editing an entry you are not an author of needs \'edit other authors {collection} entries\', and so does changing its author. parent moves the entry, with its children, in a structured collection\'s tree: pass the id of an entry of the same collection and site to make it that entry\'s last child, or "" for the top level; omitted or null, the entry stays where it is. Moving needs reorder {collection} entries, like the CP\'s tree, on top of the edit permission and its author rule. A move saves the live tree at once, also when the data goes to a working copy: working copies never stage tree position. The result reports the move under move and the new parent under parent.')]
 #[IsIdempotent]
 class EntriesUpdate extends Tool
 {
@@ -46,7 +46,7 @@ class EntriesUpdate extends Tool
     {
         return [
             'id' => $schema->string()->description('Entry id.')->required(),
-            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets. May be an empty object when only changing slug, date, or parent.')->required(),
+            'data' => $schema->object()->description('Raw field values to merge over the current top-level data. Unknown keys are rejected; null clears a field. A Replicator or Grid field also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go. May be an empty object when only changing slug, date, or parent.')->required(),
             'slug' => $schema->string()->description('New slug. Rejected on a collection with slugs turned off, whose entries have none.'),
             'date' => $schema->string()->description('New date, dated collections only: 2026-07-09, or 2026-07-09T15:30:00+02:00 with a time. A time without an offset is read in server.timezone from statamic_overview.'),
             'site' => $schema->string()->description("Selector only: must match the entry's own site, or be omitted. To add the entry to another site, call entries_localize."),
@@ -159,12 +159,14 @@ class EntriesUpdate extends Tool
             $values['date'] = $date ?? $basis->date();
         }
 
-        $merged = array_merge($current, $this->processAgainstBlueprint(
+        $processed = $this->processAgainstBlueprint(
             $blueprint,
             $values,
             array_keys($data),
             ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
-        ));
+        );
+
+        $merged = array_merge($current, $processed);
 
         // Strict compare over normalized values: assoc key order is
         // irrelevant (sorted recursively), but types matter — loose == would
@@ -212,15 +214,18 @@ class EntriesUpdate extends Tool
 
         $this->ensureUniqueUriAfter($target, $move);
 
+        $added = $this->addedSets($blueprint, $processed, $effective);
+
         return $workingCopy
-            ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move)
-            : $this->persistLive($this->applyChanges($entry, $merged, $slug, $date), $user, $collection, $move);
+            ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move, $added)
+            : $this->persistLive($this->applyChanges($entry, $merged, $slug, $date), $user, $collection, $move, $added);
     }
 
     /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array<string, list<string>>  $added
      */
-    private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move): Response
+    private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move, array $added): Response
     {
         // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
         // snapshots the in-memory attributes set above — the live entry is
@@ -256,13 +261,14 @@ class EntriesUpdate extends Tool
             $payload['date'] = $target->date()?->toIso8601String();
         }
 
-        return $this->json([...$payload, ...$placement]);
+        return $this->json([...$payload, ...array_filter(['added' => $added]), ...$placement]);
     }
 
     /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array<string, list<string>>  $added
      */
-    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move): Response
+    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move, array $added): Response
     {
         // CP parity: updates refresh updated_by/updated_at. save() returns
         // false when an EntrySaving listener cancels (approval addons do
@@ -285,7 +291,7 @@ class EntriesUpdate extends Tool
             $payload['date'] = $entry->date()?->toIso8601String();
         }
 
-        return $this->json([...$payload, ...$placement]);
+        return $this->json([...$payload, ...array_filter(['added' => $added]), ...$placement]);
     }
 
     /**
