@@ -19,7 +19,7 @@ it('uploads base64 content into the container root and reports liveness', functi
             'filename' => 'hero.png',
         ])
         ->assertOk()
-        ->assertSee('"id":"images::hero.png"')
+        ->assertSee('"path":"hero.png"')
         ->assertSee('"is_image":true')
         ->assertSee('"result":"uploaded — live"')
         ->assertSee('"cp_edit_url"');
@@ -41,8 +41,7 @@ it('uploads into a folder, creating it on demand', function () {
             'folder' => '/blog/2026/',
         ])
         ->assertOk()
-        ->assertSee('"id":"images::blog/2026/hero.png"')
-        ->assertSee('"folder":"blog/2026"');
+        ->assertSee('"path":"blog/2026/hero.png"');
 
     expect(Storage::disk('images')->exists('blog/2026/hero.png'))->toBeTrue();
 });

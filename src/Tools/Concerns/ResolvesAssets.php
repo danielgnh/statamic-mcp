@@ -89,14 +89,10 @@ trait ResolvesAssets
      */
     protected function assetSummary(AssetContract $asset): array
     {
-        $folder = $asset->folder();
         $dimensions = $asset->dimensions();
 
         return [
-            'id' => $asset->id(),
             'path' => $asset->path(),
-            'basename' => $asset->basename(),
-            'folder' => in_array($folder, ['.', '/', ''], true) ? null : $folder,
             'url' => $asset->url(),
             'is_image' => $asset->isImage(),
             'size' => $asset->size(),

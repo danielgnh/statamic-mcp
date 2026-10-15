@@ -13,7 +13,7 @@ use Statamic\Contracts\Assets\QueryBuilder;
 use Statamic\Facades\Asset;
 
 #[Name('assets_list')]
-#[Description('List assets in a container — summary columns only (id, path, basename, folder, url, is_image, size, dimensions, alt); use assets_get for full metadata. Optionally filter to a folder subtree. Paginated: the response carries total, total_pages, and next_page (null on the last page); ordered by path.')]
+#[Description('List assets in a container — summary columns only (path, url, is_image, size, dimensions, alt); use assets_get for full metadata. Optionally filter to a folder subtree. Paginated: the response carries total, total_pages, and next_page (null on the last page); ordered by path.')]
 #[IsReadOnly]
 class AssetsList extends Tool
 {

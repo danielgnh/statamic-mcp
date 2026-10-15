@@ -42,8 +42,9 @@ it('replaces the tree, keeping the ids it is given and generating the missing on
             ['title' => 'More'],
         ]])
         ->assertOk()
-        ->assertSee(sprintf('"tree":[{"id":"b-about","entry":"%s","title":"About us","resolved":{"title":"About","url":"/about","status":"published"},"children":[{"id":"new-1","entry":"%s","resolved"', $about, $team))
         ->assertSee('updated — live')
+        ->assertSee('"added":["new-1","new-2","new-3"]')
+        ->assertDontSee('"tree"')
         ->assertSee('"cp_edit_url":"http://localhost/cp/navigation/main"');
 
     expect(storedNavTree())->toBe([
@@ -128,7 +129,7 @@ it('clears the tree when sent an empty list', function () {
     Server::actingAs(Fixtures::makeUser('edit main nav'))
         ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => []])
         ->assertOk()
-        ->assertSee('"tree":[]');
+        ->assertDontSee('"added"');
 
     expect(storedNavTree())->toBe([]);
 });

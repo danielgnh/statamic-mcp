@@ -63,7 +63,7 @@ Collections with `propagate` on get a localization in every site from
 | Tool | What it does |
 |---|---|
 | `navigations_get` | A navigation's tree for one site, in the shape Statamic stores and `navigations_update` accepts. Each entry branch also carries `resolved` with the linked entry's current title, url, and status. That block is read-only, and `navigations_update` ignores it. The response also lists what a write has to respect: `max_depth`, `expects_root`, the collections entry branches may link, and the blueprint fields that branch `data` takes. The read never saves, so a branch stored without an id comes back without one. |
-| `navigations_update` | Replaces a site's tree with the complete tree you send, the way saving the tree in the CP does. Branches keep the ids they come with, and a branch without one gets a new id. An entry branch has to link an existing entry of one of the navigation's collections in the same site. A branch without an entry needs a url or a title, and a title alone makes a text item. The tool enforces `max_depth` and the root page rule, and it runs branch `data` through the navigation's blueprint. A tree that equals the stored one saves nothing. Navigations have no draft state, so the saved tree is live at once. |
+| `navigations_update` | Replaces a site's tree with the complete tree you send, the way saving the tree in the CP does. Branches keep the ids they come with, and a branch without one gets a new id, which the result lists under `added`. An entry branch has to link an existing entry of one of the navigation's collections in the same site. A branch without an entry needs a url or a title, and a title alone makes a text item. The tool enforces `max_depth` and the root page rule, and it runs branch `data` through the navigation's blueprint. A tree that equals the stored one saves nothing. Navigations have no draft state, so the saved tree is live at once. |
 
 To build a menu for new pages, create them with `entries_create`, passing `parent` to nest them in a structured collection. Then send `navigations_update` a tree whose entry branches link their ids.
 
@@ -81,7 +81,7 @@ Reading takes `view {form} form submissions` and deleting takes `delete {form} f
 
 | Tool | What it does |
 |---|---|
-| `assets_list` | Paginated asset summaries per container (id, path, basename, folder, url, is_image, size, dimensions, alt), ordered by path. Optional `folder` filters to a subtree. |
+| `assets_list` | Paginated asset summaries per container (path, url, is_image, size, dimensions, alt), ordered by path; the other asset tools take the container and this path. Optional `folder` filters to a subtree. |
 | `assets_get` | One asset's full detail: the summary columns plus raw blueprint data (alt text, custom fields — the shape `assets_update` accepts), mime type, last modified, CP edit link. |
 | `assets_upload` | Upload from a `source_url` (server-side download with fail-closed SSRF guards — see below) or inline `content_base64` for small files. Optional `folder` created on demand. Never overwrites — collisions are errors. Uploads are live immediately. |
 | `assets_update` | Merge-patch an asset's metadata (alt text + custom blueprint fields) — the file itself is untouched. `focus` (the CP's focal point) passes through for lossless round-trips. |

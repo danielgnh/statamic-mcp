@@ -24,9 +24,8 @@ it('shallow-merges data into the default site localization', function () {
             'data' => ['footer_text' => 'Hi'],
         ])
         ->assertOk()
-        ->assertSee('"site_name":"Acme"')
-        ->assertSee('"footer_text":"Hi"')
-        ->assertSee('updated — live');
+        ->assertSee('updated — live')
+        ->assertDontSee('"data"');
 
     // Rehydrate from disk: the Stache array cache aliases in-request
     // instances — only a cleared cache proves the write persisted.
@@ -108,8 +107,7 @@ it('accepts free-form keys on a set without a blueprint', function () {
             'handle' => 'footer',
             'data' => ['copyright' => '2026 Acme'],
         ])
-        ->assertOk()
-        ->assertSee('"copyright":"2026 Acme"');
+        ->assertOk();
 
     Stache::clear();
 
@@ -308,8 +306,7 @@ it('stores a single-file asset as a plain string, the way the CP does', function
 
     Server::actingAs(Fixtures::makeUser('edit theme globals'))
         ->tool(GlobalsUpdate::class, ['handle' => 'theme', 'data' => ['logo' => $logo]])
-        ->assertOk()
-        ->assertSee('"logo":"acme.svg"');
+        ->assertOk();
 
     Stache::clear();
 
@@ -366,9 +363,7 @@ it('merges into one set of a replicator variable by id', function () {
 
     Server::actingAs(Fixtures::makeUser('edit settings globals'))
         ->tool(GlobalsUpdate::class, ['handle' => 'settings', 'data' => ['footer_blocks' => ['link0002' => ['heading' => 'Imprint']]]])
-        ->assertOk()
-        ->assertSee('"heading":"Company"')
-        ->assertSee('"heading":"Imprint"');
+        ->assertOk();
 
     Stache::clear();
 

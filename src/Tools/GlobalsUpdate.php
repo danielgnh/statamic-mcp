@@ -145,7 +145,6 @@ class GlobalsUpdate extends Tool
         return $this->json([
             'handle' => $handle,
             'site' => $site,
-            'data' => $variables->data()->all(),
             ...$this->liveness($variables, self::LIVENESS_LIVE),
         ]);
     }

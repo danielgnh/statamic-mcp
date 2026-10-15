@@ -16,8 +16,7 @@ it('returns full asset detail including raw blueprint data', function () {
     Server::actingAs(Fixtures::makeUser('view images assets'))
         ->tool(AssetsGet::class, ['container' => 'images', 'path' => 'blog/hero.png'])
         ->assertOk()
-        ->assertSee('"id":"images::blog/hero.png"')
-        ->assertSee('"folder":"blog"')
+        ->assertSee('"path":"blog/hero.png"')
         ->assertSee('"is_image":true')
         ->assertSee('"data":{"alt":"A hero image"}')
         ->assertSee('"mime_type":"image/png"')
@@ -33,7 +32,7 @@ it('normalizes a leading slash on path', function () {
     Server::actingAs(Fixtures::makeSuper())
         ->tool(AssetsGet::class, ['container' => 'images', 'path' => '/hero.png'])
         ->assertOk()
-        ->assertSee('"id":"images::hero.png"');
+        ->assertSee('"path":"hero.png"');
 });
 
 it('reports a missing path with a pointer to assets_list', function () {
