@@ -106,7 +106,11 @@ Terms, globals, assets, and navigations have no draft state. Writes to them go l
 
 Page builders don't cost the whole page per edit. When a Replicator field is large, `entries_get` returns an index of its sets, each with the id Statamic stores on it, its type, and a short preview. The agent then fetches the one set it needs with `fields: ["page_builder.<id>"]` and sends back only the changed field, as `{"page_builder": {"<id>": {"variant": "centered"}}}`. `entries_update` merges that into the set and saves the page the way the Control Panel does, so the other blocks keep their content, including changes someone made in the Control Panel in the meantime. Adding, removing, or reordering blocks works the same way: the agent sends the list of ids in their new order with the new block where it goes, `[{"id": "<id>"}, {"type": "faq", ...}]`, never the whole page. A typo in a long article is fixed with `{"article": {"find": "…", "replace": "…"}}`, not by sending the article back.
 
-![What one page builder edit costs: 37.8 KB the usual way, 5.0 KB with Statamic MCP 0.8, 7.5 times less](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/page-builder-edit-cost.svg)
+![How an agent edits one block of a 16-block page: an index of the blocks, 1,241 tokens; that one block, 584 tokens; the changed field, 43 tokens written. 1,968 tokens in total, against 14,050 for the whole page builder in and out](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-an-edit-works.svg)
+
+Any other large value, such as a synced `array` field, comes back as a short preview until the agent asks for it with `fields`, and write results carry no copy of what was just written.
+
+![What everyday tasks cost an agent, Statamic MCP 0.7 against 0.9: reading an entry with a large synced field 24.4k tokens against 758, adding a block 11.1k against 1.5k, editing one field of one block 10.7k against 1.5k, adding a menu link 4.7k against 3.1k, listing 25 images 2.3k against 1.5k, changing one global setting 1.7k against 1.4k](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/token-cost-per-task.svg)
 
 ## Tools
 

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="556" viewBox="0 0 760 556" role="img" aria-labelledby="t d" font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
+<title id="t">What everyday tasks cost an agent: Statamic MCP 0.7 against 0.9</title>
+<desc id="d">Read an entry with a large synced field: 24.4k tokens on 0.7, 758 on 0.9. Add a block to a page: 11.1k tokens on 0.7, 1.5k on 0.9. Edit one field of one block: 10.7k tokens on 0.7, 1.5k on 0.9. Add a link to a menu: 4.7k tokens on 0.7, 3.1k on 0.9. List 25 images: 2.3k tokens on 0.7, 1.5k on 0.9. Change one global setting: 1.7k tokens on 0.7, 1.4k on 0.9.</desc>
+<rect x="0.5" y="0.5" width="759" height="555" rx="12" fill="#ffffff" stroke="rgba(11,11,11,0.10)"/>
+<text x="32" y="46" font-size="17" fill="#0b0b0b" font-weight="600">What everyday tasks cost an agent</text>
+<text x="32" y="68" font-size="13" fill="#52514e">Tokens the model reads and writes over the tool calls of one task</text>
+<rect x="32" y="88" width="12" height="12" rx="3" fill="#86b6ef"/>
+<text x="52" y="99" font-size="12.5" fill="#52514e">0.7: whole values in and out</text>
+<rect x="272" y="88" width="12" height="12" rx="3" fill="#1c5cab"/>
+<text x="292" y="99" font-size="12.5" fill="#52514e">0.9: ids, previews, and merges by id</text>
+<line x1="32" y1="126" x2="32" y2="478" stroke="#c3c2b7" stroke-width="1"/>
+<text x="42" y="138" font-size="13" fill="#52514e">Read an entry with a large synced field</text>
+<path d="M32 146 H498.0 a4 4 0 0 1 4 4 V154 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="510.0" y="156.5" font-size="12" fill="#52514e">24.4k</text>
+<path d="M32 160 H42.59711057026493 a4 4 0 0 1 4 4 V168 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="54.59711057026493" y="170.5" font-size="12" fill="#0b0b0b" font-weight="600">758</text>
+<text x="83.09711057026493" y="170.5" font-size="12" fill="#898781">32× less</text>
+<text x="42" y="198" font-size="13" fill="#52514e">Add a block to a page</text>
+<path d="M32 206 H240.85206218092128 a4 4 0 0 1 4 4 V214 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="252.85206218092128" y="216.5" font-size="12" fill="#52514e">11.1k</text>
+<path d="M32 220 H56.96955145277293 a4 4 0 0 1 4 4 V228 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="68.96955145277293" y="230.5" font-size="12" fill="#0b0b0b" font-weight="600">1.5k</text>
+<text x="104.96955145277293" y="230.5" font-size="12" fill="#898781">7.3× less</text>
+<text x="42" y="258" font-size="13" fill="#52514e">Edit one field of one block</text>
+<path d="M32 266 H233.36093287771143 a4 4 0 0 1 4 4 V274 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="245.36093287771143" y="276.5" font-size="12" fill="#52514e">10.7k</text>
+<path d="M32 280 H56.97597058670885 a4 4 0 0 1 4 4 V288 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="68.97597058670885" y="290.5" font-size="12" fill="#0b0b0b" font-weight="600">1.5k</text>
+<text x="104.97597058670885" y="290.5" font-size="12" fill="#898781">7.1× less</text>
+<text x="42" y="318" font-size="13" fill="#52514e">Add a link to a menu</text>
+<path d="M32 326 H118.7729729877381 a4 4 0 0 1 4 4 V334 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="130.77297298773811" y="336.5" font-size="12" fill="#52514e">4.7k</text>
+<path d="M32 340 H87.69152647004996 a4 4 0 0 1 4 4 V348 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="99.69152647004996" y="350.5" font-size="12" fill="#0b0b0b" font-weight="600">3.1k</text>
+<text x="135.69152647004995" y="350.5" font-size="12" fill="#898781">1.5× less</text>
+<text x="42" y="378" font-size="13" fill="#52514e">List 25 images</text>
+<path d="M32 386 H72.59372345278385 a4 4 0 0 1 4 4 V394 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="84.59372345278385" y="396.5" font-size="12" fill="#52514e">2.3k</text>
+<path d="M32 400 H56.62933735416958 a4 4 0 0 1 4 4 V408 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="68.62933735416958" y="410.5" font-size="12" fill="#0b0b0b" font-weight="600">1.5k</text>
+<text x="104.62933735416958" y="410.5" font-size="12" fill="#898781">1.6× less</text>
+<text x="42" y="438" font-size="13" fill="#52514e">Change one global setting</text>
+<path d="M32 446 H61.109892841436476 a4 4 0 0 1 4 4 V454 a4 4 0 0 1 -4 4 H32 Z" fill="#86b6ef"/>
+<text x="73.10989284143648" y="456.5" font-size="12" fill="#52514e">1.7k</text>
+<path d="M32 460 H55.32625316517934 a4 4 0 0 1 4 4 V468 a4 4 0 0 1 -4 4 H32 Z" fill="#1c5cab"/>
+<text x="67.32625316517934" y="470.5" font-size="12" fill="#0b0b0b" font-weight="600">1.4k</text>
+<text x="103.32625316517934" y="470.5" font-size="12" fill="#898781">1.2× less</text>
+<text x="32" y="516" font-size="11.5" fill="#898781">Counted with the cl100k tokenizer over HTTP, for the tool calls and results of each task, on pages with 8 to 16 blocks.</text>
+<text x="32" y="532" font-size="11.5" fill="#898781">On 0.7, each page edit is counted at a single whole-page write.</text>
+</svg>
