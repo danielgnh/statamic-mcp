@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesForms;
+use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
 use InvalidArgumentException;
@@ -28,22 +29,23 @@ use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global|form) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). For a form, the fields are the keys of its submissions\' data; nothing writes a submission. Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global|form|navigation) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). For a form, the fields are the keys of its submissions\' data; nothing writes a submission. For a navigation, the fields are what a branch\'s data takes in navigations_update, and example is one branch\'s data; title and url are branch keys beside data, as example_notes says when the blueprint defines them. Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
     use ResolvesForms;
+    use ResolvesNavs;
 
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [
             'type' => $schema->string()
-                ->enum(['collection', 'taxonomy', 'global', 'form'])
+                ->enum(['collection', 'taxonomy', 'global', 'form', 'navigation'])
                 ->description('Resource type the handle belongs to.')
                 ->required(),
             'handle' => $schema->string()
-                ->description('Collection, taxonomy, global set, or form handle (see statamic_overview).')
+                ->description('Collection, taxonomy, global set, form, or navigation handle (see statamic_overview).')
                 ->required(),
             'blueprint' => $schema->string()
                 ->description("Blueprint handle. Defaults to the resource's first blueprint."),
@@ -56,13 +58,13 @@ class BlueprintsGet extends Tool
     {
         $request->validate(
             [
-                'type' => 'required|string|in:collection,taxonomy,global,form',
+                'type' => 'required|string|in:collection,taxonomy,global,form,navigation',
                 'handle' => 'required|string',
                 'blueprint' => 'nullable|string',
                 'set' => 'nullable|string',
             ],
             [
-                'type.in' => 'type must be one of: collection, taxonomy, global, form.',
+                'type.in' => 'type must be one of: collection, taxonomy, global, form, navigation.',
             ],
         );
 
@@ -106,7 +108,8 @@ class BlueprintsGet extends Tool
         $fields = [];
         $example = [];
         $notes = [];
-        $parameters = $this->topLevelParameters($type, $handle);
+        $outsideData = $this->fieldsOutsideData($type, $handle);
+        $reportLocalizable = Site::multiEnabled() && $type !== 'navigation';
 
         foreach ($blueprint->fields()->all() as $field) {
             $descriptor = $this->describe($field);
@@ -114,7 +117,7 @@ class BlueprintsGet extends Tool
             // Only a field marked localizable can differ between sites:
             // entries_localize, and entries_update on a localization, take
             // no other field.
-            if (Site::multiEnabled()) {
+            if ($reportLocalizable) {
                 $descriptor['localizable'] = $field->isLocalizable();
             }
 
@@ -128,8 +131,8 @@ class BlueprintsGet extends Tool
                 continue;
             }
 
-            if ($tools = data_get($parameters, $field->handle())) {
-                $notes[$field->handle()] = sprintf('pass %s as a top-level parameter of %s, not inside data', $field->handle(), $tools);
+            if ($where = data_get($outsideData, $field->handle())) {
+                $notes[$field->handle()] = sprintf('pass %s as %s, not inside data', $field->handle(), $where);
 
                 continue;
             }
@@ -186,30 +189,32 @@ class BlueprintsGet extends Tool
             'collection' => "view {$handle} entries",
             'taxonomy' => "view {$handle} terms",
             'global' => "edit {$handle} globals",
+            'navigation' => "view {$handle} nav",
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
     }
 
     /**
-     * Blueprint fields the write tools take as top-level parameters and
-     * reject inside data, mapped to those tools.
+     * Blueprint fields the write tools take outside data and reject inside
+     * it, mapped to where they go.
      *
      * @return array<string, string>
      */
-    private function topLevelParameters(string $type, string $handle): array
+    private function fieldsOutsideData(string $type, string $handle): array
     {
         return match ($type) {
             'collection' => array_fill_keys(
                 Collection::findByHandle($handle)?->dated() ? ['slug', 'date'] : ['slug'],
-                'entries_create and entries_update',
+                'a top-level parameter of entries_create and entries_update',
             ),
-            'taxonomy' => ['slug' => 'terms_create and terms_update'],
+            'taxonomy' => ['slug' => 'a top-level parameter of terms_create and terms_update'],
+            'navigation' => array_fill_keys(['title', 'url'], 'a branch key of navigations_update'),
             default => [],
         };
     }
 
     /**
-     * @return 'collections'|'taxonomies'|'globals'|'forms'
+     * @return 'collections'|'taxonomies'|'globals'|'forms'|'navigations'
      */
     private function configKey(string $type): string
     {
@@ -218,6 +223,7 @@ class BlueprintsGet extends Tool
             'taxonomy' => 'taxonomies',
             'global' => 'globals',
             'form' => 'forms',
+            'navigation' => 'navigations',
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
     }
@@ -236,6 +242,7 @@ class BlueprintsGet extends Tool
             'taxonomy' => Taxonomy::findByHandle($handle)?->termBlueprints() ?? [],
             'global' => array_filter([GlobalSet::findByHandle($handle)?->blueprint()]),
             'form' => [$this->findExposedForm($handle)->blueprint()],
+            'navigation' => [$this->findNav($handle)->blueprint()],
             default => throw new InvalidArgumentException("Unknown resource type [{$type}]."),
         };
 

@@ -556,8 +556,8 @@ it('rejects an unknown type via validation', function () {
     $user = Fixtures::makeUser();
 
     Server::actingAs($user)
-        ->tool(BlueprintsGet::class, ['type' => 'navigation', 'handle' => 'main'])
-        ->assertHasErrors();
+        ->tool(BlueprintsGet::class, ['type' => 'user', 'handle' => 'main'])
+        ->assertHasErrors(['type must be one of: collection, taxonomy, global, form, navigation.']);
 });
 
 it('reports time_enabled on date fields, including the date field injected into dated collections', function () {
