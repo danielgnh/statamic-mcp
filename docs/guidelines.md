@@ -98,7 +98,7 @@ tabs:
     sections:
       -
         display: Basics
-        instructions: 'One page per service. Follow bike-rental-nazare: an intro whose bold first sentence states the offer and price, then the blocks.'
+        instructions: 'One page per service. Follow web-design: an intro whose bold first sentence states the offer and price, then the blocks.'
         fields:
           -
             handle: title
@@ -113,7 +113,7 @@ tabs:
     "display": "Page",
     "fields": ["title", "intro", "page_builder"],
     "sections": [
-      { "display": "Basics", "instructions": "One page per service. Follow bike-rental-nazare: an intro whose bold first sentence states the offer and price, then the blocks.", "fields": ["title", "intro"] }
+      { "display": "Basics", "instructions": "One page per service. Follow web-design: an intro whose bold first sentence states the offer and price, then the blocks.", "fields": ["title", "intro"] }
     ]
   }
 ]
@@ -164,7 +164,7 @@ guidelines:
       enabled: true
       collections:
         - pages
-      guidelines: 'Open every page with a Hero block, then one Text block. Follow bike-rental-nazare.'
+      guidelines: 'Open every page with a Hero block, then one Text block. Follow web-design.'
 ```
 
 Statamic runs addon settings through Antlers each time it loads them. The page
