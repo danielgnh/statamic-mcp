@@ -33,6 +33,16 @@ called out here explicitly.
   every revision-enabled entry, saying which one you got. **Breaking:**
   agents that relied on the live entry by default now pass
   `working_copy: false`.
+- **`entries_get` and `terms_get` preview any large value, not only Bard,
+  Markdown, and page builders.** Any other value over 4 KB comes back as
+  `{__preview, truncated, note}` unless it's requested via `fields`: an
+  assoc array as its key count and first keys, a list as its item count, a
+  string as its first 300 characters. That covers keys the blueprint no
+  longer defines too, and `fields` can now name them in raw format. A 70 KB
+  synced `array` field now reads as its key count and first keys. A Grid
+  stays inline whatever its size. **Breaking:** a
+  large `array`, `yaml`, `code`, `textarea`, or custom fieldtype value now
+  takes a second call with `fields` to read in full.
 
 ### Fixed
 

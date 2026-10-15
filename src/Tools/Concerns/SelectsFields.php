@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use JsonSerializable;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
+use Statamic\Fieldtypes\Grid;
 
 /**
  * The fields parameter of the get tools: which fields come back, which
@@ -25,7 +26,7 @@ trait SelectsFields
     // A Replicator field (a page builder) over this many bytes becomes an
     // index of its sets instead: enough to keep a few blocks inline, while a
     // long page costs one short call to find a set's id.
-    private const int SET_INDEX_THRESHOLD = 4096;
+    private const int LARGE_VALUE_THRESHOLD = 4096;
 
     private const int SET_PREVIEW_LENGTH = 60;
 
@@ -34,9 +35,10 @@ trait SelectsFields
      * (or row) of a Replicator or Grid field by the id Statamic stamps on it.
      *
      * @param  list<string>  $requested
+     * @param  list<array-key>  $stored
      * @return array{0: list<string>, 1: array<string, list<string>>} the handles, and the selected set ids by handle
      */
-    private function parseFieldSelection(array $requested, Blueprint $blueprint): array
+    private function parseFieldSelection(array $requested, Blueprint $blueprint, array $stored = []): array
     {
         $handles = [];
         $sets = [];
@@ -53,7 +55,7 @@ trait SelectsFields
 
         $handles = array_values(array_unique($handles));
 
-        $this->assertKnownFields($handles, $blueprint);
+        $this->assertKnownFields($handles, $blueprint, $stored);
 
         foreach ($sets as $handle => $ids) {
             if (in_array($handle, $requested, true)) {
@@ -96,8 +98,9 @@ trait SelectsFields
 
     /**
      * @param  list<string>  $requestedFields
+     * @param  list<array-key>  $stored
      */
-    private function assertKnownFields(array $requestedFields, Blueprint $blueprint): void
+    private function assertKnownFields(array $requestedFields, Blueprint $blueprint, array $stored = []): void
     {
         if ($requestedFields === []) {
             return;
@@ -107,7 +110,7 @@ trait SelectsFields
         // it lives outside data() and is always returned as a top-level response key,
         // so it's never a selectable data field.
         $handles = $blueprint->fields()->all()->keys()->reject(fn ($handle) => $handle === 'slug')->values()->all();
-        $unknown = array_values(array_diff($requestedFields, $handles));
+        $unknown = array_values(array_diff($requestedFields, $handles, $stored));
 
         if ($unknown === []) {
             return;
@@ -125,14 +128,15 @@ trait SelectsFields
 
     /**
      * Long Bard/markdown values become {__preview, truncated, note} objects,
-     * and large Replicator values an index of their sets under the same
-     * keys, unless explicitly requested via fields.
+     * large Replicator values an index of their sets under the same keys,
+     * and any other large value a preview too, unless explicitly requested
+     * via fields. A Grid stays inline whatever its size.
      *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $requestedFields
      * @return array<string, mixed>
      */
-    private function withRichTextPreviews(array $data, Blueprint $blueprint, array $requestedFields): array
+    private function withPreviews(array $data, Blueprint $blueprint, array $requestedFields): array
     {
         foreach ($data as $handle => $value) {
             if (in_array($handle, $requestedFields, true)) {
@@ -140,13 +144,8 @@ trait SelectsFields
             }
 
             $field = $blueprint->fields()->all()->get($handle);
-            if (! $field) {
-                continue;
-            }
 
-            $indexed = Sets::indexed($field);
-
-            if (! $indexed && ! in_array($field->type(), ['bard', 'markdown'], true)) {
+            if ($field?->fieldtype() instanceof Grid) {
                 continue;
             }
 
@@ -157,20 +156,33 @@ trait SelectsFields
             if ($encoded === false) {
                 continue;
             }
-            if (strlen($encoded) <= ($indexed ? self::SET_INDEX_THRESHOLD : self::PREVIEW_THRESHOLD)) {
+
+            $richText = in_array($field?->type(), ['bard', 'markdown'], true);
+
+            if (strlen($encoded) <= ($richText ? self::PREVIEW_THRESHOLD : self::LARGE_VALUE_THRESHOLD)) {
                 continue;
             }
 
-            $data[$handle] = $indexed
+            $data[$handle] = $field && Sets::indexed($field)
                 ? $this->setIndex($field, $this->decoded($raw))
                 : [
-                    '__preview' => Str::limit($this->plainText($raw), self::PREVIEW_LENGTH),
+                    '__preview' => $this->preview($raw, $richText),
                     'truncated' => true,
                     'note' => sprintf('NOT writable — fetch raw field before editing: %s with fields: ["%s"]', $this->name(), $handle),
                 ];
         }
 
         return $data;
+    }
+
+    private function preview(mixed $value, bool $richText): string
+    {
+        return Str::limit(match (true) {
+            $richText, is_string($value) => $this->plainText($value),
+            is_array($value) && array_is_list($value) => sprintf('%d items', count($value)),
+            is_array($value) => sprintf('%d keys: %s', count($value), implode(', ', array_keys($value))),
+            default => (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+        }, self::PREVIEW_LENGTH);
     }
 
     /**

@@ -299,3 +299,25 @@ it('indexes a large replicator field and selects one set by id', function () {
         ->assertSee('"blocks":{"text0002":{"id":"text0002","type":"text","enabled":true,"text":"Short"}}')
         ->assertDontSee('text0001');
 });
+
+it('previews a large value the blueprint no longer defines, and returns it in full via fields', function () {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Term::make()->taxonomy('tags')->slug('php')
+        ->data(['title' => 'PHP', 'legacy_notes' => str_repeat('Imported long ago. ', 300).'END_OF_NOTES'])
+        ->save();
+
+    $user = Fixtures::makeUser('view tags terms');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php'])
+        ->assertOk()
+        ->assertSee('"legacy_notes":{"__preview":"Imported long ago.')
+        ->assertDontSee('END_OF_NOTES');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php', 'fields' => ['legacy_notes']])
+        ->assertOk()
+        ->assertSee('END_OF_NOTES');
+});

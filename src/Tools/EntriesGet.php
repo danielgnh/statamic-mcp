@@ -19,7 +19,7 @@ use Statamic\Facades\Entry;
 use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles). A large Replicator field (a page builder) comes back as an index of its sets — id, type, and a short preview each — unless requested via fields: e.g. "page_builder" fetches the whole field, "page_builder.<id>" one set (of a Replicator or Grid), as an object keyed by its id that entries_update merges back by id. fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the staged working copy when there is one, as in the Control Panel\'s edit form: exactly what entries_update builds on and entries_publish would promote. working_copy: false returns the live entry instead, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Large values are truncated to preview objects unless requested via fields (an array of top-level field handles): Bard and Markdown over 500 bytes, and any other value over 4 KB, a Grid excepted. A large Replicator field (a page builder) comes back as an index of its sets — id, type, and a short preview each — unless requested via fields: e.g. "page_builder" fetches the whole field, "page_builder.<id>" one set (of a Replicator or Grid), as an object keyed by its id that entries_update merges back by id. fields selects blueprint fields, and in raw format any other key the entry stores — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the staged working copy when there is one, as in the Control Panel\'s edit form: exactly what entries_update builds on and entries_publish would promote. working_copy: false returns the live entry instead, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
@@ -39,7 +39,7 @@ class EntriesGet extends Tool
             'slug' => $schema->string()->description('Entry slug — used with collection when id is omitted. When several entries of the site share it, as pages under different parents can, the call fails and lists their ids and URLs.'),
             'site' => $schema->string()->description("Site handle. With an id it must match that entry's own site (omit it otherwise); with collection + slug it selects the localization. Defaults to the default site."),
             'format' => $schema->string()->enum(['raw', 'augmented'])->description('raw (default): $entry->data(), writable. augmented: rendered values, display only — never writable.'),
-            'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation. handle.id, with a set id from the field\'s index, returns one set of a Replicator or Grid field as an object keyed by its id: the shape the update tool merges by id.'),
+            'fields' => $schema->array()->description('Top-level field handles to return in full — a large value listed here skips the preview. handle.id, with a set id from the field\'s index, returns one set of a Replicator or Grid field as an object keyed by its id: the shape the update tool merges by id.'),
             'working_copy' => $schema->boolean()->description('Revision-enabled collections: false returns the live entry instead of the staged working copy, which is the default whenever changes are staged. When nothing is staged, the entry itself is returned either way.'),
         ];
     }
@@ -81,8 +81,6 @@ class EntriesGet extends Tool
 
         $format = $validated['format'] ?? 'raw';
         $blueprint = $entry->blueprint();
-
-        [$requestedFields, $selectedSets] = $this->parseFieldSelection(array_values($validated['fields'] ?? []), $blueprint);
 
         $localization = null;
 
@@ -126,12 +124,18 @@ class EntriesGet extends Tool
             }
         }
 
+        [$requestedFields, $selectedSets] = $this->parseFieldSelection(
+            array_values($validated['fields'] ?? []),
+            $blueprint,
+            $format === 'raw' ? array_keys($data) : [],
+        );
+
         if ($requestedFields !== []) {
             $data = array_intersect_key($data, array_flip($requestedFields));
         }
 
         $data = $this->withSelectedSets($data, $selectedSets, $blueprint);
-        $data = $this->withRichTextPreviews($data, $blueprint, $requestedFields);
+        $data = $this->withPreviews($data, $blueprint, $requestedFields);
 
         $response = [
             'id' => $entry->id(),

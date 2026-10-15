@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Term;
@@ -284,4 +285,63 @@ it('denies reading without the view permission', function () {
     Server::actingAs($user)
         ->tool(EntriesGet::class, ['id' => $entry->id()])
         ->assertHasErrors(["requires 'view blog entries' — grant it to a role of {$user->email()} in the Control Panel"]);
+});
+
+function makeListing(): Statamic\Contracts\Entries\Entry
+{
+    tap(Collection::make('listings')->title('Listings')->routes('/listings/{slug}'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'imported_data' => ['type' => 'array'],
+        'notes' => ['type' => 'textarea'],
+        'summary' => ['type' => 'textarea'],
+        'facts' => ['type' => 'grid', 'fields' => [['handle' => 'label', 'field' => ['type' => 'text']]]],
+    ])->setHandle('listing')->setNamespace('collections.listings')->save();
+
+    return tap(Entry::make()->collection('listings')->slug('flat')->data([
+        'title' => 'Listing',
+        'imported_data' => collect(range(1, 600))->mapWithKeys(fn (int $i) => ["key{$i}" => "value {$i}"])->all(),
+        'notes' => str_repeat('Long synced notes. ', 300).'END_OF_NOTES',
+        'summary' => 'Short and inline.',
+        'facts' => array_map(fn (int $i) => ['id' => sprintf('row%05d', $i), 'label' => "Fact {$i} ".str_repeat('x', 60)], range(1, 80)),
+        'schema_jsonld' => str_repeat('{"@type":"Thing"}', 300),
+    ]))->save();
+}
+
+it('previews any large value, keeps small ones and grids inline', function () {
+    Fixtures::site();
+
+    $entry = makeListing();
+
+    Server::actingAs(Fixtures::makeUser('view listings entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('"imported_data":{"__preview":"600 keys: key1, key2, key3')
+        ->assertSee('"notes":{"__preview":"Long synced notes.')
+        ->assertDontSee('END_OF_NOTES')
+        ->assertSee('"schema_jsonld":{"__preview":')
+        ->assertSee('fields: [\"imported_data\"]')
+        ->assertSee('"summary":"Short and inline."')
+        ->assertSee('"id":"row00080"');
+});
+
+it('returns a previewed value in full via fields, a stored key outside the blueprint included', function () {
+    Fixtures::site();
+
+    $entry = makeListing();
+
+    $user = Fixtures::makeUser('view listings entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['imported_data', 'schema_jsonld']])
+        ->assertOk()
+        ->assertSee('"key600":"value 600"')
+        ->assertSee('{\"@type\":\"Thing\"}')
+        ->assertDontSee('__preview')
+        ->assertDontSee('"notes"');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['schema_jsonld'], 'format' => 'augmented'])
+        ->assertHasErrors(['unknown field schema_jsonld']);
 });
