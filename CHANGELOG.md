@@ -24,6 +24,15 @@ called out here explicitly.
   field doesn't store is refused, so a block someone removed in the
   meantime never comes back empty, and a list that names one set twice is
   refused.
+- **`entries_get` returns the staged working copy by default**, as the
+  Control Panel's edit form does. On a revision-enabled entry with staged
+  changes, it used to return the live entry while `entries_update` built on
+  the working copy, so an agent edited content it had never seen, and ids
+  read from a live page builder could miss sets staged since.
+  `working_copy: false` returns the live entry. `source` now comes back on
+  every revision-enabled entry, saying which one you got. **Breaking:**
+  agents that relied on the live entry by default now pass
+  `working_copy: false`.
 
 ### Fixed
 

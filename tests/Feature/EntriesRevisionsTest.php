@@ -209,7 +209,7 @@ it('surfaces has_working_copy on revision-enabled entries in entries_get', funct
         ->assertSee('"has_working_copy":true');
 });
 
-it('returns the staged working copy from entries_get on request', function () {
+it('returns the staged working copy from entries_get, as the Control Panel edit form does, and the live entry on request', function () {
     Fixtures::site();
     Fixtures::tags();
     Fixtures::blog();
@@ -225,12 +225,6 @@ it('returns the staged working copy from entries_get on request', function () {
     Server::actingAs($user)
         ->tool(EntriesGet::class, ['id' => $entry->id()])
         ->assertOk()
-        ->assertSee('"title":"Live Title"')
-        ->assertDontSee('"source"');
-
-    Server::actingAs($user)
-        ->tool(EntriesGet::class, ['id' => $entry->id(), 'working_copy' => true])
-        ->assertOk()
         ->assertSee('"slug":"staged-post"')
         ->assertSee('"url":"/blog/staged-post"')
         ->assertSee('"title":"Staged Title"')
@@ -239,9 +233,17 @@ it('returns the staged working copy from entries_get on request', function () {
         ->assertSee('"source":"working_copy"');
 
     Server::actingAs($user)
-        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'working_copy' => true])
         ->assertOk()
-        ->assertSee('"url":"/blog/live-post"');
+        ->assertSee('"title":"Staged Title"')
+        ->assertSee('"source":"working_copy"');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'working_copy' => false])
+        ->assertOk()
+        ->assertSee('"title":"Live Title"')
+        ->assertSee('"url":"/blog/live-post"')
+        ->assertSee('"source":"entry"');
 
     expect(Entry::find($entry->id())->get('title'))->toBe('Live Title');
 });
