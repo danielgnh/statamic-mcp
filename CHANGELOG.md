@@ -8,6 +8,20 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Added
+
+- **`blueprints_get` reads navigation blueprints.** `type: navigation` with a
+  navigation handle returns the fields a branch's `data` takes in
+  `navigations_update`, an example of one branch's data, and, on a
+  Replicator or Bard field, its sets; `set` returns a set's fields and an
+  example row, as it does for a page builder. A mega menu whose branches
+  hold cards no longer leaves an agent guessing the card's field names from
+  an existing branch: `navigations_get` listed the field as a replicator and
+  nothing more, and `blueprints_get` refused the type. Reading takes
+  `view {handle} nav`, like `navigations_get`. When the blueprint defines
+  `title` or `url`, `example_notes` says to pass them as branch keys, not
+  inside `data`.
+
 ## [0.9.0] - 2026-10-15
 
 ### Added

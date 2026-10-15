@@ -26,7 +26,7 @@ class AgentGuidelines
     /**
      * The enabled rows naming this resource, in their order.
      *
-     * @param  'collections'|'taxonomies'|'globals'|'forms'  $type
+     * @param  'collections'|'taxonomies'|'globals'|'forms'|'navigations'  $type
      */
     public function for(string $type, string $handle): ?string
     {
