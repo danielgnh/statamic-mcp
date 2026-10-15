@@ -19,7 +19,7 @@ use Statamic\Facades\Entry;
 use Statamic\Fields\Value;
 
 #[Name('entries_get')]
-#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles). A large Replicator field (a page builder) comes back as an index of its sets — id, type, and a short preview each — unless requested via fields: e.g. "page_builder" fetches the whole field, "page_builder.<id>" one set (of a Replicator or Grid), as an object keyed by its id that entries_update merges back by id. fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the live entry unless working_copy is true: then it is the staged working copy, exactly what entries_publish would promote, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
+#[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Long Bard/rich-text values are truncated to preview objects unless requested via fields (an array of top-level field handles). A large Replicator field (a page builder) comes back as an index of its sets — id, type, and a short preview each — unless requested via fields: e.g. "page_builder" fetches the whole field, "page_builder.<id>" one set (of a Replicator or Grid), as an object keyed by its id that entries_update merges back by id. fields selects blueprint fields only — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the staged working copy when there is one, as in the Control Panel\'s edit form: exactly what entries_update builds on and entries_publish would promote. working_copy: false returns the live entry instead, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
 #[IsReadOnly]
 class EntriesGet extends Tool
 {
@@ -40,7 +40,7 @@ class EntriesGet extends Tool
             'site' => $schema->string()->description("Site handle. With an id it must match that entry's own site (omit it otherwise); with collection + slug it selects the localization. Defaults to the default site."),
             'format' => $schema->string()->enum(['raw', 'augmented'])->description('raw (default): $entry->data(), writable. augmented: rendered values, display only — never writable.'),
             'fields' => $schema->array()->description('Top-level field handles to return in full — Bard/rich-text fields listed here skip preview truncation. handle.id, with a set id from the field\'s index, returns one set of a Replicator or Grid field as an object keyed by its id: the shape the update tool merges by id.'),
-            'working_copy' => $schema->boolean()->description('Return the staged working copy instead of the live entry (revision-enabled collections) — review it before entries_publish. When nothing is staged, the entry itself is returned.'),
+            'working_copy' => $schema->boolean()->description('Revision-enabled collections: false returns the live entry instead of the staged working copy, which is the default whenever changes are staged. When nothing is staged, the entry itself is returned either way.'),
         ];
     }
 
@@ -68,7 +68,7 @@ class EntriesGet extends Tool
         $collection = $live->collection()->handle();
         $this->ensurePermission($user, "view {$collection} entries");
 
-        $staged = data_get($validated, 'working_copy') && $live->revisionsEnabled() && $live->hasWorkingCopy();
+        $staged = (bool) ($validated['working_copy'] ?? true) && $live->revisionsEnabled() && $live->hasWorkingCopy();
 
         $entry = $staged ? $live->fromWorkingCopy() : $live;
 
@@ -153,9 +153,6 @@ class EntriesGet extends Tool
 
         if ($live->revisionsEnabled()) {
             $response['has_working_copy'] = $live->hasWorkingCopy();
-        }
-
-        if (filled(data_get($validated, 'working_copy'))) {
             $response['source'] = $staged ? 'working_copy' : 'entry';
         }
 
