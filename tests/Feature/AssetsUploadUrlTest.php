@@ -25,7 +25,7 @@ it('downloads from a url and derives the filename from it', function () {
             'folder' => 'blog',
         ])
         ->assertOk()
-        ->assertSee('"id":"images::blog/hero.png"')
+        ->assertSee('"path":"blog/hero.png"')
         ->assertSee('"result":"uploaded — live"');
 
     expect(Storage::disk('images')->exists('blog/hero.png'))->toBeTrue();
@@ -44,7 +44,7 @@ it('lets an explicit filename override the url basename', function () {
             'filename' => 'hero.png',
         ])
         ->assertOk()
-        ->assertSee('"id":"images::hero.png"');
+        ->assertSee('"path":"hero.png"');
 });
 
 it('asks for a filename when the url has no usable basename', function () {

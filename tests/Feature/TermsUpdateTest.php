@@ -36,9 +36,8 @@ it('shallow-merges data, preserving untouched top-level keys', function () {
     Server::actingAs($user)
         ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['description' => 'New']])
         ->assertOk()
-        ->assertSee('"title":"Alpha"')
-        ->assertSee('"description":"New"')
-        ->assertSee('updated — live');
+        ->assertSee('updated — live')
+        ->assertDontSee('"data"');
 
     $fresh = Term::find('topics::alpha')->in('en');
 
@@ -56,8 +55,9 @@ it('stores an explicit null to clear an optional field', function () {
 
     Server::actingAs(Fixtures::makeUser('edit topics terms'))
         ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['description' => null]])
-        ->assertOk()
-        ->assertSee('"description":null');
+        ->assertOk();
+
+    expect(Term::find('topics::alpha')->in('en')->data()->all())->toHaveKey('description', null);
 });
 
 it('rejects clearing a required field via merged validation', function () {
@@ -142,7 +142,6 @@ it('creates a site localization override transparently on first write', function
         ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['title' => 'Alpha DE'], 'site' => 'de'])
         ->assertOk()
         ->assertSee('"site":"de"')
-        ->assertSee('"title":"Alpha DE"')
         ->assertSee('"localization":"created"');
 
     $term = Term::find('topics::alpha');
@@ -300,8 +299,7 @@ it('round-trips the terms_get bucket after a localized slug rename', function ()
 
     Server::actingAs($user)
         ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => [...$bucket, 'description' => 'Neu'], 'site' => 'de'])
-        ->assertOk()
-        ->assertSee('"description":"Neu"');
+        ->assertOk();
 
     $fresh = Term::find('topics::alpha')->in('de');
 
@@ -392,8 +390,7 @@ it('stores a single-file asset as a plain string', function () {
 
     Server::actingAs(Fixtures::makeUser('edit topics terms'))
         ->tool(TermsUpdate::class, ['id' => 'topics::php', 'data' => ['icon' => ['php.svg']]])
-        ->assertOk()
-        ->assertSee('"icon":"php.svg"');
+        ->assertOk();
 
     expect(Term::find('topics::php')->value('icon'))->toBe('php.svg');
 });

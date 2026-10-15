@@ -20,15 +20,14 @@ it('lists assets with summary columns', function () {
     Server::actingAs($user)
         ->tool(AssetsList::class, ['container' => 'images'])
         ->assertOk()
-        ->assertSee('"id":"images::hero.png"')
         ->assertSee('"path":"hero.png"')
-        ->assertSee('"basename":"hero.png"')
+        ->assertDontSee('"basename"')
+        ->assertDontSee('"id"')
         ->assertSee('"is_image":true')
         ->assertSee('"alt":"A hero image"')
         ->assertSee('"url":"/assets/images/hero.png"')
-        ->assertSee('"id":"images::notes.txt"')
+        ->assertSee('"path":"notes.txt"')
         ->assertSee('"is_image":false')
-        ->assertSee('"folder":null')
         ->assertSee('"dimensions":null')
         ->assertSee('"total":2');
 });
@@ -79,7 +78,6 @@ it('filters to a folder subtree', function () {
         ->assertOk()
         ->assertSee('"path":"blog/hero.png"')
         ->assertSee('"path":"blog/2026/nested.png"')
-        ->assertSee('"folder":"blog"')
         ->assertDontSee('"path":"root.txt"')
         ->assertSee('"total":2');
 });

@@ -43,6 +43,15 @@ called out here explicitly.
   stays inline whatever its size. **Breaking:** a
   large `array`, `yaml`, `code`, `textarea`, or custom fieldtype value now
   takes a second call with `fields` to read in full.
+- **Write results no longer echo what was just written.**
+  - `navigations_update` returned the whole tree after a save, also for one
+    added link. It now returns the result, the edit URL, and the ids of new
+    branches under `added`.
+  - `globals_update` and `terms_update` no longer return the saved data; read
+    it with `globals_get` or `terms_get` when needed.
+- **`assets_list`, `assets_get`, and `assets_upload` drop `id`, `basename`, and
+  `folder`**, which repeat `path` and the container you passed. A page of 25
+  assets is about 38% smaller. The asset tools take a container and this path.
 
 ### Fixed
 

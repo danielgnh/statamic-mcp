@@ -192,9 +192,6 @@ class TermsUpdate extends Tool
             'taxonomy' => $taxonomyHandle,
             'slug' => $localized->slug(),
             'site' => $site,
-            // Mirror terms_get's round-trippable raw shape: this site's local
-            // overrides, minus Statamic-managed metadata.
-            'data' => $localized->data()->except(['updated_at', 'updated_by'])->all(),
         ];
 
         if ($site !== $defaultSite) {
