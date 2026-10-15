@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
+use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\PlacesEntries;
@@ -26,6 +27,7 @@ use Statamic\Support\Str;
 class EntriesCreate extends Tool
 {
     use AuthorizesEntries;
+    use ComparesPatchData;
     use LocalizesEntries;
     use NormalizesEntryInput;
     use PlacesEntries;

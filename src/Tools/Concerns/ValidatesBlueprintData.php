@@ -16,11 +16,12 @@ use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 use Statamic\Fieldtypes\Replicator;
-use Statamic\Fieldtypes\RowId;
 use Statamic\Support\Arr;
 
 trait ValidatesBlueprintData
 {
+    abstract protected function normalize(mixed $value): mixed;
+
     /**
      * Statamic silently stores unknown keys (typos become content) — reject
      * them instead, naming valid handles plus a Levenshtein "did you mean".
@@ -151,51 +152,113 @@ trait ValidatesBlueprintData
      * @param  list<string>  $except  handles the blueprint defines that are never data keys
      * @param  list<string>  $allowed  keys Statamic stores beside the fields (a set's type, row ids)
      */
-    private function rejectUnknownFields(Fields $fields, array $data, string $path = '', array $except = [], array $allowed = []): void
+    private function rejectUnknownFields(Fields $fields, array $data, string $path = '', array $except = [], array $allowed = [], mixed $stored = null): void
     {
-        $handles = $fields->all()->map(fn (Field $field): string => $field->handle())->diff($except)->values()->all();
-        $unknown = array_values(array_diff(array_keys($data), $handles, $allowed));
+        $messages = $this->unknownFields($fields, $data, $path, $except, $allowed, $stored);
 
-        if ($unknown !== []) {
-            throw new ToolException($this->unknownFieldsMessage($unknown, $handles, $path));
-        }
-
-        foreach (Arr::except($data, $allowed) as $handle => $value) {
-            $this->rejectInvalidValue($fields->get($handle), $value, ltrim("{$path}.{$handle}", '.'));
+        if ($messages !== []) {
+            throw new ToolException(implode('; ', array_slice($messages, 0, 10)).(count($messages) > 10 ? sprintf('; and %d more', count($messages) - 10) : ''));
         }
     }
 
-    private function rejectInvalidValue(Field $field, mixed $value, string $path): void
+    /**
+     * @param  array<array-key, mixed>  $data
+     * @param  list<string>  $except
+     * @param  list<string>  $allowed
+     * @return list<string>
+     */
+    private function unknownFields(Fields $fields, array $data, string $path, array $except = [], array $allowed = [], mixed $stored = null): array
     {
-        if ($value === null) {
-            return;
+        $handles = $fields->all()->map(fn (Field $field): string => $field->handle())->diff($except)->values()->all();
+
+        $unknown = array_values(array_filter(
+            array_diff(array_keys($data), $handles, $allowed),
+            fn (int|string $key) => ! is_array($stored) || ! array_key_exists($key, $stored),
+        ));
+
+        $messages = $unknown === [] ? [] : [$this->unknownFieldsMessage($unknown, $handles, $path)];
+
+        foreach (Arr::except($data, $allowed) as $handle => $value) {
+            if (in_array($handle, $handles, true)) {
+                $messages = [...$messages, ...$this->invalidValue($fields->get($handle), $value, ltrim("{$path}.{$handle}", '.'), is_array($stored) ? ($stored[$handle] ?? null) : null)];
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function invalidValue(Field $field, mixed $value, string $path, mixed $stored): array
+    {
+        if ($value === null || $this->unchanged($value, $stored)) {
+            return [];
         }
 
         $fieldtype = $field->fieldtype();
 
         // Bard extends Replicator, so it has to be matched first.
         if ($fieldtype instanceof Bard) {
-            $this->rejectInvalidBard($fieldtype, $value, $path);
-        } elseif ($fieldtype instanceof Replicator) {
-            $this->rejectInvalidSets($fieldtype, $value, $path);
-        } elseif ($fieldtype instanceof Grid) {
-            $this->rejectInvalidRows($fieldtype, $value, $path);
-        } elseif ($fieldtype instanceof Group) {
-            $this->rejectInvalidGroup($fieldtype, $value, $path);
-        } elseif ($fieldtype instanceof Assets) {
-            $this->rejectMissingAssets($field, $value, $path);
+            return $this->invalidBard($fieldtype, $value, $path, $stored);
         }
+
+        if ($fieldtype instanceof Replicator) {
+            return $this->invalidSets($fieldtype, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof Grid) {
+            return $this->invalidRows($fieldtype, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof Group) {
+            return $this->invalidGroup($fieldtype, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof Assets) {
+            $this->rejectMissingAssets($field, $value, $path, $stored);
+        }
+
+        return [];
     }
 
-    private function rejectInvalidSets(Replicator $fieldtype, mixed $sets, string $path): void
+    private function unchanged(mixed $value, mixed $stored): bool
+    {
+        return $stored !== null && $this->normalize($value) === $this->normalize($stored);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function storedById(mixed $stored, mixed $id, string $key): ?array
+    {
+        if (! is_array($stored) || ! is_scalar($id) || (string) $id === '') {
+            return null;
+        }
+
+        $matches = array_values(array_filter($stored, fn (mixed $item) => is_array($item) && (string) data_get($item, $key) === (string) $id));
+
+        return count($matches) === 1 ? $matches[0] : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function invalidSets(Replicator $fieldtype, mixed $sets, string $path, mixed $stored): array
     {
         if (! is_array($sets) || ! array_is_list($sets)) {
             throw new ToolException("{$path} must be a list of sets, each an object with a type — an object keyed by set id merges into stored sets only through an update that addresses each enclosing set by id");
         }
 
+        $messages = [];
+
         foreach ($sets as $index => $set) {
-            $this->rejectInvalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index));
+            $counterpart = $this->storedById($stored, data_get($set, Sets::idHandle()), Sets::idHandle());
+
+            $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart)];
         }
+
+        return $messages;
     }
 
     /**
@@ -209,8 +272,15 @@ trait ValidatesBlueprintData
         return is_string($id) && $id !== '' ? $id : (string) $index;
     }
 
-    private function rejectInvalidSet(Replicator $fieldtype, mixed $set, string $path): void
+    /**
+     * @return list<string>
+     */
+    private function invalidSet(Replicator $fieldtype, mixed $set, string $path, mixed $stored): array
     {
+        if ($this->unchanged($set, $stored)) {
+            return [];
+        }
+
         $types = $fieldtype->flattenedSetsConfig()->keys()->sort()->values()->all();
         $type = data_get($set, 'type');
 
@@ -218,7 +288,9 @@ trait ValidatesBlueprintData
             throw new ToolException(sprintf('%s must be a set object with a type — valid set types: %s', $path, implode(', ', $types)));
         }
 
-        if (! in_array($type, $types, true)) {
+        $stored = data_get($stored, 'type') === $type ? $stored : null;
+
+        if (! in_array($type, $types, true) && $stored === null) {
             $message = sprintf("unknown set type '%s' in %s — valid set types: %s", $type, $path, implode(', ', $types));
 
             throw new ToolException(($closest = $this->closest($type, $types)) ? "{$message} — did you mean '{$closest}'?" : $message);
@@ -228,19 +300,24 @@ trait ValidatesBlueprintData
             throw new ToolException("{$path}.enabled must be true or false");
         }
 
-        $this->rejectUnknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', app(RowId::class)->handle()]);
+        return $this->unknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', Sets::idHandle()], stored: $stored);
     }
 
-    private function rejectInvalidBard(Bard $fieldtype, mixed $nodes, string $path): void
+    /**
+     * @return list<string>
+     */
+    private function invalidBard(Bard $fieldtype, mixed $nodes, string $path, mixed $stored): array
     {
         // An HTML string is fine: preProcess() converts it to ProseMirror.
         if (is_string($nodes)) {
-            return;
+            return [];
         }
 
         if (! is_array($nodes) || ! array_is_list($nodes)) {
             throw new ToolException("{$path} must be a list of ProseMirror nodes, or an HTML string");
         }
+
+        $messages = [];
 
         foreach ($nodes as $index => $node) {
             if (! is_array($node) || ! is_string(data_get($node, 'type'))) {
@@ -248,36 +325,54 @@ trait ValidatesBlueprintData
             }
 
             if ($node['type'] === 'set') {
-                $this->rejectInvalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values");
+                $counterpart = $this->storedById($stored, data_get($node, 'attrs.id'), 'attrs.id');
+
+                $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", data_get($counterpart, 'attrs.values'))];
             }
         }
+
+        return $messages;
     }
 
-    private function rejectInvalidRows(Grid $fieldtype, mixed $rows, string $path): void
+    /**
+     * @return list<string>
+     */
+    private function invalidRows(Grid $fieldtype, mixed $rows, string $path, mixed $stored): array
     {
         if (! is_array($rows) || ! array_is_list($rows)) {
             throw new ToolException("{$path} must be a list of rows — an object keyed by row id merges into stored rows only through an update that addresses each enclosing set by id");
         }
+
+        $messages = [];
 
         foreach ($rows as $index => $row) {
             if (! is_array($row)) {
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $this->rejectUnknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [app(RowId::class)->handle()]);
+            $counterpart = $this->storedById($stored, data_get($row, Sets::idHandle()), Sets::idHandle());
+
+            if (! $this->unchanged($row, $counterpart)) {
+                $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart)];
+            }
         }
+
+        return $messages;
     }
 
-    private function rejectInvalidGroup(Group $fieldtype, mixed $values, string $path): void
+    /**
+     * @return list<string>
+     */
+    private function invalidGroup(Group $fieldtype, mixed $values, string $path, mixed $stored): array
     {
         if (! is_array($values) || ($values !== [] && array_is_list($values))) {
             throw new ToolException("{$path} must be an object keyed by field handle");
         }
 
-        $this->rejectUnknownFields($fieldtype->fields(), $values, $path);
+        return $this->unknownFields($fieldtype->fields(), $values, $path, stored: $stored);
     }
 
-    private function rejectMissingAssets(Field $field, mixed $value, string $path): void
+    private function rejectMissingAssets(Field $field, mixed $value, string $path, mixed $stored): void
     {
         $container = $this->assetsFieldContainer($field);
 
@@ -289,6 +384,10 @@ trait ValidatesBlueprintData
         $handle = $container->handle();
 
         foreach (Arr::wrap($value) as $reference) {
+            if (in_array($reference, Arr::wrap($stored), true)) {
+                continue;
+            }
+
             $id = is_string($reference) && ! str_contains($reference, '::') ? "{$handle}::{$reference}" : $reference;
 
             if (! is_string($id) || ! str_starts_with($id, "{$handle}::") || ! Asset::find($id)) {

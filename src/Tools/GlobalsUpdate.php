@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Statamic\Facades\GlobalSet;
 
 #[Name('globals_update')]
-#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. A Replicator or Grid field also takes an object keyed by set id that merges into just those sets, as in entries_update. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
+#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. A Replicator or Grid field takes an object keyed by set id that merges into just those sets, or a list of sets in their order where an item with a stored id merges into that set, as in entries_update. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
 #[IsIdempotent]
 class GlobalsUpdate extends Tool
 {
@@ -29,7 +29,7 @@ class GlobalsUpdate extends Tool
     {
         return [
             'handle' => $schema->string()->description('Global set handle, e.g. "settings".')->required(),
-            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle. A Replicator or Grid variable also takes {"<set id>": {...}} to merge into single sets.')->required(),
+            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle. A Replicator or Grid variable also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go.')->required(),
             'site' => $schema->string()->description('Site handle. Defaults to the default site. A missing localization is created on first write.'),
         ];
     }

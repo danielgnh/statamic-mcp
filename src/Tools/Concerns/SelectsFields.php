@@ -203,7 +203,7 @@ trait SelectsFields
             'truncated' => true,
             'sets' => $index,
             'note' => sprintf(
-                'NOT writable — fetch the whole field with %s fields: ["%s"], or one set with fields: ["%s.<id>"]; the update tool merges into one set with {"%s": {"<id>": {...}}}',
+                'NOT writable — fetch one set with %s fields: ["%s.<id>"], or the whole field with fields: ["%s"]. The update tool merges into one set with {"%s": {"<id>": {...}}}, and adds, removes, or reorders sets with the list of ids in their new order, a new set where it goes: [{"id": "<id>"}, {"type": "...", ...}]',
                 $this->name(),
                 $handle,
                 $handle,
