@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\MergesSets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
@@ -11,12 +12,10 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
-use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 use Statamic\Facades\GlobalSet;
 
 #[Name('globals_update')]
-#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. A Replicator or Grid field takes an object keyed by set id that merges into just those sets, or a list of sets in their order where an item with a stored id merges into that set, as in entries_update. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
-#[IsIdempotent]
+#[Description("Update a global set's variables with a shallow top-level-key merge of raw data (the globals_get raw shape) — nested structures are replaced wholesale; explicit null clears a variable. A Replicator or Grid field takes an object keyed by set id that merges into just those sets, or a list of sets in their order where an item with a stored id merges into that set, and a Bard, Markdown, text, or textarea field takes {\"find\": \"...\", \"replace\": \"...\"} to change one piece of its text, as in entries_update. With site, writes that site's localization, creating it transparently on first write. An update that changes nothing is a no-op. Globals have no draft state: saved values are live immediately. Never send augmented data.")]
 class GlobalsUpdate extends Tool
 {
     use ComparesPatchData;
@@ -29,7 +28,7 @@ class GlobalsUpdate extends Tool
     {
         return [
             'handle' => $schema->string()->description('Global set handle, e.g. "settings".')->required(),
-            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle. A Replicator or Grid variable also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go.')->required(),
+            'data' => $schema->object()->description('Raw variables to merge, keyed by field handle. A Replicator or Grid variable also takes {"<set id>": {...}} to merge into single sets, or a list of [{"id": "<set id>"}, ...] with new sets where they go. A Bard, Markdown, text, or textarea field also takes {"find": "...", "replace": "..."} to change one piece of its text.')->required(),
             'site' => $schema->string()->description('Site handle. Defaults to the default site. A missing localization is created on first write.'),
         ];
     }
@@ -160,6 +159,10 @@ class GlobalsUpdate extends Tool
     private function rejectSetPatchesWithoutBlueprint(array $patch, array $current): void
     {
         foreach ($patch as $handle => $value) {
+            if (TextEdit::isEdit($value)) {
+                throw new ToolException("variable {$handle} takes {\"find\": \"...\", \"replace\": \"...\"} only on a global set with a blueprint, where its field type says it holds text — send its new value");
+            }
+
             if (is_array($value) && ! array_is_list($value) && is_array($current[$handle] ?? null) && array_is_list($current[$handle])) {
                 throw new ToolException("variable {$handle} is a list, and without a blueprint nothing says it holds sets to merge into by id — send the complete list");
             }

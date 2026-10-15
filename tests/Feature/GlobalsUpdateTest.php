@@ -387,3 +387,37 @@ it('refuses a by-id patch on a set without a blueprint instead of storing it as 
 
     expect(GlobalSet::findByHandle('footer')->in('en')->get('links'))->toBe([['id' => 'link0001', 'type' => 'link', 'label' => 'Imprint']]);
 });
+
+it('changes one piece of a markdown variable with find and replace', function () {
+    Fixtures::site();
+
+    Blueprint::makeFromFields(['notice' => ['type' => 'markdown']])->setHandle('banner')->setNamespace('globals')->save();
+
+    $set = GlobalSet::make('banner')->title('Banner');
+    $set->save();
+    $set->makeLocalization('en')->data(['notice' => 'Closed on **Monday**'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit banner globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'banner', 'data' => ['notice' => ['find' => 'Monday', 'replace' => 'Sunday']]])
+        ->assertOk();
+
+    Stache::clear();
+
+    expect(GlobalSet::findByHandle('banner')->in('en')->get('notice'))->toBe('Closed on **Sunday**');
+});
+
+it('refuses find and replace on a global set without a blueprint', function () {
+    Fixtures::site();
+
+    $set = GlobalSet::make('banner')->title('Banner');
+    $set->save();
+    $set->makeLocalization('en')->data(['notice' => 'Closed on Monday'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit banner globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'banner', 'data' => ['notice' => ['find' => 'Monday', 'replace' => 'Sunday']]])
+        ->assertHasErrors(['variable notice takes {"find": "...", "replace": "..."} only on a global set with a blueprint, where its field type says it holds text — send its new value']);
+
+    Stache::clear();
+
+    expect(GlobalSet::findByHandle('banner')->in('en')->get('notice'))->toBe('Closed on Monday');
+});

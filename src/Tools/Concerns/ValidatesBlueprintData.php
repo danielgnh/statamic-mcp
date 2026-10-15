@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Danielgnh\StatamicMcp\Support\Sets;
+use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Validation\ValidationException;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
@@ -194,6 +195,10 @@ trait ValidatesBlueprintData
     {
         if ($value === null || $this->unchanged($value, $stored)) {
             return [];
+        }
+
+        if (TextEdit::isEdit($value) && TextEdit::supports($field)) {
+            throw new ToolException(sprintf('%s takes {"find": "...", "replace": "..."} only at the top level or in a set addressed by id — send its new value', $path));
         }
 
         $fieldtype = $field->fieldtype();

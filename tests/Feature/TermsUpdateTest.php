@@ -437,3 +437,16 @@ it('merges into one set of a replicator field by id', function () {
 
     expect(array_column(Term::find('topics::alpha')->in('en')->get('blocks'), 'text'))->toBe(['First', 'Second, edited']);
 });
+
+it('changes one piece of a textarea with find and replace', function () {
+    Fixtures::site();
+    makeTopicsTaxonomy();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha', 'description' => 'Old words stay here'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit topics terms'))
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['description' => ['find' => 'Old', 'replace' => 'New']]])
+        ->assertOk();
+
+    expect(Term::find('topics::alpha')->in('en')->data()->get('description'))->toBe('New words stay here');
+});
