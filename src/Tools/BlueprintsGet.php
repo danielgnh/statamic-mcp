@@ -36,6 +36,15 @@ class BlueprintsGet extends Tool
     use ResolvesForms;
     use ResolvesNavs;
 
+    /**
+     * @var array<string, array{0: string, 1: 'asset_containers'|'collections'|'taxonomies'}>
+     */
+    private const array LINKS = [
+        'assets' => ['container', 'asset_containers'],
+        'entries' => ['collections', 'collections'],
+        'terms' => ['taxonomies', 'taxonomies'],
+    ];
+
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
@@ -289,8 +298,10 @@ class BlueprintsGet extends Tool
             default => [],
         };
 
+        [$link] = self::LINKS[$field->type()] ?? [null];
+
         foreach ($targets as $key) {
-            if (filled($value = data_get($config, $key))) {
+            if (filled($value = $key === $link ? $this->exposedLinks($field) : data_get($config, $key))) {
                 $descriptor[$key] = $value;
             }
         }
@@ -477,6 +488,13 @@ class BlueprintsGet extends Tool
      */
     private function leafExample(Field $field, string $path): array
     {
+        if ($this->linksOnlyUnexposed($field)) {
+            return [null, [$path => sprintf(
+                'links only %s not exposed to MCP, so MCP cannot fill this field',
+                $field->type() === 'assets' ? 'a container' : self::LINKS[$field->type()][0],
+            )]];
+        }
+
         [$value, $note] = match ($field->type()) {
             'text' => ['Example text', null],
             'textarea' => ['A longer example paragraph of plain text.', null],
@@ -657,6 +675,24 @@ class BlueprintsGet extends Tool
         $first = array_is_list($options) ? data_get($options[0], 'key', $options[0]) : array_key_first($options);
 
         return [$wrapInArray ? [$first] : $first, null];
+    }
+
+    private function exposedLinks(Field $field): mixed
+    {
+        [$key, $resources] = self::LINKS[$field->type()];
+
+        $configured = $field->get($key);
+
+        $exposed = array_values(array_filter((array) $configured, fn (mixed $handle) => is_scalar($handle) && $this->exposureAllows($resources, (string) $handle)));
+
+        return is_array($configured) ? $exposed : ($exposed[0] ?? null);
+    }
+
+    private function linksOnlyUnexposed(Field $field): bool
+    {
+        return isset(self::LINKS[$field->type()])
+            && filled($field->get(self::LINKS[$field->type()][0]))
+            && blank($this->exposedLinks($field));
     }
 
     /**
