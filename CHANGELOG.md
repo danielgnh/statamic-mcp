@@ -36,6 +36,18 @@ called out here explicitly.
   now also include the fields an addon adds through `EntryBlueprintFound`
   or `TermBlueprintFound`, which `entries_create` and `terms_create`
   already accepted.
+- **`entries_create` and `entries_localize` say when part of the save was
+  not stored.** A host listener can cancel the draft's initial revision
+  (`RevisionSaving`) or its place in the tree (`CollectionTreeSaving`)
+  after the entry itself is saved. The tools reported a plain success then,
+  and named a `parent` the tree never stored. The entry is still saved, as
+  before, and the response now lists what is missing under `not_stored`.
+  When the tree placement is missing, `parent` is left out, and the note
+  says where Statamic lists the entry and, for a nested entry, how to move
+  it. A tree another call kept locked is reported the same way. Before, it
+  was an error after the entry was already saved, and the rest of the save
+  never ran: no revision, no `EntrySaved` event, no localizations for
+  collections that propagate.
 
 ### Security
 

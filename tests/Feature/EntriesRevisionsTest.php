@@ -5,7 +5,9 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
+use Statamic\Events\RevisionSaving;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Revision;
 
@@ -76,6 +78,26 @@ it('creates an unpublished draft through the revision pipeline', function () {
 
     // The create recorded an attributed initial revision on disk
     expect(collect(File::allFiles(Revision::directory()))->isNotEmpty())->toBeTrue();
+});
+
+it('says the initial revision was not stored when a listener cancels it', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    Event::listen(RevisionSaving::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'New Draft']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertSee('"not_stored":["initial revision — cancelled by a listener on this site; the draft is saved without one"]');
+
+    $entry = Entry::query()->where('collection', 'blog')->where('slug', 'new-draft')->first();
+
+    expect($entry)->not->toBeNull()
+        ->and($entry->revisions())->toHaveCount(0);
 });
 
 it('creates no working copy when the merged update equals current data', function () {
