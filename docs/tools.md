@@ -135,8 +135,10 @@ entries scheduled in the CP.
 the server resolves DNS itself and refuses any host with a private, loopback,
 link-local, carrier-grade-NAT, or otherwise reserved address (IPv4 and IPv6,
 cloud metadata endpoints included); the connection is pinned to the validated IP
-(no DNS-rebinding window); every redirect hop (max 3) is re-validated; and
-downloads abort past `uploads.max_size` — `Content-Length` is never trusted.
+(no DNS-rebinding window); every redirect hop (max 3) is re-validated; the
+requests of one download, redirects included, share 15 seconds, though a slow
+DNS lookup is not cut off; and downloads abort past `uploads.max_size` —
+`Content-Length` is never trusted.
 Set `uploads.source_allowlist` to pin uploads to known hosts. Container-level
 validation rules (e.g. `mimes:jpg,png`) and Statamic's global file guards apply
 on top, exactly as in the Control Panel.

@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Support;
 
+use Carbon\CarbonInterface;
 use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use GuzzleHttp\Psr7\Uri;
@@ -24,6 +25,8 @@ class SourceDownloader
 
     private const int TIMEOUT_SECONDS = 15;
 
+    private const float MIN_HOP_TIMEOUT_SECONDS = 0.1;
+
     /**
      * @param  null|Closure(string): list<string>  $resolver  host => IPs; injectable so tests never hit real DNS
      */
@@ -35,11 +38,12 @@ class SourceDownloader
     public function download(string $url): array
     {
         $maxBytes = self::maxKilobytes() * 1024;
+        $deadline = now()->addSeconds(self::TIMEOUT_SECONDS);
 
         for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
             $ip = $this->validated($url);
 
-            $response = $this->fetch($url, $ip, $maxBytes);
+            $response = $this->fetch($url, $ip, $maxBytes, $deadline);
 
             if ($response->redirect()) {
                 $location = $response->header('Location');
@@ -165,8 +169,10 @@ class SourceDownloader
         return true;
     }
 
-    private function fetch(string $url, string $ip, int $maxBytes): Response
+    private function fetch(string $url, string $ip, int $maxBytes, CarbonInterface $deadline): Response
     {
+        $timeoutSeconds = $this->ensureTimeLeft($deadline);
+
         $host = strtolower((string) parse_url($url, PHP_URL_HOST));
         $port = parse_url($url, PHP_URL_PORT)
             ?? (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80);
@@ -200,7 +206,7 @@ class SourceDownloader
                         throw $this->sizeLimitException();
                     }
                 },
-            ])->timeout(self::TIMEOUT_SECONDS)->get($url);
+            ])->timeout($timeoutSeconds)->get($url);
         } catch (Throwable $e) {
             // Surface our own cap/guard exceptions from inside Guzzle wrappers.
             for ($previous = $e; $previous instanceof Throwable; $previous = $previous->getPrevious()) {
@@ -209,8 +215,21 @@ class SourceDownloader
                 }
             }
 
+            $this->ensureTimeLeft($deadline);
+
             throw new ToolException(sprintf('could not download source_url: %s', $e->getMessage()), $e->getCode(), $e);
         }
+    }
+
+    private function ensureTimeLeft(CarbonInterface $deadline): float
+    {
+        $secondsLeft = now()->diffInSeconds($deadline);
+
+        if ($secondsLeft < self::MIN_HOP_TIMEOUT_SECONDS) {
+            throw new ToolException(sprintf('source_url took longer than %d seconds — aborted', self::TIMEOUT_SECONDS));
+        }
+
+        return $secondsLeft;
     }
 
     private function sizeLimitException(): ToolException

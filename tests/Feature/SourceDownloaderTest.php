@@ -1,7 +1,12 @@
 <?php
 
+use Carbon\CarbonImmutable;
 use Danielgnh\StatamicMcp\Support\SourceDownloader;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Promise\Create;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 
 function downloaderWithPublicDns(): SourceDownloader
@@ -118,6 +123,79 @@ it('follows at most 3 redirects', function () {
 
     downloaderWithPublicDns()->download('https://images.example.com/a.png');
 })->throws(ToolException::class, 'redirected more than 3 times');
+
+it('gives all redirect hops one shared 15-second budget', function () {
+    $this->freezeTime();
+    $timeouts = [];
+
+    Http::fake(function (Request $request, array $options) use (&$timeouts) {
+        $timeouts[] = $options['timeout'];
+        $this->travel(5)->seconds();
+
+        return Http::response('', 302, ['Location' => 'https://images.example.com/again.png']);
+    });
+
+    expect(fn () => downloaderWithPublicDns()->download('https://images.example.com/a.png'))
+        ->toThrow(ToolException::class, 'source_url took longer than 15 seconds');
+
+    expect($timeouts)->toBe([15.0, 10.0, 5.0]);
+    Http::assertSentCount(3);
+});
+
+it('reports a hop that curl cuts off at the deadline as the budget running out', function () {
+    $this->freezeTime();
+    $timeouts = [];
+
+    Http::fake(function (Request $request, array $options) use (&$timeouts) {
+        $timeouts[] = $options['timeout'];
+
+        if (count($timeouts) === 1) {
+            $this->travel(14_500)->milliseconds();
+
+            return Http::response('', 302, ['Location' => 'https://images.example.com/stalls.png']);
+        }
+
+        $this->travel(500)->milliseconds();
+
+        return Create::rejectionFor(new ConnectException(
+            'cURL error 28: Operation timed out after 500 milliseconds with 0 bytes received',
+            $request->toPsrRequest(),
+        ));
+    });
+
+    expect(fn () => downloaderWithPublicDns()->download('https://images.example.com/a.png'))
+        ->toThrow(ToolException::class, 'source_url took longer than 15 seconds');
+
+    expect($timeouts)->toBe([15.0, 0.5]);
+});
+
+it('stops instead of starting a hop with under 100 ms left, because curl reads a 0 ms timeout as none', function () {
+    $this->freezeTime();
+
+    Http::fake(function () {
+        $this->travel(14_950)->milliseconds();
+
+        return Http::response('', 302, ['Location' => 'https://images.example.com/moved.png']);
+    });
+
+    expect(fn () => downloaderWithPublicDns()->download('https://images.example.com/a.png'))
+        ->toThrow(ToolException::class, 'source_url took longer than 15 seconds');
+
+    Http::assertSentCount(1);
+});
+
+it('downloads in a host app that configures immutable dates', function () {
+    Date::use(CarbonImmutable::class);
+    Http::fake(['https://images.example.com/*' => Http::response('PNGBYTES', 200)]);
+
+    try {
+        [$contents] = downloaderWithPublicDns()->download('https://images.example.com/hero.png');
+    } finally {
+        Date::useDefault();
+    }
+
+    expect($contents)->toBe('PNGBYTES');
+});
 
 it('reports non-2xx responses as tool errors', function () {
     Http::fake(['https://images.example.com/*' => Http::response('gone', 404)]);

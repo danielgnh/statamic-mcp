@@ -8,6 +8,17 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **The requests of one `source_url` download share 15 seconds, redirects
+  included.** Each redirect hop had its own 15-second timeout and nothing
+  limited the whole download, so a server that answered slowly and
+  redirected three times held a PHP worker for about a minute per
+  `assets_upload` call. Each hop now gets only the time left of one
+  15-second budget, and once it runs out the upload stops with
+  `source_url took longer than 15 seconds`, also when curl cuts off a hop at
+  the deadline. The DNS lookup before each hop is not cut off by the budget.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
