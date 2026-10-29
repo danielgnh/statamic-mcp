@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
+use Danielgnh\StatamicMcp\Tools\Concerns\PresentsAugmentedData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\SelectsFields;
@@ -16,7 +17,6 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\Blink;
 use Statamic\Facades\Entry;
-use Statamic\Fields\Value;
 
 #[Name('entries_get')]
 #[Description('Get a single entry by id, or by collection + slug. Returns raw field data by default — the round-trippable shape for entries_update. format=augmented returns rendered values for display only: NEVER send augmented data back into entries_update. Large values are truncated to preview objects unless requested via fields (an array of top-level field handles): Bard and Markdown over 500 bytes, and any other value over 4 KB, a Grid excepted. A large Replicator field (a page builder) comes back as an index of its sets — id, type, and a short preview each — unless requested via fields: e.g. "page_builder" fetches the whole field, "page_builder.<id>" one set (of a Replicator or Grid), as an object keyed by its id that entries_update merges back by id. fields selects blueprint fields, and in raw format any other key the entry stores — augmented-only keys such as permalink are not selectable. On revision-enabled entries, has_working_copy reports whether staged (unpublished) changes exist, and the returned data is the staged working copy when there is one, as in the Control Panel\'s edit form: exactly what entries_update builds on and entries_publish would promote. working_copy: false returns the live entry instead, and source says which one you got. On a collection in more than one site, localizations lists each site you can access with the id and status of the entry there, or null where it has none — add one with entries_localize.')]
@@ -24,6 +24,7 @@ use Statamic\Fields\Value;
 class EntriesGet extends Tool
 {
     use LocalizesEntries;
+    use PresentsAugmentedData;
     use ResolvesEntries;
     use ResolvesSites;
     use SelectsFields;
@@ -85,12 +86,7 @@ class EntriesGet extends Tool
         $localization = null;
 
         if ($format === 'augmented') {
-            // Value::jsonSerialize runs a FULL augment — a terms relation would
-            // inline whole augmented terms including their reverse entries.
-            // shallow() reduces relations to id/title/api_url-style stubs.
-            $data = collect((array) $entry->toAugmentedArray())
-                ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
-                ->all();
+            $data = $this->augmentedData($entry->toAugmentedArray());
         } else {
             // raw: the round-trippable write shape. updated_at/updated_by and
             // blueprint are Statamic-managed metadata (its own toArray excludes
