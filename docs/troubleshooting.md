@@ -42,7 +42,7 @@ runtime.
 | `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: Passport's ResourceServer rejected the bearer, or its user no longer resolves. |
 | `403` "requires 'access mcp'…" | The user authenticated fine but lacks the `Access MCP` permission — grant it to one of their roles in the CP. |
 | `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. Only the MCP route is affected. |
-| `404`, or `419` for a POST, on the endpoint | MCP is disabled, or enabled but failed to mount, so Statamic's frontend route answers instead. Check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. |
+| `404`, or `419` for a POST, on the endpoint | MCP is disabled, or enabled but failed to mount, so Statamic's frontend route answers instead. Check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. If the site caches routes, a 404 also means the cache was built under another `enabled` or `auth` setting: run `php artisan optimize`. |
 
 ## Token store locking
 

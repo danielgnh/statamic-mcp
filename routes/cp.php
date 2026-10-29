@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Http\Controllers\McpConnectionsController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpGuidelinesController;
 use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
+use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Illuminate\Support\Facades\Route;
 
 // Statamic loads this file on its own, whatever the addon's config says, so
@@ -12,7 +13,7 @@ if (! config('statamic.mcp.enabled')) {
     return;
 }
 
-Route::prefix('mcp')->name('mcp.')->middleware('can:access mcp')->group(function () {
+Route::prefix('mcp')->name('mcp.')->middleware([EnsureMcpEnabled::class, 'can:access mcp'])->group(function () {
     Route::get('/', [McpController::class, 'index'])->name('index');
 
     Route::get('guidelines', [McpGuidelinesController::class, 'edit'])->name('guidelines.edit');
