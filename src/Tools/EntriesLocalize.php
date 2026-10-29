@@ -152,7 +152,7 @@ class EntriesLocalize extends Tool
 
         if ($tree) {
             $localization->afterSave(function ($entry) use ($collection, $site, $parent, &$unplaced) {
-                $unplaced = $this->placeInTree($collection, $site, $entry, $parent);
+                $unplaced = $this->placeInTree($collection, $site, $entry, $parent, limitDepth: false);
             });
         }
 
