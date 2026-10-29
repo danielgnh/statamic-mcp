@@ -8,6 +8,17 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **Client registration in OAuth mode is throttled.** Anyone could call
+  `POST /oauth/register` without limit, and each call stored a new Passport
+  client. The registration and discovery routes now carry their own
+  `throttle:60,1`, as Passport's `/oauth/token` does, so one address
+  registers at most 60 clients a minute. The limit counts per address
+  whatever `middleware` says, so a site that throttles the MCP route by
+  bearer token does not put every anonymous caller in one bucket. It shares
+  its budget with `/oauth/token` and with the MCP route's default throttle.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
