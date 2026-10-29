@@ -50,6 +50,7 @@ class ConnectionRepository
         $tokenModel = Passport::tokenModel();
 
         $pairs = $tokenModel::query()
+            ->whereNotNull('user_id')
             ->select('user_id', 'client_id')
             ->selectRaw('MIN(created_at) as connected_at')
             ->selectRaw('MAX(created_at) as last_refreshed_at')
@@ -66,9 +67,11 @@ class ConnectionRepository
             ->get()
             ->keyBy(fn ($client) => (string) $client->getKey());
 
+        $foreignClientIds = $clients->reject(PassportBearerGuard::acceptsClient(...))->keys();
         $activePairs = $this->activePairKeys($tokenModel);
 
         return $pairs
+            ->whereNotIn('client_id', $foreignClientIds)
             ->map(fn ($pair) => [
                 'user_id' => (string) $pair->user_id,
                 'client_id' => (string) $pair->client_id,
@@ -123,6 +126,12 @@ class ConnectionRepository
     public function disconnect(string $userId, string $clientId): bool
     {
         if (! $this->ready()) {
+            return false;
+        }
+
+        $client = Passport::clientModel()::query()->find($clientId);
+
+        if ($client && ! PassportBearerGuard::acceptsClient($client)) {
             return false;
         }
 
