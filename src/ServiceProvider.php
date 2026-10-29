@@ -19,6 +19,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server as McpServer;
@@ -120,7 +121,7 @@ class ServiceProvider extends AddonServiceProvider
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
 
-            Mcp::oauthRoutes(); // hard-requires Passport — guarded so bootAddon never throws
+            Route::middleware('throttle:60,1')->group(fn () => Mcp::oauthRoutes()); // hard-requires Passport — guarded so bootAddon never throws
 
             // Passport 12+ ships no default consent view and never binds
             // AuthorizationViewResponse — /oauth/authorize 500s with

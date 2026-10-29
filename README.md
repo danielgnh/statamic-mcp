@@ -193,7 +193,7 @@ This creates `config/statamic/mcp.php`.
 | `route` | `mcp/statamic` | The endpoint path. |
 | `auth` | `token` | `token` or `oauth`. Set with `STATAMIC_MCP_AUTH`. |
 | `server` | `Danielgnh\StatamicMcp\Server` | The server class to mount. |
-| `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. |
+| `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. OAuth client registration and discovery keep their own `throttle:60,1` per address, whatever this says. |
 | `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. |
 | `deletes` | `false` | Registers the delete tools. Set with `STATAMIC_MCP_DELETES`. |
 | `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, `asset_containers`, `navigations`, and `forms`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
