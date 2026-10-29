@@ -52,7 +52,7 @@ class AssetsGet extends Tool
             'data' => $asset->data()->all(),
             'mime_type' => $asset->mimeType(),
             'last_modified' => $asset->lastModified()->toIso8601String(),
-            'cp_edit_url' => $asset->editUrl(),
+            'cp_edit_url' => $this->assetEditUrl($asset),
         ]);
     }
 }

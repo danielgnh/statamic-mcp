@@ -206,3 +206,22 @@ it('blocks uploads in read-only mode', function () {
 
     expect(Storage::disk('images')->exists('a.txt'))->toBeFalse();
 });
+
+it('reports an upload whose filename holds braces as uploaded', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'wei{rd}.png',
+            'folder' => 'blog',
+        ])
+        ->assertOk()
+        ->assertSee('"path":"blog/wei{rd}.png"')
+        ->assertSee('"result":"uploaded — live"')
+        ->assertSee('"cp_edit_url":null');
+
+    expect(Storage::disk('images')->exists('blog/wei{rd}.png'))->toBeTrue();
+});
