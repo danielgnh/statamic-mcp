@@ -2,12 +2,15 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
+use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
+use Illuminate\Routing\CompiledRouteCollection;
+use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
@@ -74,33 +77,40 @@ class Doctor extends Command
     protected function checkEnabled(): void
     {
         if (! config('statamic.mcp.enabled')) {
-            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint is not registered. Set STATAMIC_MCP_ENABLED=true to serve requests.");
+            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint, the OAuth routes and the Tools → MCP pages are off. Set STATAMIC_MCP_ENABLED=true to serve requests.");
 
             return;
         }
 
         $this->info('[ OK ] MCP is enabled.');
 
-        // Enabled but no route: bootAddon caught a mount failure and logged
-        // 'Statamic MCP failed to mount' instead of bricking the host site.
-        if ($this->routeIsMounted()) {
+        $route = $this->mountedRoute();
+        $routesCached = Route::getRoutes() instanceof CompiledRouteCollection;
+
+        if ($route && in_array(EnsureMcpEnabled::forCurrentAuth(), $route->middleware(), true)) {
             $this->info('[ OK ] MCP route is mounted.');
+        } elseif ($route) {
+            $this->problem('The cached MCP route was built for another auth mode or an older version of the addon. Rebuild the route cache: php artisan optimize.');
+        } elseif ($routesCached) {
+            $this->problem("MCP is enabled but the route cache holds no MCP route — it was built while MCP was off, or while the route failed to mount. Rebuild it: php artisan optimize. If the route is still missing, check the log for 'Statamic MCP failed to mount'.");
         } else {
+            // Enabled but no route: bootAddon caught a mount failure and logged
+            // 'Statamic MCP failed to mount' instead of bricking the host site.
             $this->problem("MCP is enabled but its route is not mounted — boot failed, so requests to the endpoint reach Statamic's frontend route and get a 404, or a 419 for a POST. Check the log for 'Statamic MCP failed to mount' and fix the reported exception.");
         }
     }
 
-    protected function routeIsMounted(): bool
+    protected function mountedRoute(): ?RoutingRoute
     {
         $uri = trim((string) config('statamic.mcp.route', 'mcp/statamic'), '/');
 
         foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
-                return true;
+                return $route;
             }
         }
 
-        return false;
+        return null;
     }
 
     protected function checkServer(): void

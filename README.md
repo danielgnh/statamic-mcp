@@ -189,7 +189,7 @@ This creates `config/statamic/mcp.php`.
 
 | Key | Default | What it does |
 |---|---|---|
-| `enabled` | `true` | Kill switch. When `false`, the route is never registered. Set with `STATAMIC_MCP_ENABLED`. |
+| `enabled` | `true` | Kill switch. When `false`, the endpoint, the OAuth routes, and the Tools → MCP pages are off, even when routes are cached. Set with `STATAMIC_MCP_ENABLED`. |
 | `route` | `mcp/statamic` | The endpoint path. |
 | `auth` | `token` | `token` or `oauth`. Set with `STATAMIC_MCP_AUTH`. |
 | `server` | `Danielgnh\StatamicMcp\Server` | The server class to mount. |
@@ -200,6 +200,8 @@ This creates `config/statamic/mcp.php`.
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
 | `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
+
+The endpoint checks `enabled` and `auth` on every request, so a cached route list cannot keep serving the old value of either. On a site that caches routes, run `php artisan optimize` after changing them: the routes for the new value exist only after that, and until then MCP stays off. `mcp:doctor` names a stale route cache.
 
 ## Troubleshooting
 
