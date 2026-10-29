@@ -20,7 +20,7 @@ use Statamic\Fields\Blueprint;
 use Statamic\Support\Arr;
 
 #[Name('navigations_update')]
-#[Description("Replace a navigation's tree for one site with the complete tree you send, as the CP's tree save does: send every branch, in order, in the shape navigations_get returns. Keep id on existing branches; omit it on new ones and one is generated. An entry branch links an entry by id, which must exist in one of the navigation's collections, in the same site; a branch without an entry needs a url, a title, or both (a title alone is a text item). data takes the navigation blueprint's fields, validated and stored the way the CP stores them. resolved blocks from navigations_get are read-only and ignored. max_depth and the root rule (with expects_root, the first branch cannot have children) are enforced. An update that changes nothing is a no-op, and the result lists the ids of new branches under added. Navigations have no draft state: the saved tree is live immediately.")]
+#[Description("Replace a navigation's tree for one site with the complete tree you send, as the CP's tree save does: send every branch, in order, in the shape navigations_get returns. Keep id on existing branches; omit it on new ones and one is generated. An entry branch links an entry by id, which must exist in one of the navigation's collections, in the same site; an unexposed or deleted entry id the stored tree already links is kept as it is; a branch without an entry needs a url, a title, or both (a title alone is a text item). data takes the navigation blueprint's fields, validated and stored the way the CP stores them. resolved blocks from navigations_get are read-only and ignored. max_depth and the root rule (with expects_root, the first branch cannot have children) are enforced. An update that changes nothing is a no-op, and the result lists the ids of new branches under added. Navigations have no draft state: the saved tree is live immediately.")]
 #[IsIdempotent]
 class NavigationsUpdate extends Tool
 {
@@ -193,7 +193,7 @@ class NavigationsUpdate extends Tool
         }
 
         if ($entry !== null) {
-            $this->ensureLinkable($nav, $site, $entry, $path);
+            $this->ensureLinkable($nav, $site, $storedTree, $entry, $path);
         }
 
         $values = $this->processBranch($nav, $branch, $title, $url, $path, data_get($this->storedBranch($storedTree, $id), 'data'));
@@ -229,15 +229,23 @@ class NavigationsUpdate extends Tool
      * Only the entry picker's choices are linkable: the navigation's own
      * collections, and the tree's site unless the navigation selects across
      * sites. A dangling id would silently vanish from the rendered menu.
+     *
+     * @param  array<int, array<string, mixed>>  $storedTree
      */
-    private function ensureLinkable(NavContract $nav, string $site, string $id, string $path): void
+    private function ensureLinkable(NavContract $nav, string $site, array $storedTree, string $id, string $path): void
     {
-        $collections = $nav->collections()->map->handle()->sort()->values()->all();
+        $collections = $this->linkableCollections($nav);
+        sort($collections);
         $linkable = $collections === [] ? '(none)' : implode(', ', $collections);
 
         $entry = Entry::find($id);
+        $exposed = $entry && in_array($entry->collectionHandle(), $this->exposedHandles('collections'), true);
 
-        if (! $entry) {
+        if (! $exposed && $this->linksEntry($storedTree, $id)) {
+            return;
+        }
+
+        if (! $exposed) {
             throw new ToolException("entry '{$id}' in {$path} not found — drop the branch, or link an existing entry (linkable collections: {$linkable})");
         }
 
@@ -250,6 +258,20 @@ class NavigationsUpdate extends Tool
         if (! $nav->canSelectAcrossSites() && $entry->locale() !== $site) {
             throw new ToolException("entry '{$id}' in {$path} belongs to site '{$entry->locale()}', not '{$site}' — link its '{$site}' localization, which has its own id");
         }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $branches
+     */
+    private function linksEntry(array $branches, string $id): bool
+    {
+        foreach ($branches as $branch) {
+            if (data_get($branch, 'entry') === $id || $this->linksEntry(data_get($branch, 'children', []), $id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

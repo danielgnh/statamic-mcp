@@ -175,3 +175,46 @@ it('treats an unexposed navigation as missing', function () {
         ->tool(NavigationsGet::class, ['handle' => 'main'])
         ->assertHasErrors(["navigation 'main' not found — available: footer"]);
 });
+
+it('shows a branch whose entry is in an unexposed collection as missing, like a deleted one', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog'], 'navigations' => ['main']]]);
+
+    $draft = Fixtures::page('unreleased', 'Unreleased offer', published: false);
+
+    Nav::find('main')->in('en')->tree([
+        ['id' => 'b-hidden', 'entry' => $draft],
+        ['id' => 'b-gone', 'entry' => 'deleted-entry'],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('view main nav', 'view pages entries'))
+        ->tool(NavigationsGet::class, ['handle' => 'main'])
+        ->assertOk()
+        ->assertSee(sprintf(
+            '"tree":[{"id":"b-hidden","entry":"%s","resolved":{"status":"missing"}},{"id":"b-gone","entry":"deleted-entry","resolved":{"status":"missing"}}]',
+            $draft,
+        ))
+        ->assertDontSee('Unreleased offer');
+});
+
+it('lists only exposed collections among the ones entry branches may link', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    Nav::find('main')->collections(['pages', 'blog'])->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog'], 'navigations' => ['main']]]);
+
+    Server::actingAs(Fixtures::makeUser('view main nav'))
+        ->tool(NavigationsGet::class, ['handle' => 'main'])
+        ->assertOk()
+        ->assertSee('"collections":["blog"]');
+});

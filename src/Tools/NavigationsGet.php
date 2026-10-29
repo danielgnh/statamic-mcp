@@ -14,7 +14,7 @@ use Statamic\Contracts\Structures\Nav as NavContract;
 use Statamic\Fields\Field;
 
 #[Name('navigations_get')]
-#[Description("Read a navigation (a menu) for one site. tree is the raw shape navigations_update accepts: a list of branches {id, entry?, title?, url?, data?, children?}. An entry branch links an entry by id, and a title on it replaces the entry's title in the menu; a branch without an entry is a link (url, usually with a title) or a text item (title only). Entry branches also carry resolved {title, url, status}: the entry's current values, read-only and ignored by navigations_update. status 'missing' means the entry is gone, and navigations_update rejects that branch, so drop it. The response also holds what a write must respect: max_depth (null = unlimited), expects_root (the first branch is the root page and cannot have children), collections (the ones entry branches may link), and fields (the navigation blueprint's fields, which data is keyed by). blueprints_get with type navigation describes those fields in full: the sets of a Replicator or Bard field, each set's fields, and an example of a branch's data.")]
+#[Description("Read a navigation (a menu) for one site. tree is the raw shape navigations_update accepts: a list of branches {id, entry?, title?, url?, data?, children?}. An entry branch links an entry by id, and a title on it replaces the entry's title in the menu; a branch without an entry is a link (url, usually with a title) or a text item (title only). Entry branches also carry resolved {title, url, status}: the entry's current values, read-only and ignored by navigations_update. status 'missing' means the entry is gone or not exposed to MCP: navigations_update keeps such a branch as stored, so send it back or drop it. The response also holds what a write must respect: max_depth (null = unlimited), expects_root (the first branch is the root page and cannot have children), collections (the ones entry branches may link), and fields (the navigation blueprint's fields, which data is keyed by). blueprints_get with type navigation describes those fields in full: the sets of a Replicator or Bard field, each set's fields, and an example of a branch's data.")]
 #[IsReadOnly]
 class NavigationsGet extends Tool
 {
@@ -65,7 +65,7 @@ class NavigationsGet extends Tool
             'site' => $site,
             'max_depth' => $nav->maxDepth(),
             'expects_root' => $nav->expectsRoot(),
-            'collections' => $nav->collections()->map->handle()->values()->all(),
+            'collections' => $this->linkableCollections($nav),
             'fields' => $this->branchFields($nav),
             'tree' => $this->presentBranches($tree->tree()),
             'cp_edit_url' => $tree->showUrl(),
