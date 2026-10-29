@@ -421,3 +421,33 @@ it('refuses find and replace on a global set without a blueprint', function () {
 
     expect(GlobalSet::findByHandle('banner')->in('en')->get('notice'))->toBe('Closed on Monday');
 });
+
+it('gives a new set a fresh id when its id is 0 or sent twice', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    Blueprint::makeFromFields([
+        'site_name' => ['type' => 'text'],
+        'footer_blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'links' => ['fields' => [['handle' => 'heading', 'field' => ['type' => 'text']]]],
+        ]]]],
+    ])->setHandle('settings')->setNamespace('globals')->save();
+
+    Server::actingAs(Fixtures::makeUser('edit settings globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'settings', 'data' => ['footer_blocks' => [
+            ['id' => 'same0001', 'type' => 'links', 'heading' => 'Company'],
+            ['id' => 'same0001', 'type' => 'links', 'heading' => 'Legal'],
+            ['id' => '0', 'type' => 'links', 'heading' => 'Help'],
+            ['id' => 'keep0001', 'type' => 'links', 'heading' => 'Kept'],
+        ]]])
+        ->assertOk();
+
+    Stache::clear();
+
+    $ids = array_column(GlobalSet::findByHandle('settings')->in('en')->get('footer_blocks'), 'id');
+
+    expect($ids)->toHaveCount(4)
+        ->and(array_unique($ids))->toHaveCount(4)
+        ->and($ids[3])->toBe('keep0001')
+        ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
+});

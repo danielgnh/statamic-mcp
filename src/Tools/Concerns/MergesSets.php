@@ -161,11 +161,14 @@ trait MergesSets
         $sets = is_array($sets) ? array_values($sets) : [];
         $byId = Sets::positionsById($sets, $idHandle);
         $kept = [];
+        $new = [];
 
         foreach ($items as $position => $item) {
             $id = is_array($item) ? ($item[$idHandle] ?? null) : null;
 
             if (! is_scalar($id) || (string) $id === '') {
+                $new[] = $position;
+
                 continue;
             }
 
@@ -177,6 +180,8 @@ trait MergesSets
             }
 
             if (count($matches) !== 1) {
+                $new[] = $position;
+
                 continue;
             }
 
@@ -188,13 +193,15 @@ trait MergesSets
             $set = $sets[$matches[0]];
 
             if (array_key_exists('type', $item) && $item['type'] !== data_get($set, 'type')) {
+                $items[$position] = Sets::withoutUnaddressableIds(Sets::fieldsOf($field, $item), $item);
+
                 continue;
             }
 
             $items[$position] = $this->mergeSet($field, $set, $item, "{$path}.{$id}");
         }
 
-        return $items;
+        return Sets::withoutUnaddressableIdsAt($field, $items, $new);
     }
 
     /**
