@@ -8,6 +8,20 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`blueprints_get` without `blueprint` describes the blueprint
+  `entries_create` uses.** On a collection whose first blueprint is hidden,
+  the way the Control Panel retires one, it described the hidden blueprint,
+  while `entries_create` and the CP build new entries on the first visible
+  one. An agent then sent fields the new entry's blueprint doesn't have, or
+  missed fields it requires. Collections now default to the first visible
+  blueprint, as Statamic does. Taxonomies keep their first blueprint, which
+  is what `terms_create` uses, and `available_blueprints` still lists hidden
+  ones, which stay readable by handle. A collection blueprint read by handle
+  now also includes the fields an addon adds through `EntryBlueprintFound`,
+  which `entries_create` already accepted.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
