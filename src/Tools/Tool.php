@@ -7,6 +7,7 @@ use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Tool as BaseTool;
+use League\Flysystem\PathTraversalDetected;
 use Statamic\Contracts\Assets\Asset as AssetContract;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
@@ -60,6 +61,8 @@ abstract class Tool extends BaseTool
             return $this->execute($request);
         } catch (ToolException $e) {
             return Response::error($e->getMessage());
+        } catch (PathTraversalDetected $e) {
+            return Response::error("asset path '{$e->path()}' may not contain '../' — pass a path from assets_list");
         }
     }
 
