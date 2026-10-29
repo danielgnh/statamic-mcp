@@ -16,6 +16,14 @@ called out here explicitly.
   or alt text change was stored and then answered "An internal server error
   occurred.", and `assets_get` couldn't read the asset at all. The tools now
   answer as usual, with `cp_edit_url` set to `null` for such an asset.
+- **An asset path with `../` gets a tool error instead of an internal
+  error.** `assets_get`, `assets_update`, and `assets_delete` given such a
+  path, and a write whose assets field held one, answered "An internal
+  server error occurred." and logged a stack trace on the host for every
+  call. Statamic refuses the path before it touches the disk, so nothing
+  outside the container was read or changed. Every tool, host tools
+  included, now answers that the path may not contain `../`, and logs
+  nothing.
 
 ### Security
 
