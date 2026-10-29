@@ -4,12 +4,14 @@ namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
 use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use Danielgnh\StatamicMcp\Tools\TreeChangedException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Routing\UrlBuilder;
 use Statamic\Contracts\Structures\CollectionTree;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Stache;
 use Statamic\Structures\Page;
@@ -88,6 +90,52 @@ trait PlacesEntries
         }
 
         return $page;
+    }
+
+    protected function parentInLockedTree(CollectionTree $tree, ?string $parent, ?string $moving = null, bool $limitDepth = true): ?string
+    {
+        $page = $parent === null ? null : $tree->find($parent);
+
+        if ($parent !== null && ! $page) {
+            throw TreeChangedException::in($tree, "parent '{$parent}' is no longer in it");
+        }
+
+        if ($page?->isRoot()) {
+            throw TreeChangedException::in($tree, "parent '{$parent}' is the root page now, which takes no children");
+        }
+
+        if ($limitDepth) {
+            try {
+                $this->resolveParent($parent ?? '', $tree, $moving === null ? null : $tree->find($moving));
+            } catch (ToolException $refused) {
+                throw TreeChangedException::in($tree, $refused->getMessage());
+            }
+        }
+
+        return $parent;
+    }
+
+    protected function ensureUniqueUriInLockedTree(CollectionTree $tree, string $id): CollectionTree
+    {
+        if (! $tree->collection()->route($tree->locale())) {
+            return $tree;
+        }
+
+        $probe = (clone $tree)->flushCache()->disableUriCache();
+        $page = $probe->find($id);
+        $parent = $page->parent();
+        $level = $parent && ! $parent->isRoot() ? $parent->pages()->all() : $probe->pages()->all();
+        $uri = $page->uri();
+
+        $taken = $level->first(fn (Page $other) => $other->id() !== $id && $other->uri() === $uri);
+
+        Blink::store('structure-uris')->forget($id);
+
+        if ($taken) {
+            throw TreeChangedException::in($tree, "URL '{$uri}' already belongs to entry '{$taken->id()}' in collection '{$tree->collection()->handle()}' — pick another slug or parent");
+        }
+
+        return $tree;
     }
 
     private function ensureMovableUnder(Page $parent, Page $moving, string $handle): void
@@ -213,14 +261,19 @@ trait PlacesEntries
         }
     }
 
-    protected function placeInTree(CollectionContract $collection, string $site, EntryContract $entry, ?string $parent): ?string
+    protected function placeInTree(CollectionContract $collection, string $site, EntryContract $entry, ?string $parent, bool $limitDepth = true): ?string
     {
         try {
-            $unplaced = $this->saveTreeChangeInLock($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent, $entry))
+            $unplaced = $this->saveTreeChangeInLock($collection, $site, fn (CollectionTree $tree) => $this->ensureUniqueUriInLockedTree(
+                $tree->remove($entry)->appendTo($this->parentInLockedTree($tree, $parent, limitDepth: $limitDepth), $entry),
+                $entry->id(),
+            ))
                 ? null
                 : 'cancelled by a listener on this site';
         } catch (LockTimeoutException) {
             $unplaced = "another call was still saving the tree of collection '{$collection->handle()}' (site '{$site}')";
+        } catch (TreeChangedException $changed) {
+            $unplaced = $changed->getMessage();
         }
 
         return match (true) {
@@ -238,7 +291,7 @@ trait PlacesEntries
         return Cache::lock("statamic-mcp-tree:{$collection->handle()}:{$site}", 10)->block(5, function () use ($collection, $site, $change) {
             $tree = $this->placementTree($collection, $site) ?? throw $this->cannotNest($collection);
 
-            return $change($this->materializeTree($tree))->save();
+            return $change($this->materializeTree(clone $tree))->save();
         });
     }
 }

@@ -483,3 +483,85 @@ it('keeps the entries another process placed while its Stache still lacks them',
         ['entry' => $about, 'children' => [['entry' => Fixtures::pageId('contact')], ['entry' => Fixtures::pageId('team')]]],
     ]);
 });
+
+it('reports a placement that another call took past max_depth after the parent was checked, with the entry it saved', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure(maxDepth: 3);
+
+    $about = Fixtures::page('about', 'About');
+    $contact = Fixtures::page('contact', 'Contact');
+    $office = Fixtures::page('office', 'Office');
+
+    $competing = [['entry' => $about, 'children' => [['entry' => $contact, 'children' => [['entry' => $office]]]]]];
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about], ['entry' => $contact, 'children' => [['entry' => $office]]]])->save();
+
+    // After this call checked Office at depth 2, another one moves Contact,
+    // and Office with it, under About.
+    $moved = false;
+
+    Event::listen(EntrySaving::class, function () use (&$moved, $competing) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        Collection::findByHandle('pages')->structure()->in('en')->tree($competing)->save();
+    });
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => $office])
+        ->assertOk()
+        ->assertSee(sprintf('"id":"%s"', Fixtures::pageId('team')))
+        ->assertDontSee('"parent"')
+        ->assertSee('"not_stored":'.json_encode([
+            "tree placement — another call changed the tree of collection 'pages' (site 'en') after this one checked it: parent '{$office}' is at depth 3, so the entry would be at depth 4, past the 3 levels collection 'pages' allows (max_depth) — pick a parent higher up, or the top level; Statamic lists the entry at the end of the top level, not under '{$office}' — move it with entries_update and parent, which needs 'reorder pages entries'",
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+    expect(Fixtures::storedPagesTree())->toBe($competing);
+});
+
+it('reports a placement onto a URL another call gave a page after it was checked, with the entry it saved', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $office = Fixtures::page('office', 'Office');
+    $team = Fixtures::page('team', 'Team');
+
+    $competing = [['entry' => $about, 'children' => [['entry' => $team]]], ['entry' => $office]];
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about], ['entry' => $office, 'children' => [['entry' => $team]]]])->save();
+
+    // After this call checked /about/team, another one moves Team there.
+    $moved = false;
+
+    Event::listen(EntrySaving::class, function () use (&$moved, $competing) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        Collection::findByHandle('pages')->structure()->in('en')->tree($competing)->save();
+    });
+
+    $response = Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'slug' => 'team', 'data' => ['title' => 'Team'], 'parent' => $about])
+        ->assertOk()
+        ->assertSee('"url":"/team"')
+        ->assertDontSee('"parent"');
+
+    $created = Entry::query()->where('collection', 'pages')->where('slug', 'team')->get()->reject(fn ($entry) => $entry->id() === $team)->first();
+
+    $response->assertSee(sprintf('"id":"%s"', $created->id()))
+        ->assertSee('"not_stored":'.json_encode([
+            "tree placement — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' already belongs to entry '{$team}' in collection 'pages' — pick another slug or parent; Statamic lists the entry at the end of the top level, not under '{$about}' — move it with entries_update and parent, which needs 'reorder pages entries'",
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+    expect(Fixtures::storedPagesTree())->toBe($competing)
+        ->and(Entry::find($created->id())->url())->toBe('/team');
+});

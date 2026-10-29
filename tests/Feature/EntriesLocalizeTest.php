@@ -521,3 +521,64 @@ it('is refused in read_only mode', function () {
 
     expect($origin->in('de'))->toBeNull();
 });
+
+it('reports a placement under a parent deleted after it was checked, with the localization it saved', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about, 'children' => [['entry' => $team]]]])->save();
+
+    $aboutDe = tap(Entry::find($about)->makeLocalization('de'))->save();
+
+    // After this call found the German About, another one deletes it.
+    $deleted = false;
+
+    Event::listen(EntryCreating::class, function () use (&$deleted, $aboutDe) {
+        if ($deleted) {
+            return;
+        }
+
+        $deleted = true;
+
+        Entry::find($aboutDe->id())->delete();
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $team, 'site' => 'de', 'data' => ['title' => 'Team']])
+        ->assertOk()
+        ->assertSee(sprintf('"id":"%s"', Fixtures::pageId('team', 'de')))
+        ->assertDontSee('"parent"')
+        ->assertSee('"not_stored":'.json_encode([
+            "tree placement — another call changed the tree of collection 'pages' (site 'de') after this one checked it: parent '{$aboutDe->id()}' is no longer in it; Statamic lists the entry at the end of the top level, not under '{$aboutDe->id()}' — move it with entries_update and parent, which needs 'reorder pages entries'",
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+});
+
+it('places a localization under its localized parent past max_depth, as the CP does', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::structure(maxDepth: 2);
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+    $kontakt = Fixtures::page('kontakt', 'Kontakt', site: 'de');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about, 'children' => [['entry' => $team]]]])->save();
+
+    $aboutDe = tap(Entry::find($about)->makeLocalization('de'))->save();
+
+    Collection::findByHandle('pages')->structure()->in('de')->tree([['entry' => $kontakt, 'children' => [['entry' => $aboutDe->id()]]]])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $team, 'site' => 'de', 'data' => ['title' => 'Team']])
+        ->assertOk()
+        ->assertSee(sprintf('"parent":"%s"', $aboutDe->id()))
+        ->assertDontSee('"not_stored"');
+
+    expect(Fixtures::storedPagesTree('de'))->toBe([
+        ['entry' => $kontakt, 'children' => [['entry' => $aboutDe->id(), 'children' => [['entry' => Fixtures::pageId('team', 'de')]]]]],
+    ]);
+});

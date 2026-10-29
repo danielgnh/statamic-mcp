@@ -22,6 +22,24 @@ called out here explicitly.
   was an error after the entry was already saved, and the rest of the save
   never ran: no revision, no `EntrySaved` event, no localizations for
   collections that propagate.
+- **Two conflicting moves no longer drop both entries from the tree.** When
+  one `entries_update` call moved an entry under a second one while another
+  call moved the second under the first, both calls reported "moved", and
+  the saved tree lost both entries and their children. Those pages fell
+  back to the top level, and on a `{parent_uri}/{slug}` route their URLs
+  changed. Each call checked the move against the tree it read before it
+  took the tree's lock. The move is now checked again on the tree read
+  inside the lock: the parent, max_depth, a parent that became the root
+  page, and the URL among the pages of its new level, as the Control
+  Panel's tree save checks it. A move that no longer fits is refused, and
+  the error says the entry was not moved and the rest of the update was
+  saved. On a collection with revisions, a move is also checked under the
+  entry's live slug, which the tree takes at once while a new slug waits
+  in the working copy. `entries_create` and `entries_localize` check the
+  parent and the URL again inside the lock too. The entry is saved by
+  then, so a placement that no longer fits leaves it outside the tree,
+  with a `not_stored` note that says why, and the reported URL is the one
+  it has there.
 
 ## [0.9.1] - 2026-10-15
 
