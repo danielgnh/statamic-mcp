@@ -8,6 +8,18 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **Rewriting a long set list costs time in proportion to its length.**
+  `entries_update`, `terms_update`, and `globals_update` matched every set
+  they were sent against the stored list by scanning that list, once to
+  merge and once to validate, and a Bard value's sets were matched the
+  same way. The cost grew with the square of the list. Each stored list is
+  now read once into an index by id, so the cost grows with its length, as
+  it does when the Control Panel saves the field. A stored set whose id is
+  a list or another value with no string form no longer makes every later
+  write of the field fail. Errors and results are otherwise unchanged.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

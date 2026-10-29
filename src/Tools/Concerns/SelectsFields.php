@@ -87,9 +87,10 @@ trait SelectsFields
         foreach ($selectedSets as $handle => $ids) {
             $field = $blueprint->field($handle);
             $sets = $this->decoded($data[$handle] ?? []);
+            $byId = Sets::positionsById($sets, Sets::idHandle());
 
             $data[$handle] = collect($ids)
-                ->mapWithKeys(fn (string $id) => [$id => $sets[Sets::find($field, $sets, $id, $handle)]])
+                ->mapWithKeys(fn (string $id) => [$id => $sets[Sets::find($field, $sets, $byId, $id, $handle)]])
                 ->all();
         }
 
