@@ -86,7 +86,7 @@ class EntriesGet extends Tool
         $localization = null;
 
         if ($format === 'augmented') {
-            $data = $this->augmentedData($entry->toAugmentedArray());
+            $data = $this->augmentedData($entry->toAugmentedArray(), $user);
         } else {
             // raw: the round-trippable write shape. updated_at/updated_by and
             // blueprint are Statamic-managed metadata (its own toArray excludes
