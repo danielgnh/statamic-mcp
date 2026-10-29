@@ -25,6 +25,15 @@ called out here explicitly.
   caller can't view it, because the Control Panel's entry listing shows its
   title. **Breaking:** entries reached through keys Statamic adds itself,
   such as `parent`, come back as the same stub instead of the whole entry.
+- **Augmented `entries_get` and `terms_get` show other users by id and
+  name.** `updated_by` came back as the whole user, with email, super flag,
+  roles, and last login, and an `author` field or any other users field
+  carried the user's email. A role with only `view blog entries` or
+  `view tags terms` read all of it, while the Control Panel shows a related
+  user by name and never shows the email without `view users`. Every user
+  in augmented output, inside sets too, is now `{id, name, api_url}`, with
+  `email` added for a caller who has `view users`. **Breaking:**
+  `updated_by` is that stub instead of the whole user.
 
 ## [0.9.1] - 2026-10-15
 

@@ -6,6 +6,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Statamic\Contracts\Assets\Asset as AssetContract;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
+use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Forms\Form as FormContract;
@@ -33,11 +34,12 @@ use Statamic\Fieldtypes\RowId;
 use Statamic\Fieldtypes\Structures;
 use Statamic\Fieldtypes\Taxonomies;
 use Statamic\Fieldtypes\Terms;
+use Statamic\Fieldtypes\Users;
 use Statamic\Forms\Fieldtype as Forms;
 use Statamic\Structures\CollectionStructure;
 
 /**
- * @phpstan-type Exposed array<'collections'|'taxonomies'|'asset_containers'|'navigations'|'forms', list<string>>
+ * @phpstan-type Exposed array{collections: list<string>, taxonomies: list<string>, asset_containers: list<string>, navigations: list<string>, forms: list<string>, user_emails: bool}
  */
 trait PresentsAugmentedData
 {
@@ -47,7 +49,7 @@ trait PresentsAugmentedData
      * @param  array<string, mixed>  $augmented
      * @return array<string, mixed>
      */
-    private function augmentedData(array $augmented): array
+    private function augmentedData(array $augmented, UserContract $user): array
     {
         $exposed = [
             'collections' => $this->exposedHandles('collections'),
@@ -55,6 +57,7 @@ trait PresentsAugmentedData
             'asset_containers' => $this->exposedHandles('asset_containers'),
             'navigations' => $this->exposedHandles('navigations'),
             'forms' => $this->exposedHandles('forms'),
+            'user_emails' => $this->can($user, 'view users'),
         ];
 
         return array_map(fn (mixed $value) => $this->presented($value, $exposed), $augmented);
@@ -79,7 +82,8 @@ trait PresentsAugmentedData
             $fieldtype === null => $this->presentedData($value, $exposed),
             $fieldtype instanceof Entries, $fieldtype instanceof Terms, $fieldtype instanceof Assets,
             $fieldtype instanceof Collections, $fieldtype instanceof Taxonomies, $fieldtype instanceof Navs,
-            $fieldtype instanceof Structures, $fieldtype instanceof AssetContainer, $fieldtype instanceof Forms => $this->presentedRelation($value->value(), $exposed),
+            $fieldtype instanceof Structures, $fieldtype instanceof AssetContainer, $fieldtype instanceof Forms,
+            $fieldtype instanceof Users => $this->presentedRelation($value->value(), $exposed),
             default => $value->shallow(),
         };
     }
@@ -124,7 +128,7 @@ trait PresentsAugmentedData
     {
         $raw = $value->value();
 
-        return Compare::isQueryBuilder($raw) || $this->exposureOf($raw) !== null
+        return Compare::isQueryBuilder($raw) || $this->exposureOf($raw) !== null || $raw instanceof UserContract
             ? $this->presentedRelation($raw, $exposed)
             : $value->shallow();
     }
@@ -141,12 +145,12 @@ trait PresentsAugmentedData
         if ($items instanceof Collection) {
             return $items
                 ->reject(fn (mixed $item) => $this->isOutsideExposure($item, $exposed))
-                ->map($this->stub(...))
+                ->map(fn (mixed $item) => $this->stub($item, $exposed))
                 ->values()
                 ->all();
         }
 
-        return $items === null || $this->isOutsideExposure($items, $exposed) ? null : $this->stub($items);
+        return $items === null || $this->isOutsideExposure($items, $exposed) ? null : $this->stub($items, $exposed);
     }
 
     /**
@@ -218,11 +222,17 @@ trait PresentsAugmentedData
         return new Value($raw, $value->handle(), $value->fieldtype(), $value->augmentable());
     }
 
-    private function stub(mixed $item): mixed
+    /**
+     * @param  Exposed  $exposed
+     */
+    private function stub(mixed $item, array $exposed): mixed
     {
-        return $item instanceof EntryContract || $item instanceof TermContract || $item instanceof AssetContract || $item instanceof FormContract
-            ? $item->toShallowAugmentedCollection()
-            : $item;
+        return match (true) {
+            $item instanceof UserContract && ! $exposed['user_emails'] => $item->toShallowAugmentedCollection()->except('email'),
+            $item instanceof EntryContract, $item instanceof TermContract, $item instanceof AssetContract,
+            $item instanceof FormContract, $item instanceof UserContract => $item->toShallowAugmentedCollection(),
+            default => $item,
+        };
     }
 
     /**
