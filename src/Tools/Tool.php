@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Support\ActingUser;
+use Illuminate\Routing\Exceptions\UrlGenerationException;
 use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -212,8 +213,17 @@ abstract class Tool extends BaseTool
     {
         return [
             'result' => $state,
-            'cp_edit_url' => $saved->editUrl(),
+            'cp_edit_url' => $saved instanceof AssetContract ? $this->assetEditUrl($saved) : $saved->editUrl(),
         ];
+    }
+
+    protected function assetEditUrl(AssetContract $asset): ?string
+    {
+        try {
+            return $asset->editUrl();
+        } catch (UrlGenerationException) {
+            return null;
+        }
     }
 
     /**

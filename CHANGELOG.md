@@ -8,6 +8,15 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Assets with braces in their filename can be uploaded, updated, and read.**
+  Statamic keeps `{` and `}` in an uploaded filename, but Laravel can't put
+  them in the Control Panel link, so building `cp_edit_url` threw. An upload
+  or alt text change was stored and then answered "An internal server error
+  occurred.", and `assets_get` couldn't read the asset at all. The tools now
+  answer as usual, with `cp_edit_url` set to `null` for such an asset.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

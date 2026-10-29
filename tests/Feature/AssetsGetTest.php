@@ -68,3 +68,15 @@ it('treats an unexposed container as missing', function () {
         ->tool(AssetsGet::class, ['container' => 'secrets', 'path' => 'x.txt'])
         ->assertHasErrors(["asset container 'secrets' not found — available: images"]);
 });
+
+it('reads an asset whose filename holds braces, without the edit url Laravel cannot build for it', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Storage::disk('images')->put('blog/wei{rd}.png', Fixtures::tinyPng());
+
+    Server::actingAs(Fixtures::makeUser('view images assets'))
+        ->tool(AssetsGet::class, ['container' => 'images', 'path' => 'blog/wei{rd}.png'])
+        ->assertOk()
+        ->assertSee('"path":"blog/wei{rd}.png"')
+        ->assertSee('"cp_edit_url":null');
+});
