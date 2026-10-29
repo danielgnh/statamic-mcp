@@ -8,6 +8,17 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An asset path with `../` gets a tool error instead of an internal
+  error.** `assets_get`, `assets_update`, and `assets_delete` given such a
+  path, and a write whose assets field held one, answered "An internal
+  server error occurred." and logged a stack trace on the host for every
+  call. Statamic refuses the path before it touches the disk, so nothing
+  outside the container was read or changed. Every tool, host tools
+  included, now answers that the path may not contain `../`, and logs
+  nothing.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
