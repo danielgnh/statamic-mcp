@@ -8,6 +8,24 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **Augmented `entries_get` and `terms_get` leave out related items outside
+  the exposure.** With `resources` limited, relation fields still came back
+  with the title, URL, and permalink of entries in unexposed collections and
+  terms of unexposed taxonomies, and with the URL and alt text of assets in
+  unexposed containers. That held inside Replicator, Grid, Group, and Bard
+  sets, for link fields, and for links and images in Bard and Markdown
+  text, while `entries_get` answers the same ids with "not found". Fields
+  that point at a collection, taxonomy, navigation, form, or asset
+  container, and an entry's `mount`, returned unexposed ones with their
+  titles. A list now drops those items, a single relation reads `null`, a
+  link field `{"url": null}`, and a link or image in text loses its URL, as
+  for a deleted item. An exposed related item keeps its stub even when the
+  caller can't view it, because the Control Panel's entry listing shows its
+  title. **Breaking:** entries reached through keys Statamic adds itself,
+  such as `parent`, come back as the same stub instead of the whole entry.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
