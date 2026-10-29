@@ -81,7 +81,7 @@ class NavigationsUpdate extends Tool
         // A navigation without a tree yet gets its first one on this write.
         $tree = $nav->in($site) ?? $nav->makeTree($site);
 
-        $branches = $this->branches($nav, $site, $validated['tree'], 'tree', 1);
+        $branches = $this->branches($nav, $site, $tree->tree(), $validated['tree'], 'tree', 1);
 
         $this->rejectDuplicateIds($branches);
 
@@ -124,16 +124,17 @@ class NavigationsUpdate extends Tool
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $storedTree
      * @return list<array<string, mixed>>
      */
-    private function branches(NavContract $nav, string $site, mixed $branches, string $path, int $depth): array
+    private function branches(NavContract $nav, string $site, array $storedTree, mixed $branches, string $path, int $depth): array
     {
         if (! is_array($branches) || ! array_is_list($branches)) {
             throw new ToolException("{$path} must be a list of branches");
         }
 
         return array_map(
-            fn (mixed $branch, int $index): array => $this->branch($nav, $site, $branch, "{$path}.{$index}", $depth),
+            fn (mixed $branch, int $index): array => $this->branch($nav, $site, $storedTree, $branch, "{$path}.{$index}", $depth),
             $branches,
             array_keys($branches),
         );
@@ -143,9 +144,10 @@ class NavigationsUpdate extends Tool
      * One branch in the shape the CP's tree save stores: {id, entry, title,
      * url, data, children}, with empty values left out.
      *
+     * @param  array<int, array<string, mixed>>  $storedTree
      * @return array<string, mixed>
      */
-    private function branch(NavContract $nav, string $site, mixed $branch, string $path, int $depth): array
+    private function branch(NavContract $nav, string $site, array $storedTree, mixed $branch, string $path, int $depth): array
     {
         if (! is_array($branch) || ($branch !== [] && array_is_list($branch))) {
             throw new ToolException("{$path} must be a branch object: {id?, entry?, title?, url?, data?, children?}");
@@ -194,7 +196,7 @@ class NavigationsUpdate extends Tool
             $this->ensureLinkable($nav, $site, $entry, $path);
         }
 
-        $values = $this->processBranch($nav, $branch, $title, $url, $path);
+        $values = $this->processBranch($nav, $branch, $title, $url, $path, data_get($this->storedBranch($storedTree, $id), 'data'));
 
         $stored = Arr::removeNullValues([
             'id' => $id ?? BranchIdGenerator::generate(),
@@ -204,7 +206,7 @@ class NavigationsUpdate extends Tool
             'data' => Arr::removeNullValues($values),
         ]);
 
-        $children = $this->branches($nav, $site, data_get($branch, 'children', []), "{$path}.children", $depth + 1);
+        $children = $this->branches($nav, $site, $storedTree, data_get($branch, 'children', []), "{$path}.children", $depth + 1);
 
         return $children === [] ? $stored : [...$stored, 'children' => $children];
     }
@@ -260,7 +262,7 @@ class NavigationsUpdate extends Tool
      * @param  array<string, mixed>  $branch
      * @return array<array-key, mixed>
      */
-    private function processBranch(NavContract $nav, array $branch, ?string $title, ?string $url, string $path): array
+    private function processBranch(NavContract $nav, array $branch, ?string $title, ?string $url, string $path, mixed $stored): array
     {
         $data = data_get($branch, 'data', []);
 
@@ -280,7 +282,7 @@ class NavigationsUpdate extends Tool
             throw new ToolException("navigation '{$nav->handle()}' defines no branch fields — omit {$path}.data");
         }
 
-        $this->rejectUnknownFields($blueprint->fields(), $data, "{$path}.data", except: ['title', 'url']);
+        $this->rejectUnknownFields($blueprint->fields(), $data, "{$path}.data", except: ['title', 'url'], stored: $stored);
 
         $values = [...array_filter(['title' => $title, 'url' => $url], filled(...)), ...$data];
 
@@ -294,6 +296,29 @@ class NavigationsUpdate extends Tool
         } catch (ToolException $e) {
             throw new ToolException("{$path}: {$e->getMessage()}", $e->getCode(), $e);
         }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $branches
+     * @return array<string, mixed>|null
+     */
+    private function storedBranch(array $branches, ?string $id): ?array
+    {
+        if ($id === null) {
+            return null;
+        }
+
+        foreach ($branches as $branch) {
+            if (data_get($branch, 'id') === $id) {
+                return $branch;
+            }
+
+            if ($found = $this->storedBranch(data_get($branch, 'children', []), $id)) {
+                return $found;
+            }
+        }
+
+        return null;
     }
 
     private function branchBlueprint(NavContract $nav): Blueprint

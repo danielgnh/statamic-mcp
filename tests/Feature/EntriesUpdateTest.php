@@ -693,6 +693,65 @@ it('updates a page the CP saved without tripping over its single-file assets', f
         ->and($fresh->data()->except(['title', 'updated_at', 'updated_by'])->all())->toBe($before);
 });
 
+it('keeps or clears a stored file of an unexposed container, as the CP form sends it back', function () {
+    Fixtures::site();
+
+    $entry = makeCpSavedLandingPage();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    $user = Fixtures::makeUser('edit landing entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Home v2', 'hero' => 'hero.jpg']])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero' => 'other.jpg']])
+        ->assertHasErrors(['hero links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['hero' => null]])
+        ->assertOk();
+
+    $fresh = Entry::find($entry->id());
+
+    expect($fresh->get('title'))->toBe('Home v2')
+        ->and($fresh->get('hero'))->toBeNull()
+        ->and($fresh->get('page_builder')[0]['image'])->toBe('hero.jpg');
+});
+
+it('keeps a stored file of an unexposed container in a set without an id', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'page_builder' => [
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'Hi', 'image' => 'hero.jpg'],
+            ['type' => 'section_text_block', 'enabled' => true, 'text' => 'Old'],
+        ],
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'Welcome', 'image' => 'hero.jpg'],
+            ['type' => 'section_text_block', 'enabled' => true, 'text' => 'New'],
+        ]]])
+        ->assertOk();
+
+    expect(Entry::find($entry->id())->get('page_builder'))
+        ->sequence(
+            fn ($set) => $set->toMatchArray(['heading' => 'Welcome', 'image' => 'hero.jpg']),
+            fn ($set) => $set->toMatchArray(['text' => 'New']),
+        );
+});
+
 it('takes back exactly what entries_get returns as a no-op', function () {
     Fixtures::site();
 

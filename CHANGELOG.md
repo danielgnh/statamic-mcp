@@ -8,6 +8,19 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **Writes no longer look up files in asset containers MCP does not
+  expose.** Every write that validates an assets field checked a new path
+  against the field's container and named the container in the error, so
+  `entries_create` or `entries_update` told an existing file from a missing
+  one in a container that `assets_list` answers with "not found". A new
+  path for a field whose container `resources` leaves out is now refused
+  before any lookup, with an error that names no container. A path the
+  field already stores anywhere, in a set without an id or in a
+  navigation branch's data too, still goes back unchanged, and `null` still
+  clears the field.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
