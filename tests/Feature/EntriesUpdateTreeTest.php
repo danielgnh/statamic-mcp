@@ -7,6 +7,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Events\CollectionTreeSaving;
+use Statamic\Events\EntrySaved;
 use Statamic\Events\EntrySaving;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -466,6 +467,189 @@ it('keeps a tree change another call saved while it was moving an entry', functi
     expect(Fixtures::storedPagesTree())->toBe([
         ['entry' => $about, 'children' => [['entry' => $contact], ['entry' => $team]]],
     ]);
+});
+
+it('refuses a move that another call made circular before the tree was saved, and keeps both entries in the tree', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+    $contact = Fixtures::page('contact', 'Contact');
+
+    storePagesTree([['entry' => $about], ['entry' => $team], ['entry' => $contact]]);
+
+    // After this call checked the move, another one moves About under Team.
+    $moved = false;
+
+    Event::listen(EntrySaved::class, function () use (&$moved, $about, $team, $contact) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        storePagesTree([['entry' => $team, 'children' => [['entry' => $about]]], ['entry' => $contact]]);
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $about])
+        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: parent '{$about}' is inside entry '{$team}' — an entry can't move under one of its own descendants. Any other change in this update was saved."]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $team, 'children' => [['entry' => $about]]], ['entry' => $contact]])
+        ->and(Entry::find($team)->get('title'))->toBe('The team');
+});
+
+it('refuses a move that another call took past max_depth before the tree was saved', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure(maxDepth: 3);
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+    $contact = Fixtures::page('contact', 'Contact');
+    $office = Fixtures::page('office', 'Office');
+
+    storePagesTree([
+        ['entry' => $about, 'children' => [['entry' => $team]]],
+        ['entry' => $contact, 'children' => [['entry' => $office]]],
+    ]);
+
+    // After this call checked Office at depth 2, another one moves Contact,
+    // and Office with it, under About.
+    $moved = false;
+
+    Event::listen(EntrySaved::class, function () use (&$moved, $about, $team, $contact, $office) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        storePagesTree([['entry' => $about, 'children' => [['entry' => $team], ['entry' => $contact, 'children' => [['entry' => $office]]]]]]);
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $office])
+        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: parent '{$office}' is at depth 3, so the entry would be at depth 4, past the 3 levels collection 'pages' allows (max_depth) — pick a parent higher up, or the top level. Any other change in this update was saved."]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => $team], ['entry' => $contact, 'children' => [['entry' => $office]]]]]]);
+});
+
+it('refuses a move under a page that became the root page before the tree was saved', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure(root: true);
+
+    $home = Fixtures::page('home', 'Home');
+    $about = Fixtures::page('about', 'About');
+    $contact = Fixtures::page('contact', 'Contact');
+    $team = Fixtures::page('team', 'Team');
+
+    storePagesTree([['entry' => $home], ['entry' => $about], ['entry' => $contact, 'children' => [['entry' => $team]]]]);
+
+    // After this call checked the move, a tree save puts About first.
+    $reordered = false;
+
+    Event::listen(EntrySaved::class, function () use (&$reordered, $home, $about, $contact, $team) {
+        if ($reordered) {
+            return;
+        }
+
+        $reordered = true;
+
+        storePagesTree([['entry' => $about], ['entry' => $home], ['entry' => $contact, 'children' => [['entry' => $team]]]]);
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $about])
+        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: parent '{$about}' is the root page now, which takes no children. Any other change in this update was saved."]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about], ['entry' => $home], ['entry' => $contact, 'children' => [['entry' => $team]]]]);
+});
+
+it('refuses a move onto a URL another call gave a page before the tree was saved, as the CP tree save does', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $contact = Fixtures::page('contact', 'Contact');
+    $office = Fixtures::page('office', 'Office');
+    $team = Fixtures::page('team', 'Team');
+    $otherTeam = Fixtures::page('team', 'Team');
+
+    storePagesTree([
+        ['entry' => $about],
+        ['entry' => $contact, 'children' => [['entry' => $team]]],
+        ['entry' => $office, 'children' => [['entry' => $otherTeam]]],
+    ]);
+
+    // After this call checked /about/team, another one moves the other Team there.
+    $competing = [
+        ['entry' => $about, 'children' => [['entry' => $otherTeam]]],
+        ['entry' => $contact, 'children' => [['entry' => $team]]],
+        ['entry' => $office],
+    ];
+    $moved = false;
+
+    Event::listen(EntrySaved::class, function () use (&$moved, $competing) {
+        if ($moved) {
+            return;
+        }
+
+        $moved = true;
+
+        storePagesTree($competing);
+    });
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $about])
+        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' already belongs to entry '{$otherTeam}' in collection 'pages' — pick another slug or parent. Any other change in this update was saved."]);
+
+    expect(Fixtures::storedPagesTree())->toBe($competing);
+});
+
+it('saves a moved tree with its URL cache on, so later reads of it keep the cache', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+
+    storePagesTree([['entry' => $about], ['entry' => $team]]);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $team, 'data' => [], 'parent' => $about])
+        ->assertOk();
+
+    expect(Collection::findByHandle('pages')->structure()->flushCache('en')->in('en')->uriCacheEnabled())->toBeTrue()
+        ->and(Stache::cacheStore()->get('stache::items::collection-trees::pages::en')->uriCacheEnabled())->toBeTrue();
+});
+
+it('refuses moving a working copy onto the URL its live slug would take, before anything is saved', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+    Fixtures::revisions('pages');
+
+    $about = Fixtures::page('about', 'About');
+    $sibling = Fixtures::page('team', 'Team');
+    $moving = Fixtures::page('staff', 'Staff');
+
+    Entry::find($moving)->slug('team')->save();
+
+    storePagesTree([['entry' => $about, 'children' => [['entry' => $sibling]]], ['entry' => $moving]]);
+
+    // The slug stays staged, but the move is live at once, under the live slug.
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $moving, 'slug' => 'crew', 'data' => ['title' => 'Crew'], 'parent' => $about])
+        ->assertHasErrors([sprintf("URL '/about/team' already belongs to entry '%s' in collection 'pages' — pick another slug or parent", $sibling)]);
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => $sibling]]], ['entry' => $moving]])
+        ->and(Entry::find($moving)->hasWorkingCopy())->toBeFalse();
 });
 
 it('refuses a move onto a URL another entry already has', function () {

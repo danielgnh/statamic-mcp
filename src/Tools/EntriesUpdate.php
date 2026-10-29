@@ -212,6 +212,10 @@ class EntriesUpdate extends Tool
 
         $this->ensureUniqueUriAfter($target, $move);
 
+        if ($workingCopy && $move !== null) {
+            $this->ensureUniqueUriAfter($entry, $move);
+        }
+
         $added = $this->addedSets($blueprint, $processed, $effective);
 
         return $workingCopy
@@ -370,7 +374,16 @@ class EntriesUpdate extends Tool
             return ['parent' => $to, 'move' => $to === null ? 'no-op — already at the top level' : "no-op — already under '{$to}'"];
         }
 
-        if (! $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $tree->move($entry->id(), $to))) {
+        try {
+            $saved = $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $this->ensureUniqueUriInLockedTree(
+                $tree->move($entry->id(), $this->parentInLockedTree($tree, $to, $entry->id())),
+                $entry->id(),
+            ));
+        } catch (TreeChangedException $changed) {
+            throw new ToolException("the entry was not moved — {$changed->getMessage()}. Any other change in this update was saved.", $changed->getCode(), $changed);
+        }
+
+        if (! $saved) {
             throw new ToolException('the move was cancelled by a listener on this site — the entry was not moved, and any other change in this update was saved');
         }
 
