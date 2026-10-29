@@ -2,9 +2,11 @@
 
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
+use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Danielgnh\StatamicMcp\Tests\UsesOAuthMode;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Support\Facades\Route;
+use Laravel\Passport\Passport;
 
 uses(UsesOAuthMode::class);
 
@@ -27,4 +29,16 @@ it('authenticates oauth mode through the preflight wrapper, never a bare auth:ap
     expect(collect($resolved)->contains(
         fn ($middleware) => is_string($middleware) && str_starts_with($middleware, Authenticate::class),
     ))->toBeFalse();
+});
+
+it('throttles anonymous client registration per address', function () {
+    OAuthFixtures::migratePassport();
+
+    $codes = collect(range(1, 61))->map(fn (int $i) => $this->postJson('/oauth/register', [
+        'client_name' => 'Client '.$i,
+        'redirect_uris' => ['https://client.example.com/callback'],
+    ])->getStatusCode());
+
+    expect($codes->countBy()->all())->toBe([201 => 60, 429 => 1])
+        ->and(Passport::client()->newQuery()->count())->toBe(60);
 });
