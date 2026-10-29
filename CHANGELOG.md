@@ -8,6 +8,17 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **`blueprints_get` names only the collections, taxonomies, and asset
+  containers MCP exposes.** An entries, terms, or assets field showed every
+  handle its config names under `collections`, `taxonomies`, or `container`,
+  and the assets example note named the container, even when
+  `resources` leaves that resource out and every other tool answers its
+  handle with "not found". Those lists now hold only the handles `resources`
+  allows. A field that links nothing MCP exposes has no such key, a `null`
+  example, and a note in `example_notes` saying MCP cannot fill it.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

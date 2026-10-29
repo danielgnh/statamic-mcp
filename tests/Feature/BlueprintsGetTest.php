@@ -9,6 +9,7 @@ use Laravel\Mcp\Request;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Taxonomy;
 
 it('returns fields and a bounded example payload for a collection blueprint', function () {
     Fixtures::site();
@@ -504,6 +505,45 @@ it('says where asset, entry, term, and user fields point when that is configured
         ->assertSee('{"handle":"related","type":"entries","required":false,"rules":["array","max:3","nullable"],"collections":["posts"],"max_items":3}')
         ->assertSee('{"handle":"topics","type":"terms","required":false,"rules":["array","nullable"],"taxonomies":["tags"]}')
         ->assertSee('{"handle":"author","type":"users","required":false,"rules":["array","max:1","nullable"],"max_items":1}');
+});
+
+it('names only the collections, taxonomies, and containers MCP exposes in relation fields', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private_files');
+
+    Taxonomy::make('departments')->title('Departments')->save();
+
+    Blueprint::find('collections.blog.article')
+        ->ensureField('related', ['type' => 'entries', 'collections' => ['blog', 'pages', 'archived']])
+        ->ensureField('department', ['type' => 'terms', 'taxonomies' => ['departments']])
+        ->ensureField('attachment', ['type' => 'assets', 'container' => 'private_files', 'max_files' => 1])
+        ->ensureField('hero', ['type' => 'assets', 'container' => 'images', 'max_files' => 1])
+        ->save();
+
+    config(['statamic.mcp.resources' => [
+        'collections' => ['blog'],
+        'taxonomies' => ['tags'],
+        'asset_containers' => ['images'],
+    ]]);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries'))
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertSee('{"handle":"related","type":"entries","required":false,"rules":["array","nullable"],"collections":["blog"]}')
+        ->assertSee('{"handle":"department","type":"terms","required":false,"rules":["array","nullable"]}')
+        ->assertSee('{"handle":"attachment","type":"assets","required":false,"rules":["array","max:1","nullable"],"max_files":1}')
+        ->assertSee('{"handle":"hero","type":"assets","required":false,"rules":["array","max:1","nullable"],"container":"images","max_files":1}')
+        ->assertSee('"related":["REPLACE-WITH-REAL-ENTRY-ID"],"department":null,"attachment":null,"hero":"REPLACE-WITH-REAL-ASSET-PATH"')
+        ->assertSee('"department":"links only taxonomies not exposed to MCP, so MCP cannot fill this field"')
+        ->assertSee('"attachment":"links only a container not exposed to MCP, so MCP cannot fill this field"')
+        ->assertDontSee('pages')
+        ->assertDontSee('archived')
+        ->assertDontSee('departments')
+        ->assertDontSee('private_files');
 });
 
 it('denies reading a blueprint the user has no permission to view', function () {
