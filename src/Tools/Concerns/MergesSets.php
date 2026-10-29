@@ -121,10 +121,11 @@ trait MergesSets
         $idHandle = Sets::idHandle();
         $noun = Sets::noun($field);
         $sets = is_array($sets) ? array_values($sets) : [];
+        $byId = Sets::positionsById($sets, $idHandle);
 
         foreach ($patches as $id => $patch) {
             $id = (string) $id;
-            $index = Sets::find($field, $sets, $id, $path);
+            $index = Sets::find($field, $sets, $byId, $id, $path);
 
             if ($patch === null) {
                 unset($sets[$index]);
@@ -158,6 +159,7 @@ trait MergesSets
     {
         $idHandle = Sets::idHandle();
         $sets = is_array($sets) ? array_values($sets) : [];
+        $byId = Sets::positionsById($sets, $idHandle);
         $kept = [];
 
         foreach ($items as $position => $item) {
@@ -168,7 +170,7 @@ trait MergesSets
             }
 
             $id = (string) $id;
-            $matches = Sets::positions($sets, $id);
+            $matches = $byId[$id] ?? [];
 
             if ($matches === [] && Arr::except($item, Sets::reservedKeys($field)) === []) {
                 throw Sets::unknown($field, $sets, $id, $path);
@@ -178,11 +180,11 @@ trait MergesSets
                 continue;
             }
 
-            if (in_array($id, $kept, true)) {
+            if (isset($kept[$id])) {
                 throw new ToolException(sprintf("%s lists the %s with id '%s' twice", $path, Sets::noun($field), $id));
             }
 
-            $kept[] = $id;
+            $kept[$id] = true;
             $set = $sets[$matches[0]];
 
             if (array_key_exists('type', $item) && $item['type'] !== data_get($set, 'type')) {

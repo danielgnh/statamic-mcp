@@ -870,3 +870,20 @@ it('resolves a list of ids against the sets a localization inherits, nested grid
         ->and(array_column($german[0]['items'], 'title'))->toBe(['Sell', 'Mieten'])
         ->and(Entry::find($origin->id())->get('blocks'))->toHaveCount(2);
 });
+
+it('keeps writing a field whose stored sets include one with an id that is not a string', function (array $patch) {
+    Fixtures::site();
+
+    $entry = makePageWithBlocks(['page_builder' => [
+        ['id' => ['odd'], 'type' => 'section_text_block', 'enabled' => true, 'text' => 'Odd'],
+        ['id' => 'text0001', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'First'],
+    ]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => $patch]])
+        ->assertOk();
+})->with([
+    'a set patched by id' => [['text0001' => ['text' => 'First, edited']]],
+    'a list of ids with a new set' => [[['id' => 'text0001'], ['type' => 'section_text_block', 'text' => 'New']]],
+    'a list of new sets' => [[['type' => 'section_text_block', 'text' => 'Replaced']]],
+]);

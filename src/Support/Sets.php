@@ -11,6 +11,7 @@ use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Fieldtypes\RowId;
+use Stringable;
 
 /**
  * The sets (page builder blocks) of a Replicator or Bard field. Reads both
@@ -120,8 +121,9 @@ class Sets
      * string key.
      *
      * @param  array<int, mixed>  $sets
+     * @param  array<array-key, list<int>>  $positions  positionsById($sets)
      */
-    public static function find(Field $field, array $sets, string $id, string $path): int
+    public static function find(Field $field, array $sets, array $positions, string $id, string $path): int
     {
         $noun = self::noun($field);
 
@@ -133,7 +135,7 @@ class Sets
             throw new ToolException(sprintf("the %s id 0 can't be addressed, PHP reads it as a list index — fetch or send the whole %s", $noun, $path));
         }
 
-        $matches = self::positions($sets, $id);
+        $matches = $positions[$id] ?? [];
 
         if (count($matches) > 1) {
             throw new ToolException(sprintf("id '%s' is shared by %d %ss in %s — fetch or send the whole field", $id, count($matches), $noun, $path));
@@ -144,13 +146,22 @@ class Sets
 
     /**
      * @param  array<int, mixed>  $sets
-     * @return list<int>
+     * @return array<array-key, list<int>>
      */
-    public static function positions(array $sets, string $id): array
+    public static function positionsById(array $sets, string $key): array
     {
-        $idHandle = self::idHandle();
+        $positions = [];
 
-        return array_keys(array_filter($sets, fn (mixed $set) => is_array($set) && (string) data_get($set, $idHandle) === $id));
+        foreach ($sets as $position => $set) {
+            $id = is_array($set) ? data_get($set, $key) : null;
+            $id = is_scalar($id) || $id instanceof Stringable ? (string) $id : '';
+
+            if ($id !== '') {
+                $positions[$id][] = $position;
+            }
+        }
+
+        return $positions;
     }
 
     /**
