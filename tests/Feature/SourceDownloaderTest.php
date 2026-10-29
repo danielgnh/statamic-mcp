@@ -54,6 +54,43 @@ it('rejects literal private, loopback, link-local, CGN and IPv6-internal address
     'http://[fe80::1]/x.png',
 ]);
 
+it('rejects NAT64 addresses whose IPv4 address is private', function (string $url) {
+    Http::fake();
+
+    expect(fn () => (new SourceDownloader)->download($url))
+        ->toThrow(ToolException::class, 'private or reserved address');
+
+    Http::assertNothingSent();
+})->with([
+    'loopback' => 'http://[64:ff9b::7f00:1]/x.png',
+    'cloud metadata' => 'http://[64:ff9b::a9fe:a9fe]/x.png',
+    'carrier-grade NAT' => 'http://[64:ff9b::6440:1]/x.png',
+]);
+
+it('rejects local-use NAT64, 6to4 and Teredo addresses whatever IPv4 address they carry', function (string $url) {
+    Http::fake();
+
+    expect(fn () => (new SourceDownloader)->download($url))
+        ->toThrow(ToolException::class, 'private or reserved address');
+
+    Http::assertNothingSent();
+})->with([
+    'local-use NAT64 of a public address' => 'http://[64:ff9b:1::808:808]/x.png',
+    '6to4 of loopback' => 'http://[2002:7f00:1::]/x.png',
+    '6to4 of a public address' => 'http://[2002:808:808::1]/x.png',
+    'Teredo' => 'http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/x.png',
+]);
+
+it('accepts the NAT64 address DNS64 returns for a public IPv4 host', function () {
+    Http::fake(['https://images.example.com/*' => Http::response('PNGBYTES', 200)]);
+
+    $downloader = new SourceDownloader(fn (string $host) => ['93.184.216.34', '64:ff9b::5db8:d822']);
+
+    [$contents] = $downloader->download('https://images.example.com/hero.png');
+
+    expect($contents)->toBe('PNGBYTES');
+});
+
 it('rejects hosts that RESOLVE to a private address', function () {
     Http::fake();
 

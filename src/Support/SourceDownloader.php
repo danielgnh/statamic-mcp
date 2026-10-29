@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\ResponseInterface;
+use Symfony\Component\HttpFoundation\IpUtils;
 use Throwable;
 
 /**
@@ -23,6 +24,10 @@ class SourceDownloader
     private const int MAX_REDIRECTS = 3;
 
     private const int TIMEOUT_SECONDS = 15;
+
+    private const array NON_PUBLIC_RANGES_PHP_FLAGS_MISS = ['100.64.0.0/10', '64:ff9b:1::/48', '2002::/16', '2001::/32'];
+
+    private const string NAT64_PREFIX = '64:ff9b::/96';
 
     /**
      * @param  null|Closure(string): list<string>  $resolver  host => IPs; injectable so tests never hit real DNS
@@ -153,13 +158,12 @@ class SourceDownloader
             return false;
         }
 
-        // 100.64.0.0/10 (carrier-grade NAT) is not covered by PHP's flags.
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
-            $long = ip2long($ip);
+        if (IpUtils::checkIp($ip, self::NON_PUBLIC_RANGES_PHP_FLAGS_MISS)) {
+            return false;
+        }
 
-            if ($long >= ip2long('100.64.0.0') && $long <= ip2long('100.127.255.255')) {
-                return false;
-            }
+        if (IpUtils::checkIp($ip, self::NAT64_PREFIX)) {
+            return $this->isPublicIp((string) inet_ntop(substr((string) inet_pton($ip), -4)));
         }
 
         return true;
