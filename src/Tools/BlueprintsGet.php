@@ -29,7 +29,7 @@ use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 
 #[Name('blueprints_get')]
-#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global|form|navigation) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the first). For a form, the fields are the keys of its submissions\' data; nothing writes a submission. For a navigation, the fields are what a branch\'s data takes in navigations_update, and example is one branch\'s data; title and url are branch keys beside data, as example_notes says when the blueprint defines them. Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
+#[Description('Returns a blueprint\'s fields (handle, type, rules, required, options, instructions; time_enabled on date fields — without it the Control Panel shows only the day, not the time; on multisite, localizable: only such a field can hold a value of its own in a localization) plus a valid example payload for writes. Pass type (collection|taxonomy|global|form|navigation) and the resource handle from statamic_overview; optionally a specific blueprint handle (defaults to the one entries_create and terms_create use). For a form, the fields are the keys of its submissions\' data; nothing writes a submission. For a navigation, the fields are what a branch\'s data takes in navigations_update, and example is one branch\'s data; title and url are branch keys beside data, as example_notes says when the blueprint defines them. Relation-field examples are placeholders — replace them with real IDs. Fields with a null example carry a note in example_notes; read a real value from existing content for those. On collection and taxonomy blueprints, slug (and date on dated collections) is left out of the example: the entries_* and terms_* write tools take it as a top-level parameter, as example_notes says. Cross-check each field\'s rules — examples satisfy shape, not every validation rule. Replicator and Bard fields list their sets (page builder blocks) with each set\'s display name, group, and instructions — follow a set\'s instructions when choosing and filling it, and never add a set marked hidden. Pass set with a set\'s handle to get its fields and an example row. Notes on nested values are keyed by path, like seo.meta_title. Tabs and sections that carry instructions come back in tabs, with the handles of the fields under them — follow those when filling the fields they name. When the site\'s guidelines for agents cover this collection or taxonomy, they come back in guidelines — follow them.')]
 #[IsReadOnly]
 class BlueprintsGet extends Tool
 {
@@ -48,7 +48,7 @@ class BlueprintsGet extends Tool
                 ->description('Collection, taxonomy, global set, form, or navigation handle (see statamic_overview).')
                 ->required(),
             'blueprint' => $schema->string()
-                ->description("Blueprint handle. Defaults to the resource's first blueprint."),
+                ->description("Blueprint handle. Defaults to the one the create tools use: a collection's first blueprint that is not hidden, otherwise the resource's first."),
             'set' => $schema->string()
                 ->description('A set handle from the sets of a replicator or Bard field. Returns only that set, with its fields and an example row, instead of the whole blueprint. When a handle has different fields in different places, the error lists their paths; pass one of those instead.'),
         ];
@@ -90,7 +90,11 @@ class BlueprintsGet extends Tool
             return $this->notFound('blueprint', $requested, $blueprints->keys()->all());
         }
 
-        $blueprint = $requested === null ? $blueprints->first() : $blueprints->get($requested);
+        $blueprint = match (true) {
+            $type === 'collection' => Collection::findOrFail($handle)->entryBlueprint($requested),
+            $requested === null => $blueprints->first(),
+            default => $blueprints->get($requested),
+        };
 
         if ($blueprint === null) {
             return $this->notFound('blueprint', (string) $requested, $blueprints->keys()->all());

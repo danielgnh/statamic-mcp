@@ -4,8 +4,10 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
+use Statamic\Events\EntryBlueprintFound;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -382,6 +384,65 @@ it('returns the requested blueprint when a collection has several', function () 
         ->assertSee('"blueprint":"video","available_blueprints":["article","video"]')
         ->assertSee('"handle":"video_url","type":"text"');
 });
+
+it('defaults to the blueprint entries_create builds on, skipping a hidden first one', function () {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->routes('/{slug}')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'legacy_only' => ['type' => 'text'],
+    ])->setHandle('page')->setNamespace('collections.pages')->setOrder(1)->setHidden(true)->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'summary' => ['type' => 'textarea'],
+    ])->setHandle('landing')->setNamespace('collections.pages')->setOrder(2)->save();
+
+    $user = Fixtures::makeUser('view pages entries', 'create pages entries');
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages'])
+        ->assertOk()
+        ->assertSee('"blueprint":"landing","available_blueprints":["page","landing"]')
+        ->assertSee('"handle":"summary"')
+        ->assertDontSee('legacy_only');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello']])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'pages')->first()->blueprint()->handle())->toBe('landing');
+});
+
+it('describes the fields a listener adds to a collection blueprint, as entries_create takes them', function (array $arguments) {
+    Fixtures::site();
+
+    Collection::make('pages')->title('Pages')->routes('/{slug}')->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+    ])->setHandle('landing')->setNamespace('collections.pages')->save();
+
+    Event::listen(EntryBlueprintFound::class, fn (EntryBlueprintFound $event) => $event->blueprint->ensureField('seo_title', ['type' => 'text']));
+
+    $user = Fixtures::makeUser('view pages entries', 'create pages entries');
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'pages', ...$arguments])
+        ->assertOk()
+        ->assertSee('"handle":"seo_title"');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello', 'seo_title' => 'Hello there']])
+        ->assertOk();
+
+    expect(Entry::query()->where('collection', 'pages')->first()->get('seo_title'))->toBe('Hello there');
+})->with([
+    'by default' => [[]],
+    'by handle' => [['blueprint' => 'landing']],
+]);
 
 it('emits obviously fake placeholders for entries and users relation fields', function () {
     Fixtures::site();
