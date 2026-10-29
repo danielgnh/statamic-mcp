@@ -6,6 +6,7 @@ use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
+use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Routing\UrlBuilder;
@@ -150,7 +151,7 @@ trait PlacesEntries
      * alone may repeat, as it does under different parents in a tree; a
      * blueprint that wants unique slugs sets unique_entry_value on it.
      */
-    protected function ensureUniqueUri(EntryContract $entry, ?CollectionTree $tree, ?string $parent): void
+    protected function ensureUniqueUri(UserContract $user, EntryContract $entry, ?CollectionTree $tree, ?string $parent): void
     {
         if (! $uri = $this->futureUri($entry, $tree, $parent)) {
             return;
@@ -158,15 +159,23 @@ trait PlacesEntries
 
         $existing = Entry::findByUri($uri, $entry->locale());
 
-        if ($existing && $existing->id() !== $entry->id()) {
-            throw new ToolException(sprintf(
-                "URL '%s' already belongs to entry '%s' in collection '%s' — pick another slug%s",
-                $uri,
-                $existing->id(),
-                $existing->collectionHandle(),
-                $tree ? ' or parent' : '',
-            ));
+        if (! $existing || $existing->id() === $entry->id()) {
+            return;
         }
+
+        $retry = $tree ? 'pick another slug or parent' : 'pick another slug';
+
+        throw new ToolException($this->canRead($user, $existing)
+            ? "URL '{$uri}' already belongs to entry '{$existing->id()}' in collection '{$existing->collectionHandle()}' — {$retry}"
+            : "URL '{$uri}' is already taken — {$retry}");
+    }
+
+    private function canRead(UserContract $user, EntryContract $entry): bool
+    {
+        $collection = $entry->collectionHandle();
+
+        return in_array($collection, $this->exposedHandles('collections'), true)
+            && $this->can($user, "view {$collection} entries");
     }
 
     /**

@@ -145,7 +145,7 @@ class EntriesCreate extends Tool
             $entry->date($date);
         }
 
-        $this->ensureUniqueUri($entry, $tree, $parent?->id());
+        $this->ensureUniqueUri($user, $entry, $tree, $parent?->id());
 
         if ($tree) {
             // The tree as it reads may already list this entry at the top level.

@@ -8,6 +8,17 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **The unique-URL refusal names the entry that holds the URL only to a
+  caller who can read it.** `entries_create`, `entries_update`, and
+  `entries_localize` refuse a URL another entry of the site already has, in
+  any collection, as the Control Panel does. The error named that entry's id
+  and collection even when the collection is not exposed to MCP or the
+  caller lacks `view {collection} entries`, while `entries_get` answers the
+  same id with "not found" or a permission error. Such a caller now reads
+  `URL '/blog/hello' is already taken`, as the Control Panel says it.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

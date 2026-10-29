@@ -292,7 +292,7 @@ it('refuses a URL another entry already has, as the CP does', function () {
     $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
     $blog = Fixtures::page('blog', 'Blog');
 
-    Server::actingAs(Fixtures::makeUser('create pages entries'))
+    Server::actingAs(Fixtures::makeUser('create pages entries', 'view blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello'], 'parent' => $blog])
         ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
 
@@ -308,7 +308,7 @@ it('refuses a URL another entry already has in a collection without a tree', fun
 
     $post = tap(Entry::make()->collection('blog')->slug('hello')->data(['title' => 'Hello']))->save()->id();
 
-    Server::actingAs(Fixtures::makeUser('create pages entries'))
+    Server::actingAs(Fixtures::makeUser('create pages entries', 'view blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Hello']])
         ->assertHasErrors([sprintf("URL '/hello' already belongs to entry '%s' in collection 'blog' — pick another slug", $post)]);
 
@@ -336,7 +336,7 @@ it('gives a page a slug another page has under a different parent, as the CP doe
         ->assertSee('"url":"/services/overview"');
 
     // The same URL is still refused.
-    Server::actingAs(Fixtures::makeUser('create pages entries'))
+    Server::actingAs(Fixtures::makeUser('view pages entries', 'create pages entries'))
         ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Overview'], 'parent' => $products])
         ->assertHasErrors([sprintf("URL '/products/overview' already belongs to entry '%s' in collection 'pages' — pick another slug or parent", $overview)]);
 

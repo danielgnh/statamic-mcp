@@ -480,7 +480,7 @@ it('refuses a move onto a URL another entry already has', function () {
 
     storePagesTree([['entry' => $blog], ['entry' => $hello]]);
 
-    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries', 'view blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $hello, 'data' => [], 'parent' => $blog])
         ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
 
@@ -499,7 +499,7 @@ it('refuses a new slug whose URL another entry already has', function () {
 
     storePagesTree([['entry' => $blog, 'children' => [['entry' => $team]]]]);
 
-    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'view blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $team, 'data' => [], 'slug' => 'hello'])
         ->assertHasErrors([sprintf("URL '/blog/hello' already belongs to entry '%s' in collection 'blog' — pick another slug or parent", $post)]);
 
