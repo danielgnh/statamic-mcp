@@ -166,9 +166,10 @@ trait ValidatesBlueprintData
      * @param  array<array-key, mixed>  $data
      * @param  list<string>  $except
      * @param  list<string>  $allowed
+     * @param  mixed  $storedField  the stored value of the top-level field this walk is inside, null at the top level
      * @return list<string>
      */
-    private function unknownFields(Fields $fields, array $data, string $path, array $except = [], array $allowed = [], mixed $stored = null): array
+    private function unknownFields(Fields $fields, array $data, string $path, array $except = [], array $allowed = [], mixed $stored = null, mixed $storedField = null): array
     {
         $handles = $fields->all()->map(fn (Field $field): string => $field->handle())->diff($except)->values()->all();
 
@@ -181,7 +182,9 @@ trait ValidatesBlueprintData
 
         foreach (Arr::except($data, $allowed) as $handle => $value) {
             if (in_array($handle, $handles, true)) {
-                $messages = [...$messages, ...$this->invalidValue($fields->get($handle), $value, ltrim("{$path}.{$handle}", '.'), is_array($stored) ? ($stored[$handle] ?? null) : null)];
+                $storedValue = is_array($stored) ? ($stored[$handle] ?? null) : null;
+
+                $messages = [...$messages, ...$this->invalidValue($fields->get($handle), $value, ltrim("{$path}.{$handle}", '.'), $storedValue, $storedField ?? $storedValue)];
             }
         }
 
@@ -191,7 +194,7 @@ trait ValidatesBlueprintData
     /**
      * @return list<string>
      */
-    private function invalidValue(Field $field, mixed $value, string $path, mixed $stored): array
+    private function invalidValue(Field $field, mixed $value, string $path, mixed $stored, mixed $storedField): array
     {
         if ($value === null || $this->unchanged($value, $stored)) {
             return [];
@@ -205,23 +208,23 @@ trait ValidatesBlueprintData
 
         // Bard extends Replicator, so it has to be matched first.
         if ($fieldtype instanceof Bard) {
-            return $this->invalidBard($fieldtype, $value, $path, $stored);
+            return $this->invalidBard($fieldtype, $value, $path, $stored, $storedField);
         }
 
         if ($fieldtype instanceof Replicator) {
-            return $this->invalidSets($fieldtype, $value, $path, $stored);
+            return $this->invalidSets($fieldtype, $value, $path, $stored, $storedField);
         }
 
         if ($fieldtype instanceof Grid) {
-            return $this->invalidRows($fieldtype, $value, $path, $stored);
+            return $this->invalidRows($fieldtype, $value, $path, $stored, $storedField);
         }
 
         if ($fieldtype instanceof Group) {
-            return $this->invalidGroup($fieldtype, $value, $path, $stored);
+            return $this->invalidGroup($fieldtype, $value, $path, $stored, $storedField);
         }
 
         if ($fieldtype instanceof Assets) {
-            $this->rejectMissingAssets($field, $value, $path, $stored);
+            $this->rejectMissingAssets($field, $value, $path, $storedField);
         }
 
         return [];
@@ -249,7 +252,7 @@ trait ValidatesBlueprintData
     /**
      * @return list<string>
      */
-    private function invalidSets(Replicator $fieldtype, mixed $sets, string $path, mixed $stored): array
+    private function invalidSets(Replicator $fieldtype, mixed $sets, string $path, mixed $stored, mixed $storedField): array
     {
         if (! is_array($sets) || ! array_is_list($sets)) {
             throw new ToolException("{$path} must be a list of sets, each an object with a type — an object keyed by set id merges into stored sets only through an update that addresses each enclosing set by id");
@@ -260,7 +263,7 @@ trait ValidatesBlueprintData
         foreach ($sets as $index => $set) {
             $counterpart = $this->storedById($stored, data_get($set, Sets::idHandle()), Sets::idHandle());
 
-            $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart)];
+            $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart, $storedField)];
         }
 
         return $messages;
@@ -280,7 +283,7 @@ trait ValidatesBlueprintData
     /**
      * @return list<string>
      */
-    private function invalidSet(Replicator $fieldtype, mixed $set, string $path, mixed $stored): array
+    private function invalidSet(Replicator $fieldtype, mixed $set, string $path, mixed $stored, mixed $storedField): array
     {
         if ($this->unchanged($set, $stored)) {
             return [];
@@ -305,13 +308,13 @@ trait ValidatesBlueprintData
             throw new ToolException("{$path}.enabled must be true or false");
         }
 
-        return $this->unknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', Sets::idHandle()], stored: $stored);
+        return $this->unknownFields($fieldtype->fields($type), $set, $path, allowed: ['type', 'enabled', Sets::idHandle()], stored: $stored, storedField: $storedField);
     }
 
     /**
      * @return list<string>
      */
-    private function invalidBard(Bard $fieldtype, mixed $nodes, string $path, mixed $stored): array
+    private function invalidBard(Bard $fieldtype, mixed $nodes, string $path, mixed $stored, mixed $storedField): array
     {
         // An HTML string is fine: preProcess() converts it to ProseMirror.
         if (is_string($nodes)) {
@@ -332,7 +335,7 @@ trait ValidatesBlueprintData
             if ($node['type'] === 'set') {
                 $counterpart = $this->storedById($stored, data_get($node, 'attrs.id'), 'attrs.id');
 
-                $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", data_get($counterpart, 'attrs.values'))];
+                $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", data_get($counterpart, 'attrs.values'), $storedField)];
             }
         }
 
@@ -342,7 +345,7 @@ trait ValidatesBlueprintData
     /**
      * @return list<string>
      */
-    private function invalidRows(Grid $fieldtype, mixed $rows, string $path, mixed $stored): array
+    private function invalidRows(Grid $fieldtype, mixed $rows, string $path, mixed $stored, mixed $storedField): array
     {
         if (! is_array($rows) || ! array_is_list($rows)) {
             throw new ToolException("{$path} must be a list of rows — an object keyed by row id merges into stored rows only through an update that addresses each enclosing set by id");
@@ -358,7 +361,7 @@ trait ValidatesBlueprintData
             $counterpart = $this->storedById($stored, data_get($row, Sets::idHandle()), Sets::idHandle());
 
             if (! $this->unchanged($row, $counterpart)) {
-                $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart)];
+                $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart, storedField: $storedField)];
             }
         }
 
@@ -368,18 +371,26 @@ trait ValidatesBlueprintData
     /**
      * @return list<string>
      */
-    private function invalidGroup(Group $fieldtype, mixed $values, string $path, mixed $stored): array
+    private function invalidGroup(Group $fieldtype, mixed $values, string $path, mixed $stored, mixed $storedField): array
     {
         if (! is_array($values) || ($values !== [] && array_is_list($values))) {
             throw new ToolException("{$path} must be an object keyed by field handle");
         }
 
-        return $this->unknownFields($fieldtype->fields(), $values, $path, stored: $stored);
+        return $this->unknownFields($fieldtype->fields(), $values, $path, stored: $stored, storedField: $storedField);
     }
 
-    private function rejectMissingAssets(Field $field, mixed $value, string $path, mixed $stored): void
+    private function rejectMissingAssets(Field $field, mixed $value, string $path, mixed $storedField): void
     {
         $container = $this->assetsFieldContainer($field);
+
+        $added = array_filter(Arr::wrap($value), fn (mixed $reference) => ! $this->holds($storedField, $reference));
+
+        $containerHandle = $field->get('container') ?: $container?->handle();
+
+        if ($added !== [] && is_scalar($containerHandle) && ! $this->exposureAllows('asset_containers', (string) $containerHandle)) {
+            throw new ToolException("{$path} links a container not exposed to MCP — leave it out of data");
+        }
 
         // An unresolvable container is a blueprint problem, not the agent's.
         if (! $container instanceof AssetContainerContract) {
@@ -388,11 +399,7 @@ trait ValidatesBlueprintData
 
         $handle = $container->handle();
 
-        foreach (Arr::wrap($value) as $reference) {
-            if (in_array($reference, Arr::wrap($stored), true)) {
-                continue;
-            }
-
+        foreach ($added as $reference) {
             $id = is_string($reference) && ! str_contains($reference, '::') ? "{$handle}::{$reference}" : $reference;
 
             if (! is_string($id) || ! str_starts_with($id, "{$handle}::") || ! Asset::find($id)) {
@@ -404,6 +411,21 @@ trait ValidatesBlueprintData
                 ));
             }
         }
+    }
+
+    private function holds(mixed $stored, mixed $reference): bool
+    {
+        if (! is_array($stored)) {
+            return $stored === $reference;
+        }
+
+        foreach ($stored as $value) {
+            if ($this->holds($value, $reference)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

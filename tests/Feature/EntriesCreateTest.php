@@ -551,6 +551,54 @@ it('rejects an asset reference that does not resolve in the field container', fu
     ],
 ]);
 
+it('refuses a file of an unexposed container the same whether it exists or not, naming no container', function (array $data, string $error) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', ...$data]])
+        ->assertHasErrors([$error])
+        ->assertDontSee('images');
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'an existing file' => [
+        ['hero' => 'hero.jpg'],
+        'hero links a container not exposed to MCP — leave it out of data',
+    ],
+    'a missing file' => [
+        ['hero' => 'missing.jpg'],
+        'hero links a container not exposed to MCP — leave it out of data',
+    ],
+    'an existing file inside a set' => [
+        ['page_builder' => [['type' => 'section_hero', 'heading' => 'Hi', 'image' => ['hero.jpg']]]],
+        'page_builder.0.image links a container not exposed to MCP — leave it out of data',
+    ],
+]);
+
+it('answers a field whose container does not exist like an unexposed one when resources lists containers', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('brochure', ['type' => 'assets', 'container' => 'archive', 'max_files' => 1])
+        ->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'brochure' => 'guide.pdf']])
+        ->assertHasErrors(['brochure links a container not exposed to MCP — leave it out of data']);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+});
+
 it('names the field when Statamic cannot process its value', function () {
     Fixtures::site();
     Fixtures::assetContainer('images');
