@@ -249,6 +249,79 @@ it('rejects an entry of a collection the navigation does not link', function () 
     expect(storedNavTree())->toBe([]);
 });
 
+it('refuses an entry of an unexposed collection with the text a missing entry gets', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::faqs();
+    Fixtures::nav();
+
+    Nav::find('main')->collections(['pages', 'blog'])->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog'], 'navigations' => ['main']]]);
+
+    $user = Fixtures::makeUser('edit main nav');
+
+    foreach ([Fixtures::page('about', 'About'), Fixtures::faq('Shipping'), 'no-such-entry'] as $id) {
+        Server::actingAs($user)
+            ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [['entry' => $id]]])
+            ->assertHasErrors(["entry '{$id}' in tree.0 not found — drop the branch, or link an existing entry (linkable collections: blog)"])
+            ->assertDontSee('pages')
+            ->assertDontSee('faqs');
+    }
+
+    expect(storedNavTree())->toBe([]);
+});
+
+it('keeps stored branches whose entries are unexposed or gone, as the CP keeps any stored id', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog'], 'navigations' => ['main']]]);
+
+    $about = Fixtures::page('about', 'About');
+
+    Nav::find('main')->in('en')->tree([
+        ['id' => 'b-about', 'entry' => $about, 'title' => 'About us'],
+        ['id' => 'b-gone', 'entry' => 'deleted-entry'],
+    ])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit main nav'))
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [
+            ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com'],
+            ['id' => 'b-about', 'entry' => $about, 'title' => 'About', 'resolved' => ['status' => 'missing'], 'children' => [
+                ['id' => 'b-gone', 'entry' => 'deleted-entry', 'resolved' => ['status' => 'missing']],
+            ]],
+        ]])
+        ->assertOk()
+        ->assertSee('updated — live');
+
+    expect(storedNavTree())->toBe([
+        ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com'],
+        ['id' => 'b-about', 'entry' => $about, 'title' => 'About', 'children' => [
+            ['id' => 'b-gone', 'entry' => 'deleted-entry'],
+        ]],
+    ]);
+});
+
+it("keeps only the gone or unexposed entry ids this site's stored tree links", function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    Nav::find('main')->in('de')->tree([['id' => 'b-gone', 'entry' => 'deleted-entry']])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit main nav', 'access en site', 'access de site'))
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [['id' => 'b-gone', 'entry' => 'deleted-entry']]])
+        ->assertHasErrors(["entry 'deleted-entry' in tree.0 not found — drop the branch, or link an existing entry (linkable collections: pages)"]);
+
+    expect(storedNavTree())->toBe([]);
+});
+
 it('rejects an entry of another site', function () {
     Fixtures::multisite();
     Fixtures::pages();

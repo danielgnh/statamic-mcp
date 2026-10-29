@@ -8,6 +8,21 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **`navigations_get` and `navigations_update` no longer reveal entries of
+  collections MCP does not expose.** With `resources.collections` limited,
+  `navigations_get` showed the title, URL, and status of every linked entry,
+  drafts included, and listed every collection the navigation links.
+  `navigations_update` accepted a new link to an entry of an unexposed
+  collection and named the collection of any entry id it refused. Such a
+  branch now reads `"resolved": {"status": "missing"}`, the same as a deleted
+  entry, `collections` lists only exposed collections, and a new link to an
+  entry outside the exposure gets the error a missing entry gets. An entry
+  id the stored tree already links is kept as it is when its entry is
+  unexposed or gone, as the Control Panel keeps it, so writing a tree back
+  never drops a menu item the agent cannot see.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
