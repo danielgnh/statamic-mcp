@@ -16,7 +16,6 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Contracts\Entries\Entry as EntryContract;
-use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 use Statamic\Structures\Page;
@@ -149,16 +148,26 @@ class EntriesLocalize extends Tool
 
         $this->ensureUniqueUri($localization, $tree, $parent);
 
+        $unplaced = null;
+
         if ($tree) {
-            $localization->afterSave(fn ($entry) => $this->saveTreeChange($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent, $entry)));
+            $localization->afterSave(function ($entry) use ($collection, $site, $parent, &$unplaced) {
+                $unplaced = $this->placeInTree($collection, $site, $entry, $parent);
+            });
         }
 
         if (! $localization->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — nothing was created');
         }
 
-        if ($collection->revisionsEnabled()) {
-            $localization->makeRevision()->user($user)->message('Created via MCP (entries_localize)')->save();
+        $notStored = [];
+
+        if ($collection->revisionsEnabled() && ! $localization->makeRevision()->user($user)->message('Created via MCP (entries_localize)')->save()) {
+            $notStored[] = 'initial revision — cancelled by a listener on this site; the draft is saved without one';
+        }
+
+        if ($unplaced !== null) {
+            $notStored[] = $unplaced;
         }
 
         $payload = [
@@ -175,11 +184,15 @@ class EntriesLocalize extends Tool
             $payload['date'] = $localization->date()?->toIso8601String();
         }
 
-        if ($tree) {
+        if ($tree && $unplaced === null) {
             $payload['parent'] = $parent;
         }
 
         $payload['localizations'] = $this->localizations($user, $localization);
+
+        if ($notStored !== []) {
+            $payload['not_stored'] = $notStored;
+        }
 
         return $this->json($payload);
     }

@@ -207,13 +207,38 @@ trait PlacesEntries
     protected function saveTreeChange(CollectionContract $collection, string $site, Closure $change): bool
     {
         try {
-            return Cache::lock("statamic-mcp-tree:{$collection->handle()}:{$site}", 10)->block(5, function () use ($collection, $site, $change) {
-                $tree = $this->placementTree($collection, $site) ?? throw $this->cannotNest($collection);
-
-                return $change($this->materializeTree($tree))->save();
-            });
+            return $this->saveTreeChangeInLock($collection, $site, $change);
         } catch (LockTimeoutException) {
             throw new ToolException("another call is still saving the tree of collection '{$collection->handle()}' (site '{$site}') — the entry was not placed in it, and anything else this call changed was saved. Place it with entries_update and parent.");
         }
+    }
+
+    protected function placeInTree(CollectionContract $collection, string $site, EntryContract $entry, ?string $parent): ?string
+    {
+        try {
+            $unplaced = $this->saveTreeChangeInLock($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent, $entry))
+                ? null
+                : 'cancelled by a listener on this site';
+        } catch (LockTimeoutException) {
+            $unplaced = "another call was still saving the tree of collection '{$collection->handle()}' (site '{$site}')";
+        }
+
+        return match (true) {
+            $unplaced === null => null,
+            $parent === null => "tree placement — {$unplaced}; the stored tree does not list the entry yet, and Statamic lists it at the end of the top level",
+            default => "tree placement — {$unplaced}; Statamic lists the entry at the end of the top level, not under '{$parent}' — move it with entries_update and parent, which needs 'reorder {$collection->handle()} entries'",
+        };
+    }
+
+    /**
+     * @param  Closure(CollectionTree): CollectionTree  $change
+     */
+    private function saveTreeChangeInLock(CollectionContract $collection, string $site, Closure $change): bool
+    {
+        return Cache::lock("statamic-mcp-tree:{$collection->handle()}:{$site}", 10)->block(5, function () use ($collection, $site, $change) {
+            $tree = $this->placementTree($collection, $site) ?? throw $this->cannotNest($collection);
+
+            return $change($this->materializeTree($tree))->save();
+        });
     }
 }
