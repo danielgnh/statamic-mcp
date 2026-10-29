@@ -4,6 +4,7 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Danielgnh\StatamicMcp\Tools\EntriesLocalize;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
@@ -869,4 +870,156 @@ it('resolves a list of ids against the sets a localization inherits, nested grid
         ->and($german[0]['heading'])->toBe('Services')
         ->and(array_column($german[0]['items'], 'title'))->toBe(['Sell', 'Mieten'])
         ->and(Entry::find($origin->id())->get('blocks'))->toHaveCount(2);
+});
+
+function textBlock(mixed $id, string $text): array
+{
+    return ['id' => $id, 'type' => 'section_text_block', 'text' => $text];
+}
+
+/**
+ * @param  list<array<string, mixed>>  $sets
+ * @return list<string>
+ */
+function uniqueSetIds(array $sets): array
+{
+    $ids = array_map(strval(...), array_column($sets, 'id'));
+
+    expect($ids)->toHaveCount(count($sets))
+        ->and(array_values(array_unique($ids)))->toBe($ids)
+        ->and(array_intersect($ids, ['', '0']))->toBe([]);
+
+    return $ids;
+}
+
+it('gives a new set a fresh id when its id is blank, 0, or sent twice, so every stored id stays addressable', function () {
+    Fixtures::site();
+
+    $entry = makePageWithBlocks();
+    $user = Fixtures::makeUser('edit landing entries', 'view landing entries');
+
+    $response = Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['id' => 'hero0001'],
+            textBlock('newset01', 'One'),
+            textBlock('newset01', 'Two'),
+            textBlock('0', 'Zero'),
+            textBlock(0, 'Integer zero'),
+            textBlock('', 'Blank'),
+            textBlock('brandnew', 'Fresh'),
+        ]]])
+        ->assertOk();
+
+    $sets = Entry::find($entry->id())->get('page_builder');
+    $ids = uniqueSetIds($sets);
+
+    expect($ids[0])->toBe('hero0001')
+        ->and($ids[6])->toBe('brandnew')
+        ->and($ids)->not->toContain('newset01')
+        ->and(array_column($sets, 'text'))->toBe(['One', 'Two', 'Zero', 'Integer zero', 'Blank', 'Fresh']);
+
+    $response->assertSee('"added":{"page_builder":'.json_encode(array_slice($ids, 1)).'}');
+
+    foreach ($ids as $id) {
+        Server::actingAs($user)
+            ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ["page_builder.{$id}"]])
+            ->assertOk();
+    }
+});
+
+it('gives new rows of a nested grid fresh ids when they share one, in a stored set and in a new one', function () {
+    Fixtures::site();
+    makeSectionsCollection();
+
+    $entry = tap(Entry::make()->collection('sections')->slug('home')->data(['title' => 'Home', 'blocks' => sectionBlocks()]))->save();
+    $user = Fixtures::makeUser('edit sections entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => ['card0001' => ['items' => [
+            ['id' => 'item0001'],
+            ['id' => 'same0001', 'title' => 'Rent'],
+            ['id' => 'same0001', 'title' => 'Lease'],
+        ]]]]])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => [
+            ['id' => 'hero0001'],
+            ['id' => 'card0001'],
+            ['type' => 'cards', 'heading' => 'More', 'items' => [['id' => 'same0002', 'title' => 'Ask'], ['id' => 'same0002', 'title' => 'Visit']]],
+        ]]])
+        ->assertOk();
+
+    $blocks = Entry::find($entry->id())->get('blocks');
+    $stored = uniqueSetIds($blocks[1]['items']);
+    $added = uniqueSetIds($blocks[2]['items']);
+
+    expect($stored[0])->toBe('item0001')
+        ->and(array_intersect([...$stored, ...$added], ['same0001', 'same0002']))->toBe([]);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => ['card0001' => ['items' => [$stored[2] => ['title' => 'Lease, edited']]]]]])
+        ->assertOk();
+
+    expect(array_column(Entry::find($entry->id())->get('blocks')[1]['items'], 'title'))->toBe(['Buy', 'Rent', 'Lease, edited']);
+});
+
+it('creates entries whose set and row ids are unique and addressable, keeping each sent id that already is', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    $user = Fixtures::makeUser('create landing entries', 'view landing entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'slug' => 'new', 'data' => [
+            'title' => 'New',
+            'page_builder' => [textBlock('newset01', 'One'), textBlock('newset01', 'Two'), textBlock('0', 'Zero'), textBlock('keep0001', 'Kept')],
+            'facts' => [['id' => 'row00001', 'label' => 'Rooms'], ['id' => 'row00001', 'label' => 'Baths']],
+        ]])
+        ->assertOk();
+
+    $entry = Entry::query()->where('collection', 'landing')->where('slug', 'new')->first();
+    $ids = uniqueSetIds($entry->get('page_builder'));
+    $rows = uniqueSetIds($entry->get('facts'));
+
+    expect($ids[3])->toBe('keep0001')
+        ->and(array_intersect([...$ids, ...$rows], ['newset01', 'row00001']))->toBe([]);
+
+    foreach ($ids as $id) {
+        Server::actingAs($user)
+            ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ["page_builder.{$id}"]])
+            ->assertOk();
+    }
+});
+
+it('localizes an entry with unique and addressable set ids', function () {
+    Fixtures::multisite();
+    makeSectionsCollection();
+
+    $origin = tap(Entry::make()->collection('sections')->slug('home')->locale('en')->data(['title' => 'Home', 'blocks' => sectionBlocks()]))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de', 'data' => ['blocks' => [
+            ['id' => 'hero0001', 'type' => 'hero', 'heading' => 'Willkommen'],
+            ['id' => 'hero0001', 'type' => 'hero', 'heading' => 'Hallo'],
+        ]]])
+        ->assertOk();
+
+    $ids = uniqueSetIds(Entry::find($origin->id())->in('de')->get('blocks'));
+
+    expect($ids)->not->toContain('hero0001');
+});
+
+it('refuses a new set whose type is not a string with the set-type error, before any id is given out', function () {
+    Fixtures::site();
+
+    $entry = makePageWithBlocks();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['id' => 'hero0001'],
+            ['id' => '0', 'type' => ['section_text_block'], 'text' => 'Zero'],
+        ]]])
+        ->assertHasErrors(['page_builder.1 must be a set object with a type — valid set types: section_hero, section_text_block']);
 });
