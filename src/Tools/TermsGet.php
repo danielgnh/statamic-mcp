@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\PresentsAugmentedData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\SelectsFields;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -12,13 +13,13 @@ use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use Statamic\Facades\Term;
-use Statamic\Fields\Value;
 
 #[Name('terms_get')]
 #[Description('Get one taxonomy term by id ("{taxonomy}::{slug}") or by taxonomy + slug. format=raw (default) returns the round-trippable data shape for terms_update; format=augmented is read-only — never send augmented values back into terms_update. With site, data holds that site\'s local overrides and inherited holds what comes from the term\'s origin site (the taxonomy\'s first configured site — a term\'s localizations are data overrides within one term). Terms have no publish state, so there is no status. Large values are truncated to preview objects (Bard and Markdown over 500 bytes, any other value over 4 KB, a Grid excepted), and a large Replicator field to an index of its sets, unless requested via fields (an array of top-level field handles, or handle.id for one set, as in entries_get).')]
 #[IsReadOnly]
 class TermsGet extends Tool
 {
+    use PresentsAugmentedData;
     use ResolvesSites;
     use SelectsFields;
 
@@ -93,12 +94,7 @@ class TermsGet extends Tool
         $inherited = null;
 
         if ($format === 'augmented') {
-            // Value::jsonSerialize runs a FULL augment — a relation field would
-            // inline whole augmented items including their reverse entries.
-            // shallow() reduces relations to id/title/api_url-style stubs.
-            $data = collect((array) $localized->toAugmentedArray())
-                ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
-                ->all();
+            $data = $this->augmentedData($localized->toAugmentedArray());
         } else {
             // raw: the round-trippable write shape — this site's own data
             // overrides only. updated_at/updated_by are Statamic-managed
