@@ -131,3 +131,24 @@ it('stores metadata the way the CP does', function () {
 
     expect(Asset::find('images::hero.png')->data()->get('rating'))->toBe(4);
 });
+
+it('reports saved metadata as saved on an asset whose filename holds braces', function () {
+    Storage::disk('images')->put('blog/wei{rd}.png', Fixtures::tinyPng());
+
+    $user = Fixtures::makeUser('edit images assets');
+    $arguments = ['container' => 'images', 'path' => 'blog/wei{rd}.png', 'data' => ['alt' => 'A tiny pixel']];
+
+    Server::actingAs($user)
+        ->tool(AssetsUpdate::class, $arguments)
+        ->assertOk()
+        ->assertSee('"result":"updated — live"')
+        ->assertSee('"cp_edit_url":null');
+
+    expect(Asset::find('images::blog/wei{rd}.png')->data()->get('alt'))->toBe('A tiny pixel');
+
+    Server::actingAs($user)
+        ->tool(AssetsUpdate::class, $arguments)
+        ->assertOk()
+        ->assertSee('no-op — merged data equals current data; nothing saved')
+        ->assertSee('"cp_edit_url":null');
+});

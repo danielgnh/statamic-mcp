@@ -89,7 +89,7 @@ class AssetsUpdate extends Tool
                 'id' => $asset->id(),
                 'path' => $asset->path(),
                 'result' => 'no-op — merged data equals current data; nothing saved',
-                'cp_edit_url' => $asset->editUrl(),
+                'cp_edit_url' => $this->assetEditUrl($asset),
             ]);
         }
 
