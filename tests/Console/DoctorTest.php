@@ -1,6 +1,7 @@
 <?php
 
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
+use Danielgnh\StatamicMcp\Tests\CachesRoutes;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
@@ -8,6 +9,8 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\File;
 use Laravel\Passport\Passport;
+
+uses(CachesRoutes::class);
 
 beforeEach(function () {
     // Other tests in the run may have issued tokens into the shared
@@ -35,6 +38,15 @@ it('warns about the locked door when zero tokens exist', function () {
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain('[WARN] No tokens issued — the endpoint is a locked door. Run: php please mcp:token you@site.com')
         ->assertExitCode(0);
+});
+
+it('fails with a rebuild remedy when the cached mcp route was built for another auth mode', function () {
+    $this->cacheRoutes();
+    config(['statamic.mcp.auth' => 'oauth']);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] The cached MCP route was built for another auth mode or an older version of the addon. Rebuild the route cache: php artisan optimize.')
+        ->assertExitCode(1);
 });
 
 it('warns when the server is disabled', function () {

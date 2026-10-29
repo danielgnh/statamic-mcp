@@ -8,6 +8,22 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **The kill switch and the auth mode hold with cached routes.** Both were
+  read only while routes registered, and a cached route list skips that.
+  With routes cached, setting `STATAMIC_MCP_ENABLED=false` left the
+  endpoint answering existing tokens, the Tools → MCP pages issuing new
+  ones, and anonymous client registration open in OAuth mode. Switching
+  `STATAMIC_MCP_AUTH` from `token` to `oauth` kept accepting static tokens.
+  The endpoint and the OAuth routes now check both settings on every
+  request, the Tools → MCP pages check `enabled`, and each answers 404 when
+  the setting no longer matches what the route was built for. On a site
+  that caches routes, run `php artisan optimize` after changing either
+  setting to serve the new value. `mcp:doctor` now reports a route cache
+  built for another auth mode, or while MCP was off, instead of calling the
+  route mounted or blaming a boot failure.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

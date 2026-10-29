@@ -1,8 +1,9 @@
 <?php
 
+use Danielgnh\StatamicMcp\Tests\CachesRoutes;
 use Danielgnh\StatamicMcp\Tests\DisablesMcp;
 
-uses(DisablesMcp::class);
+uses(DisablesMcp::class, CachesRoutes::class);
 
 it('fails when MCP is enabled but the route never mounted', function () {
     // DisablesMcp boots the app with zero MCP routes; flipping the config back
@@ -12,5 +13,14 @@ it('fails when MCP is enabled but the route never mounted', function () {
 
     $this->artisan('statamic:mcp:doctor')
         ->expectsOutputToContain("[FAIL] MCP is enabled but its route is not mounted — boot failed, so requests to the endpoint reach Statamic's frontend route and get a 404, or a 419 for a POST.")
+        ->assertExitCode(1);
+});
+
+it('fails with a rebuild remedy when routes were cached while mcp was off', function () {
+    $this->cacheRoutes();
+    config(['statamic.mcp.enabled' => true]);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] MCP is enabled but the route cache holds no MCP route — it was built while MCP was off, or while the route failed to mount. Rebuild it: php artisan optimize.')
         ->assertExitCode(1);
 });

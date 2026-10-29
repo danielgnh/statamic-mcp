@@ -12,6 +12,7 @@ use Danielgnh\StatamicMcp\Console\Setup;
 use Danielgnh\StatamicMcp\CP\McpNav;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
+use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
@@ -19,6 +20,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server as McpServer;
@@ -104,6 +106,7 @@ class ServiceProvider extends AddonServiceProvider
         // so a config-shape error throws while zero routes exist — a throw after
         // registration would leave an unauthenticated route behind (fail closed).
         $middleware = [
+            EnsureMcpEnabled::forCurrentAuth(),
             ...Arr::wrap(config('statamic.mcp.middleware', [])),
             ...($oauth
                 // Wrapper runs the oauth preflight then delegates to the api
@@ -120,7 +123,7 @@ class ServiceProvider extends AddonServiceProvider
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
 
-            Mcp::oauthRoutes(); // hard-requires Passport — guarded so bootAddon never throws
+            Route::middleware(EnsureMcpEnabled::class.':oauth')->group(fn () => Mcp::oauthRoutes()); // hard-requires Passport — guarded so bootAddon never throws
 
             // Passport 12+ ships no default consent view and never binds
             // AuthorizationViewResponse — /oauth/authorize 500s with
