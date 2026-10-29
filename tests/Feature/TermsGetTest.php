@@ -4,6 +4,8 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\TermsGet;
 use Statamic\Facades\Blueprint;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
 
@@ -320,4 +322,52 @@ it('previews a large value the blueprint no longer defines, and returns it in fu
         ->tool(TermsGet::class, ['id' => 'tags::php', 'fields' => ['legacy_notes']])
         ->assertOk()
         ->assertSee('END_OF_NOTES');
+});
+
+function pagesTaggedWithPricing(): void
+{
+    Fixtures::pages();
+
+    Collection::findByHandle('pages')->taxonomies(['tags'])->save();
+
+    Blueprint::find('collections.pages.page')
+        ->ensureField('tags', ['type' => 'terms', 'taxonomies' => ['tags']])
+        ->ensureField('internal_note', ['type' => 'textarea'])
+        ->save();
+
+    Term::make()->taxonomy('tags')->slug('pricing')->data(['title' => 'Pricing'])->save();
+
+    Entry::find(Fixtures::page('spring-offer', 'Spring offer'))
+        ->merge(['tags' => ['pricing'], 'internal_note' => 'margin is four percent'])
+        ->save();
+}
+
+it('never lists or counts the entries tagged with a term in augmented format, as the Control Panel shows neither', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    pagesTaggedWithPricing();
+
+    Server::actingAs(Fixtures::makeUser('view tags terms'))
+        ->tool(TermsGet::class, ['id' => 'tags::pricing', 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"title":"Pricing"')
+        ->assertDontSee('"entries"')
+        ->assertDontSee('"entries_count"')
+        ->assertDontSee('Spring offer')
+        ->assertDontSee('margin is four percent');
+});
+
+it('never lists entries of an unexposed collection in augmented format', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    pagesTaggedWithPricing();
+
+    config(['statamic.mcp.resources' => ['collections' => [], 'taxonomies' => ['tags']]]);
+
+    Server::actingAs(Fixtures::makeUser('view tags terms', 'view pages entries'))
+        ->tool(TermsGet::class, ['id' => 'tags::pricing', 'format' => 'augmented'])
+        ->assertOk()
+        ->assertDontSee('"entries_count"')
+        ->assertDontSee('Spring offer')
+        ->assertDontSee('margin is four percent');
 });
