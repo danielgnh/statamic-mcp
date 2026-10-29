@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\OAuth;
 
 use Illuminate\Http\Request;
+use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
 use League\OAuth2\Server\Exception\OAuthServerException;
 use League\OAuth2\Server\ResourceServer;
@@ -68,7 +69,9 @@ class PassportBearerGuard
         }
 
         // Parity with Passport's TokenGuard: a revoked client kills its tokens.
-        if (! app(ClientRepository::class)->findActive($psr->getAttribute('oauth_client_id'))) {
+        $client = app(ClientRepository::class)->findActive($psr->getAttribute('oauth_client_id'));
+
+        if (! $client || ! self::acceptsClient($client)) {
             return null;
         }
 
@@ -79,6 +82,24 @@ class PassportBearerGuard
 
         $id = $psr->getAttribute('oauth_user_id');
 
-        return filled($id) ? User::find((string) $id) : null;
+        if (blank($id) || ($id === $psr->getAttribute('oauth_client_id') && $client->hasGrantType('client_credentials'))) {
+            return null;
+        }
+
+        return User::find((string) $id);
+    }
+
+    public static function acceptsClient(Client $client): bool
+    {
+        $provider = $client->getAttribute('provider');
+
+        if (blank($provider)) {
+            $provider = $client->hasGrantType('password') || $client->hasGrantType('personal_access')
+                ? config('auth.guards.api.provider')
+                : config('auth.guards.'.config('passport.guard', 'web').'.provider');
+        }
+
+        return blank($provider)
+            || $provider === config('auth.guards.'.config('statamic.users.guards.cp', 'web').'.provider');
     }
 }
