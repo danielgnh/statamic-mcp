@@ -96,6 +96,21 @@ it("leaves another user's tokens intact when a non-super is 403d", function () {
     expect($tokenModel::query()->find($tokenId)->revoked)->toBeFalse();
 });
 
+it('404s disconnecting a pair whose client is bound to another user provider, leaving its tokens intact', function () {
+    $user = Fixtures::makeUser('access cp');
+
+    $client = OAuthFixtures::client('Host API', 'customers');
+    $tokenId = OAuthFixtures::accessToken((string) $user->id(), $client);
+
+    $this->actingAs($user)
+        ->delete(cp_route('mcp.connections.oauth.destroy', [$client, (string) $user->id()]))
+        ->assertNotFound();
+
+    $tokenModel = Passport::tokenModel();
+
+    expect($tokenModel::query()->find($tokenId)->revoked)->toBeFalse();
+});
+
 it('404s disconnecting a pair with no tokens', function () {
     $user = Fixtures::makeUser('access cp');
 
@@ -160,6 +175,35 @@ it("shows a super admin everyone's connections with their emails", function () {
         ->assertOk()
         ->assertSee('Zebra Desktop', false)
         ->assertSee($other->email(), false);
+});
+
+it('lists only connections of clients bound to no user provider or to the one statamic users come from', function () {
+    $super = Fixtures::makeSuper();
+    $userId = (string) $super->id();
+
+    OAuthFixtures::accessToken($userId, OAuthFixtures::client('Acme Team Laptop'));
+    OAuthFixtures::accessToken($userId, OAuthFixtures::client('Bound Desktop', 'users'));
+    OAuthFixtures::accessToken($userId, OAuthFixtures::client('Host Storefront', 'customers'));
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('Acme Team Laptop', false)
+        ->assertSee('Bound Desktop', false)
+        ->assertDontSee('Host Storefront', false);
+});
+
+it('leaves client credentials tokens, which belong to no user, off the connections page', function () {
+    $super = Fixtures::makeSuper();
+
+    OAuthFixtures::accessToken((string) $super->id(), OAuthFixtures::client('Acme Team Laptop'));
+    OAuthFixtures::accessToken(null, OAuthFixtures::client('Host Worker'));
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('Acme Team Laptop', false)
+        ->assertDontSee('Host Worker', false);
 });
 
 it('links each user to their page, with the initials avatar the Users listing shows', function () {

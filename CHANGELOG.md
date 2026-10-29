@@ -8,6 +8,24 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Security
+
+- **OAuth mode accepts only tokens issued for Statamic users.** When the
+  site's own API also runs on Passport with a second user provider, tokens
+  from that provider's Passport clients signed in to MCP as the Statamic
+  user with the same id. A client credentials token signed in as the
+  Statamic user whose id equals the client id. The guard now refuses a
+  token whose client belongs to another user provider. A client without a
+  provider counts as bound to the provider Passport finds its users in:
+  the `api` guard's for password and personal access clients, and the
+  `passport.guard` consent guard's for the others. A client credentials
+  token never resolves to a user. Clients from dynamic client registration
+  and clients bound to the provider Statamic users come from work as before. The Connections
+  page now lists and disconnects only connections of those clients, so a
+  CP user no longer sees or revokes another provider's tokens. It also
+  leaves out client credentials tokens, which belong to no user. Once the
+  site held one, the page failed with a server error for super admins.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added
