@@ -147,7 +147,7 @@ class EntriesLocalize extends Tool
 
         $parent = $tree ? $this->localizedParent($origin, $site) : null;
 
-        $this->ensureUniqueUri($localization, $tree, $parent);
+        $this->ensureUniqueUri($user, $localization, $tree, $parent);
 
         if ($tree) {
             $localization->afterSave(fn ($entry) => $this->saveTreeChange($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent, $entry)));

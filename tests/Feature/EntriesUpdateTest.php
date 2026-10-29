@@ -352,6 +352,30 @@ it('still requires the data key to be present', function () {
     expect(Entry::find($entry->id())->slug())->toBe('hello-world');
 });
 
+it('refuses a slug whose URL an entry of an unexposed collection has without naming that entry', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Collection::findByHandle('pages')->routes('/blog/{slug}')->save();
+
+    $entry = makeUpdatableBlogEntry();
+    $page = Fixtures::page('taken', 'Taken', published: false);
+
+    config(['statamic.mcp.resources.collections' => ['blog']]);
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'view pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'slug' => 'taken'])
+        ->assertHasErrors(["URL '/blog/taken' is already taken — pick another slug"])
+        ->assertDontSee($page)
+        ->assertDontSee('pages');
+
+    Stache::clear();
+
+    expect(Entry::find($entry->id())->slug())->toBe('hello-world');
+});
+
 it('refuses a slug whose URL another entry has, but never its own', function () {
     Fixtures::site();
     Fixtures::tags();
@@ -363,7 +387,7 @@ it('refuses a slug whose URL another entry has, but never its own', function () 
         Entry::make()->collection('blog')->slug('taken')->data(['title' => 'Taken'])->published(true)
     )->save();
 
-    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'edit blog entries'))
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed'], 'slug' => 'taken'])
         ->assertHasErrors(["URL '/blog/taken' already belongs to entry '{$other->id()}' in collection 'blog' — pick another slug"]);
 
