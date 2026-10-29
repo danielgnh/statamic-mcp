@@ -6,8 +6,10 @@ use Danielgnh\StatamicMcp\Tools\NavigationsGet;
 use Danielgnh\StatamicMcp\Tools\NavigationsUpdate;
 use Facades\Statamic\Structures\BranchIdGenerator;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
 use Statamic\Events\NavTreeSaving;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Stache;
@@ -102,6 +104,46 @@ it('stores branch data the way the navigation blueprint processes it', function 
     // The toggle stores a boolean, and a cleared field is not stored at all.
     expect(storedNavTree())->toBe([
         ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com', 'data' => ['new_tab' => true]],
+    ]);
+});
+
+it("takes back a branch's stored file of an unexposed container, matched by branch id", function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav();
+    Fixtures::assetContainer('icons');
+
+    Storage::disk('icons')->put('book.svg', '<svg/>');
+
+    Blueprint::makeFromFields([
+        'icon' => ['type' => 'assets', 'container' => 'icons', 'max_files' => 1],
+    ])->setHandle('main')->setNamespace('navigation')->save();
+
+    Nav::find('main')->in('en')->tree([
+        ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com', 'data' => ['icon' => 'book.svg']],
+    ])->save();
+
+    config(['statamic.mcp.resources' => ['collections' => true, 'navigations' => ['main'], 'asset_containers' => []]]);
+
+    $user = Fixtures::makeUser('edit main nav');
+
+    Server::actingAs($user)
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [
+            ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com', 'data' => ['icon' => 'book.svg']],
+            ['id' => 'b-blog', 'title' => 'Blog', 'url' => '/blog'],
+        ]])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [
+            ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com', 'data' => ['icon' => 'book.svg']],
+            ['id' => 'b-blog', 'title' => 'Blog', 'url' => '/blog', 'data' => ['icon' => 'book.svg']],
+        ]])
+        ->assertHasErrors(['tree.1.data.icon links a container not exposed to MCP — leave it out of data']);
+
+    expect(storedNavTree())->toBe([
+        ['id' => 'b-docs', 'title' => 'Docs', 'url' => 'https://docs.example.com', 'data' => ['icon' => 'book.svg']],
+        ['id' => 'b-blog', 'title' => 'Blog', 'url' => '/blog'],
     ]);
 });
 
