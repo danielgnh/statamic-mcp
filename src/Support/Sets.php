@@ -109,8 +109,58 @@ class Sets
         $fieldtype = $field->fieldtype();
 
         return $fieldtype instanceof Replicator
-            ? $fieldtype->fields((string) data_get($set, 'type', ''))
+            ? $fieldtype->fields(is_scalar($type = data_get($set, 'type')) ? (string) $type : '')
             : $fieldtype->fields();
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $data
+     * @return array<array-key, mixed>
+     */
+    public static function withoutUnaddressableIds(Fields $fields, array $data): array
+    {
+        foreach ($data as $handle => $value) {
+            $field = $fields->get((string) $handle);
+
+            if (self::addressable($field) && is_array($value) && array_is_list($value)) {
+                $data[$handle] = self::withoutUnaddressableIdsAt($field, $value, array_keys($value));
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  list<mixed>  $sets
+     * @param  list<int>  $new  the positions of the sets the list adds
+     * @return list<mixed>
+     */
+    public static function withoutUnaddressableIdsAt(Field $field, array $sets, array $new): array
+    {
+        $idHandle = self::idHandle();
+        $sent = [];
+
+        foreach ($new as $position) {
+            if (is_array($sets[$position]) && is_scalar($id = $sets[$position][$idHandle] ?? null)) {
+                $sent[(string) $id] = ($sent[(string) $id] ?? 0) + 1;
+            }
+        }
+
+        foreach ($new as $position) {
+            if (! is_array($set = $sets[$position])) {
+                continue;
+            }
+
+            $id = $set[$idHandle] ?? null;
+
+            if (! is_scalar($id) || in_array((string) $id, ['', '0'], true) || $sent[(string) $id] > 1) {
+                unset($set[$idHandle]);
+            }
+
+            $sets[$position] = self::withoutUnaddressableIds(self::fieldsOf($field, $set), $set);
+        }
+
+        return $sets;
     }
 
     /**

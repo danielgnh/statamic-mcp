@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
@@ -23,7 +24,7 @@ use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
-#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted, except on a collection with slugs turned off, whose entries have none. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'. On a collection in more than one site the entry exists in site only: add it to another site with entries_localize. When the collection\'s propagate is on (see statamic_overview), every site gets a localization at once, and the response lists them under localizations.')]
+#[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted, except on a collection with slugs turned off, whose entries have none. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site. A new Replicator or Grid set whose id is blank, 0, or shared with another new set gets a fresh id; entries_get shows the stored ids. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'. On a collection in more than one site the entry exists in site only: add it to another site with entries_localize. When the collection\'s propagate is on (see statamic_overview), every site gets a localization at once, and the response lists them under localizations.')]
 class EntriesCreate extends Tool
 {
     use AuthorizesEntries;
@@ -106,6 +107,8 @@ class EntriesCreate extends Tool
         $date = $this->resolveDate($validated['date'] ?? null, $collection);
 
         $this->rejectUnknownKeys($blueprint, $data);
+
+        $data = Sets::withoutUnaddressableIds($blueprint->fields(), $data);
 
         $data = $this->withAuthor($user, $blueprint, $collectionHandle, $data);
 

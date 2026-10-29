@@ -450,3 +450,36 @@ it('changes one piece of a textarea with find and replace', function () {
 
     expect(Term::find('topics::alpha')->in('en')->data()->get('description'))->toBe('New words stay here');
 });
+
+it('gives a new set a fresh id when its id is 0 or sent twice', function () {
+    Fixtures::site();
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'text' => ['fields' => [['handle' => 'text', 'field' => ['type' => 'textarea']]]],
+        ]]]],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha', 'blocks' => [
+        ['id' => 'text0001', 'type' => 'text', 'enabled' => true, 'text' => 'First'],
+    ]])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit topics terms'))
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'data' => ['blocks' => [
+            ['id' => 'text0001'],
+            ['id' => 'same0001', 'type' => 'text', 'text' => 'One'],
+            ['id' => 'same0001', 'type' => 'text', 'text' => 'Two'],
+            ['id' => '0', 'type' => 'text', 'text' => 'Zero'],
+        ]]])
+        ->assertOk();
+
+    $ids = array_column(Term::find('topics::alpha')->in('en')->get('blocks'), 'id');
+
+    expect($ids)->toHaveCount(4)
+        ->and(array_unique($ids))->toHaveCount(4)
+        ->and($ids[0])->toBe('text0001')
+        ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
+});

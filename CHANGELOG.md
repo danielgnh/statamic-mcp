@@ -8,6 +8,22 @@ called out here explicitly.
 
 ## [Unreleased]
 
+### Fixed
+
+- **New page builder sets get an id the tools can address.** The write
+  tools stored the ids a caller gave new Replicator sets and Grid rows as
+  they were sent, `0`, blank ids, and one id on two sets included. Every
+  later by-id call then refused them, in `entries_get` with `fields`, in a
+  keyed patch, and in a list naming the id. Now a new set whose id is
+  blank, `0`, or shared with another new set of its list gets a fresh id
+  from Statamic, as a set sent without an id does. This covers Replicator
+  and Grid fields of the blueprint and the ones nested in their sets,
+  written through `entries_create`, `entries_localize`, `terms_create`,
+  `entries_update`, `terms_update`, and `globals_update`. `entries_update`
+  lists the fresh ids under `added`, and the get tools show them. A unique
+  id the caller picked is kept, stored sets keep theirs, and the write is
+  accepted as before, as the Control Panel accepts it.
+
 ## [0.9.1] - 2026-10-15
 
 ### Added

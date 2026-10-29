@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
@@ -23,7 +24,7 @@ use Statamic\Structures\Page;
 use Statamic\Support\Str;
 
 #[Name('entries_localize')]
-#[Description('Add an entry to another site of its collection, the way the Control Panel\'s Localize action does. The new entry is a localization of the one passed: it inherits every field it does not override, and data holds the values of its own, such as a translated title and content. Only fields marked localizable in the blueprint take a value of their own; the rest show the origin\'s value in every site, and the Control Panel makes them read-only there. The origin is the entry passed, or the root entry when the collection\'s origin_behavior is root (see statamic_overview), as in the Control Panel. slug defaults to the origin\'s slug, and the date of a dated collection is inherited. Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On a structured collection the localization joins the target site\'s tree under the localization of the origin\'s parent, or at the top level when the parent has none there. Needs the edit permission for the origin entry, as in the Control Panel, and access to the target site. A site that already has the entry is an error naming that entry: change it with entries_update. Collections whose propagate is on (see statamic_overview) get a localization in every site from entries_create already, and entries_get lists them under localizations. Only registered on multisite installs.')]
+#[Description('Add an entry to another site of its collection, the way the Control Panel\'s Localize action does. The new entry is a localization of the one passed: it inherits every field it does not override, and data holds the values of its own, such as a translated title and content. A new Replicator or Grid set whose id is blank, 0, or shared with another new set gets a fresh id; entries_get shows the stored ids. Only fields marked localizable in the blueprint take a value of their own; the rest show the origin\'s value in every site, and the Control Panel makes them read-only there. The origin is the entry passed, or the root entry when the collection\'s origin_behavior is root (see statamic_overview), as in the Control Panel. slug defaults to the origin\'s slug, and the date of a dated collection is inherited. Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On a structured collection the localization joins the target site\'s tree under the localization of the origin\'s parent, or at the top level when the parent has none there. Needs the edit permission for the origin entry, as in the Control Panel, and access to the target site. A site that already has the entry is an error naming that entry: change it with entries_update. Collections whose propagate is on (see statamic_overview) get a localization in every site from entries_create already, and entries_get lists them under localizations. Only registered on multisite installs.')]
 class EntriesLocalize extends Tool
 {
     use AuthorizesEntries;
@@ -106,6 +107,8 @@ class EntriesLocalize extends Tool
         $blueprint = $origin->blueprint();
 
         $this->rejectUnknownKeys($blueprint, $data);
+
+        $data = Sets::withoutUnaddressableIds($blueprint->fields(), $data);
 
         $this->rejectUnlocalizableFields($origin, $blueprint, $data);
 
