@@ -126,6 +126,17 @@ abstract class Tool extends BaseTool
             : array_values(array_intersect($all, $configured));
     }
 
+    /**
+     * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'|'forms'  $type
+     * @return bool whether config('statamic.mcp.resources.{$type}') lets $handle through, existing or not
+     */
+    protected function exposureAllows(string $type, string $handle): bool
+    {
+        $configured = config("statamic.mcp.resources.{$type}", false);
+
+        return $configured === true || (is_array($configured) && in_array($handle, $configured, true));
+    }
+
     protected function can(UserContract $user, string $permission): bool
     {
         if ($user->isSuper()) {
