@@ -16,7 +16,6 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
-use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
@@ -147,9 +146,13 @@ class EntriesCreate extends Tool
 
         $this->ensureUniqueUri($entry, $tree, $parent?->id());
 
+        $unplaced = null;
+
         if ($tree) {
             // The tree as it reads may already list this entry at the top level.
-            $entry->afterSave(fn ($entry) => $this->saveTreeChange($collection, $site, fn (CollectionTree $tree) => $tree->remove($entry)->appendTo($parent?->id(), $entry)));
+            $entry->afterSave(function ($entry) use ($collection, $site, $parent, &$unplaced) {
+                $unplaced = $this->placeInTree($collection, $site, $entry, $parent?->id());
+            });
         }
 
         // CP parity: created entries carry updated_by/updated_at. save()
@@ -159,13 +162,19 @@ class EntriesCreate extends Tool
             throw new ToolException('the save was cancelled by a listener on this site — nothing was created');
         }
 
-        if ($revisions) {
-            // CP-parity create path (EntriesController@store, 6.x): the draft
-            // gets an attributed initial revision. This inlines Revisable::
-            // store() — published(false) + save + makeRevision — because
-            // store()'s return is the revision save, which would mask a
-            // listener-cancelled entry save behind a false success.
-            $entry->makeRevision()->user($user)->message('Created via MCP (entries_create)')->save();
+        $notStored = [];
+
+        // CP-parity create path (EntriesController@store, 6.x): the draft
+        // gets an attributed initial revision. This inlines Revisable::
+        // store() — published(false) + save + makeRevision — because
+        // store()'s return is the revision save, which would mask a
+        // listener-cancelled entry save behind a false success.
+        if ($revisions && ! $entry->makeRevision()->user($user)->message('Created via MCP (entries_create)')->save()) {
+            $notStored[] = 'initial revision — cancelled by a listener on this site; the draft is saved without one';
+        }
+
+        if ($unplaced !== null) {
+            $notStored[] = $unplaced;
         }
 
         $payload = [
@@ -181,12 +190,16 @@ class EntriesCreate extends Tool
             $payload['date'] = $entry->date()?->toIso8601String();
         }
 
-        if ($tree) {
+        if ($tree && $unplaced === null) {
             $payload['parent'] = $parent?->id();
         }
 
         if ($localizations = $this->localizations($user, $entry)) {
             $payload['localizations'] = $localizations;
+        }
+
+        if ($notStored !== []) {
+            $payload['not_stored'] = $notStored;
         }
 
         return $this->json($payload);

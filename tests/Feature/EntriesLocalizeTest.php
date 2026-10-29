@@ -7,7 +7,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Laravel\Mcp\Request;
 use Statamic\Contracts\Auth\User;
+use Statamic\Events\CollectionTreeSaving;
 use Statamic\Events\EntryCreating;
+use Statamic\Events\RevisionSaving;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -403,6 +405,31 @@ it('places it at the top level when the parent has no localization in that site'
     expect(Fixtures::storedPagesTree('de'))->toBe([['entry' => Fixtures::pageId('team', 'de')]]);
 });
 
+it('says the tree placement was not stored when a listener cancels it, claiming no parent', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about, 'children' => [['entry' => $team]]]])->save();
+
+    $aboutDe = tap(Entry::find($about)->makeLocalization('de'))->save();
+    Collection::findByHandle('pages')->structure()->in('de')->tree([['entry' => $aboutDe->id()]])->save();
+
+    Event::listen(CollectionTreeSaving::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries', 'access en site', 'access de site'))
+        ->tool(EntriesLocalize::class, ['id' => $team, 'site' => 'de', 'data' => ['title' => 'Team']])
+        ->assertOk()
+        ->assertSee(sprintf('"not_stored":["tree placement — cancelled by a listener on this site; Statamic lists the entry at the end of the top level, not under \'%s\' — move it with entries_update and parent, which needs \'reorder pages entries\'"]', $aboutDe->id()))
+        ->assertDontSee('"parent"');
+
+    expect(Entry::find($team)->in('de'))->not->toBeNull()
+        ->and(Fixtures::storedPagesTree('de'))->toBe([['entry' => $aboutDe->id()]]);
+});
+
 it('records an initial revision on revision-enabled collections', function () {
     Fixtures::multisite();
     Fixtures::tags();
@@ -422,6 +449,26 @@ it('records an initial revision on revision-enabled collections', function () {
     expect($revisions)->toHaveCount(1)
         ->and($revisions->first()->message())->toBe('Created via MCP (entries_localize)')
         ->and($revisions->first()->user()->id())->toBe($user->id());
+});
+
+it('says the initial revision was not stored when a listener cancels it', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $origin = makeBlogOrigin();
+
+    Event::listen(RevisionSaving::class, fn () => false);
+
+    Server::actingAs(localizer())
+        ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de'])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertSee('"not_stored":["initial revision — cancelled by a listener on this site; the draft is saved without one"]');
+
+    expect($origin->in('de'))->not->toBeNull()
+        ->and($origin->in('de')->revisions())->toHaveCount(0);
 });
 
 it('reports a listener-cancelled save instead of claiming success', function () {
