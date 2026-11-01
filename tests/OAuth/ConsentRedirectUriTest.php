@@ -46,10 +46,13 @@ beforeEach(function () {
 it('shows where approving sends the code, whatever name the client registered under', function () {
     $client = ($this->register)(['https://attacker.example/callback']);
 
-    ($this->consent)($client, ['redirect_uri' => 'https://attacker.example/callback'])
+    $page = ($this->consent)($client, ['redirect_uri' => 'https://attacker.example/callback'])
         ->assertOk()
         ->assertSee('Claude')
-        ->assertSeeInOrder(['attacker.example', 'https://attacker.example/callback']);
+        ->assertSee('<span class="ui-redirect__host">attacker.example</span>', false)
+        ->assertSeeText('https://attacker.example/callback');
+
+    expect(substr_count($page->getContent(), 'attacker.example'))->toBe(1);
 
     expect(($this->approve)()->headers->get('Location'))->toStartWith('https://attacker.example/callback?');
 });
@@ -59,7 +62,8 @@ it('shows a lookalike host the way the browser will reach it', function (string 
 
     ($this->consent)($client, ['redirect_uri' => $registered])
         ->assertOk()
-        ->assertSeeInOrder([$reached, "https://{$reached}/callback"])
+        ->assertSee("<span class=\"ui-redirect__host\">{$reached}</span>", false)
+        ->assertSeeText("https://{$reached}/callback")
         ->assertDontSee(parse_url($registered, PHP_URL_HOST));
 
     expect(Uri::of(($this->approve)()->headers->get('Location'))->host())->toBe($reached);
@@ -73,7 +77,7 @@ it('shows the registered redirect URI when the request leaves it out', function 
 
     ($this->consent)($client)
         ->assertOk()
-        ->assertSee('https://client.example.com/callback');
+        ->assertSeeText('https://client.example.com/callback');
 
     expect(($this->approve)()->headers->get('Location'))->toStartWith('https://client.example.com/callback?');
 });
@@ -85,7 +89,7 @@ it('shows the registered redirect URI when the request sends an empty one on a s
 
     ($this->consent)($client, ['redirect_uri' => ''])
         ->assertOk()
-        ->assertSee('https://client.example.com/callback');
+        ->assertSeeText('https://client.example.com/callback');
 
     expect(($this->approve)()->headers->get('Location'))->toStartWith('https://client.example.com/callback?');
 });
@@ -95,7 +99,8 @@ it('shows the port a loopback redirect uses, not the one registered', function (
 
     ($this->consent)($client, ['redirect_uri' => 'http://127.0.0.1:43210/callback'])
         ->assertOk()
-        ->assertSee('http://127.0.0.1:43210/callback');
+        ->assertSee('<span class="ui-redirect__host">127.0.0.1</span>', false)
+        ->assertSeeText('http://127.0.0.1:43210/callback');
 
     expect(($this->approve)()->headers->get('Location'))->toStartWith('http://127.0.0.1:43210/callback?');
 });

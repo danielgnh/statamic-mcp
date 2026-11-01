@@ -15,6 +15,8 @@
 
     $redirectUri = $request->query('redirect_uri') ?: ($client->redirect_uris[0] ?? null);
     $redirect = $redirectUri ? \Illuminate\Support\Uri::of($redirectUri) : null;
+    $redirectScheme = $redirect ? $redirect->scheme().'://' : null;
+    $redirectRest = $redirect ? mb_substr($redirect->value(), mb_strlen($redirectScheme.$redirect->host())) : null;
     $redirectIsShort = $redirect && mb_strlen($redirect->value()) <= 64;
 @endphp
 
@@ -242,14 +244,34 @@
         }
         .dark .ui-profile__identity { color: var(--theme-color-gray-100); }
 
-        .ui-redirect { min-width: 0; }
+        .ui-redirect {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            min-width: 0;
+        }
+        .ui-redirect > div { flex: 1; min-width: 0; }
+        .ui-redirect__icon {
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 0.75rem;
+            background: var(--theme-color-gray-100);
+            color: var(--theme-color-gray-500);
+        }
+        .dark .ui-redirect__icon { background: var(--theme-color-gray-800); color: var(--theme-color-gray-400); }
+        .ui-redirect__icon svg { width: 0.875rem; height: 0.875rem; }
         .ui-redirect__uri {
             display: block;
-            font-size: 0.75rem;
             color: var(--theme-color-gray-500);
             overflow-wrap: anywhere;
         }
         .dark .ui-redirect__uri { color: var(--theme-color-gray-400); }
+        .ui-redirect__host { font-weight: 500; color: var(--theme-color-gray-900); }
+        .dark .ui-redirect__host { color: var(--theme-color-gray-100); }
         .ui-redirect__uri summary {
             display: flex;
             align-items: center;
@@ -259,10 +281,13 @@
             border-radius: 0.25rem;
         }
         .ui-redirect__uri summary::-webkit-details-marker { display: none; }
-        .ui-redirect__uri summary:hover { color: var(--theme-color-gray-700); }
-        .dark .ui-redirect__uri summary:hover { color: var(--theme-color-gray-200); }
         .ui-redirect__uri summary:focus-visible { outline: 2px solid var(--theme-color-focus-outline); outline-offset: 2px; }
-        .ui-redirect__uri summary span {
+        .ui-redirect__uri summary:hover svg { color: var(--theme-color-gray-700); }
+        .dark .ui-redirect__uri summary:hover svg { color: var(--theme-color-gray-200); }
+        .ui-redirect__text { flex: 1; display: flex; min-width: 0; }
+        .ui-redirect__uri summary .ui-redirect__origin { flex: none; max-width: 100%; }
+        .ui-redirect__uri summary .ui-redirect__rest {
+            flex: 1 1 0;
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -270,7 +295,8 @@
         }
         .ui-redirect__uri summary svg { flex: none; width: 1rem; height: 1rem; transition: transform 150ms; }
         .ui-redirect__uri[open] summary { align-items: flex-start; }
-        .ui-redirect__uri[open] summary span { white-space: normal; }
+        .ui-redirect__uri[open] .ui-redirect__text { display: block; }
+        .ui-redirect__uri[open] summary .ui-redirect__rest { white-space: normal; }
         .ui-redirect__uri[open] summary svg { transform: rotate(180deg); }
 
         .ui-actions { display: flex; gap: 0.75rem; }
@@ -310,20 +336,20 @@
 
             @if ($redirect)
                 <div class="ui-redirect">
-                    <span class="ui-profile__label">Authorizing sends you to</span>
-                    @if ($redirect->host())
-                        <span class="ui-profile__identity">{{ $redirect->host() }}</span>
-                    @endif
-                    @if ($redirectIsShort)
-                        <span class="ui-redirect__uri">{{ $redirect->value() }}</span>
-                    @else
-                        <details class="ui-redirect__uri">
-                            <summary>
-                                <span>{{ $redirect->value() }}</span>
-                                {!! Statamic::svg('icons/chevron-down') !!}
-                            </summary>
-                        </details>
-                    @endif
+                    <span class="ui-redirect__icon">{!! Statamic::svg('icons/external-link') !!}</span>
+                    <div>
+                        <span class="ui-profile__label">Authorizing sends you to</span>
+                        @if ($redirectIsShort)
+                            <span class="ui-redirect__uri"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                        @else
+                            <details class="ui-redirect__uri">
+                                <summary>
+                                    <span class="ui-redirect__text"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                                    {!! Statamic::svg('icons/chevron-down') !!}
+                                </summary>
+                            </details>
+                        @endif
+                    </div>
                 </div>
             @endif
 
