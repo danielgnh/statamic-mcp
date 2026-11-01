@@ -8,6 +8,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-01
+
 ### Changed
 
 - **Breaking: requires `laravel/mcp` 1.1.2 or newer.** 0.8, 0.9, and 1.x
@@ -980,7 +982,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.1...v1.0.0
 [0.9.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.7.2...v0.8.0
