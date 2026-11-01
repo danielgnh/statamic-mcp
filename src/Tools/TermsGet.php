@@ -95,7 +95,7 @@ class TermsGet extends Tool
         $inherited = null;
 
         if ($format === 'augmented') {
-            $data = $this->augmentedData(Arr::except($localized->toAugmentedArray(), ['entries', 'entries_count']));
+            $data = $this->augmentedData(Arr::except($localized->toAugmentedArray(), ['entries', 'entries_count']), $user);
         } else {
             // raw: the round-trippable write shape — this site's own data
             // overrides only. updated_at/updated_by are Statamic-managed
