@@ -199,7 +199,7 @@ trait PlacesEntries
      * alone may repeat, as it does under different parents in a tree; a
      * blueprint that wants unique slugs sets unique_entry_value on it.
      */
-    protected function ensureUniqueUri(UserContract $user, EntryContract $entry, ?CollectionTree $tree, ?string $parent): void
+    protected function ensureUniqueUri(UserContract $user, EntryContract $entry, ?CollectionTree $tree, ?string $parent, ?string $retry = null): void
     {
         if (! $uri = $this->futureUri($entry, $tree, $parent)) {
             return;
@@ -211,7 +211,7 @@ trait PlacesEntries
             return;
         }
 
-        $retry = $tree ? 'pick another slug or parent' : 'pick another slug';
+        $retry ??= $tree ? 'pick another slug or parent' : 'pick another slug';
 
         throw new ToolException($this->canRead($user, $existing)
             ? "URL '{$uri}' already belongs to entry '{$existing->id()}' in collection '{$existing->collectionHandle()}' — {$retry}"

@@ -175,9 +175,13 @@ class EntriesUpdate extends Tool
             || ($slug !== null && $slug !== $basis->slug())
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
+        $liveMoveRetry = $workingCopy && $move !== null
+            ? "a move is live at once, under the live slug '{$entry->slug()}': pick another parent, or publish a new slug before moving"
+            : null;
+
         if (! $dirty) {
             if ($move !== null && $move['from'] !== $move['to']) {
-                $this->ensureUniqueUriAfter($user, $entry, $move);
+                $this->ensureUniqueUriAfter($user, $entry, $move, $liveMoveRetry);
             }
 
             $placement = $this->applyMove($entry, $move, $workingCopy);
@@ -210,11 +214,11 @@ class EntriesUpdate extends Tool
         // path only once the URL check has passed.
         $target = $this->applyChanges($amending ? $basis : clone $entry, $merged, $slug, $date);
 
-        $this->ensureUniqueUriAfter($user, $target, $move);
-
-        if ($workingCopy && $move !== null) {
-            $this->ensureUniqueUriAfter($entry, $move);
+        if ($liveMoveRetry !== null) {
+            $this->ensureUniqueUriAfter($user, $entry, $move, $liveMoveRetry);
         }
+
+        $this->ensureUniqueUriAfter($user, $target, $move);
 
         $added = $this->addedSets($blueprint, $processed, $effective);
 
@@ -346,13 +350,14 @@ class EntriesUpdate extends Tool
     /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
-    private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move): void
+    private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move, ?string $retry = null): void
     {
         $this->ensureUniqueUri(
             $user,
             $entry,
             $this->placementTree($entry->collection(), $entry->locale()),
             $move === null ? $entry->parent()?->id() : $move['to'],
+            $retry,
         );
     }
 

@@ -629,7 +629,7 @@ it('saves a moved tree with its URL cache on, so later reads of it keep the cach
         ->and(Stache::cacheStore()->get('stache::items::collection-trees::pages::en')->uriCacheEnabled())->toBeTrue();
 });
 
-it('refuses moving a working copy onto the URL its live slug would take, before anything is saved', function () {
+it('refuses moving a working copy onto the URL its live slug would take, before anything is saved', function (array $arguments) {
     Fixtures::site();
     Fixtures::pages();
     Fixtures::structure();
@@ -643,14 +643,17 @@ it('refuses moving a working copy onto the URL its live slug would take, before 
 
     storePagesTree([['entry' => $about, 'children' => [['entry' => $sibling]]], ['entry' => $moving]]);
 
-    // The slug stays staged, but the move is live at once, under the live slug.
-    Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
-        ->tool(EntriesUpdate::class, ['id' => $moving, 'slug' => 'crew', 'data' => ['title' => 'Crew'], 'parent' => $about])
-        ->assertHasErrors([sprintf("URL '/about/team' already belongs to entry '%s' in collection 'pages' — pick another slug or parent", $sibling)]);
+    Server::actingAs(Fixtures::makeUser('view pages entries', 'edit pages entries', 'reorder pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $moving, 'parent' => $about, ...$arguments])
+        ->assertHasErrors([sprintf("URL '/about/team' already belongs to entry '%s' in collection 'pages' — a move is live at once, under the live slug 'team': pick another parent, or publish a new slug before moving", $sibling)]);
 
     expect(Fixtures::storedPagesTree())->toBe([['entry' => $about, 'children' => [['entry' => $sibling]]], ['entry' => $moving]])
         ->and(Entry::find($moving)->hasWorkingCopy())->toBeFalse();
-});
+})->with([
+    'with a staged slug' => [['slug' => 'crew', 'data' => ['title' => 'Crew']]],
+    'with staged data' => [['data' => ['title' => 'Crew']]],
+    'alone' => [['data' => []]],
+]);
 
 it('refuses a move onto a URL another entry already has', function () {
     Fixtures::site();
