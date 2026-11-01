@@ -262,13 +262,15 @@ trait ValidatesBlueprintData
     }
 
     /**
+     * @param  array<array-key, array<string, mixed>>  $counterparts
      * @return array<string, mixed>|null
      */
-    private function storedWithoutIdAt(mixed $stored, int $index, mixed $item, string $key): ?array
+    private function storedWithoutIdAt(mixed $stored, int $index, mixed $item, array $counterparts, string $key): ?array
     {
         $candidate = is_array($stored) ? ($stored[$index] ?? null) : null;
+        $id = data_get($item, $key);
 
-        return is_array($candidate) && blank(data_get($item, $key)) && blank(data_get($candidate, $key)) ? $candidate : null;
+        return is_array($candidate) && (blank($id) || $id === data_get($candidate, $key)) && $this->counterpart($counterparts, data_get($candidate, $key)) === null ? $candidate : null;
     }
 
     /**
@@ -284,7 +286,7 @@ trait ValidatesBlueprintData
         $counterparts = $this->storedByUniqueId($stored, Sets::idHandle());
 
         foreach ($sets as $index => $set) {
-            $counterpart = $this->counterpart($counterparts, data_get($set, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $set, Sets::idHandle());
+            $counterpart = $this->counterpart($counterparts, data_get($set, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $set, $counterparts, Sets::idHandle());
 
             $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart)];
         }
@@ -357,7 +359,7 @@ trait ValidatesBlueprintData
             }
 
             if ($node['type'] === 'set') {
-                $counterpart = $this->counterpart($counterparts, data_get($node, 'attrs.id')) ?? $this->storedWithoutIdAt($stored, $index, $node, 'attrs.id');
+                $counterpart = $this->counterpart($counterparts, data_get($node, 'attrs.id')) ?? $this->storedWithoutIdAt($stored, $index, $node, $counterparts, 'attrs.id');
                 $storedValues = data_get($counterpart, 'type') === 'set' ? data_get($counterpart, 'attrs.values') : null;
 
                 $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", $storedValues)];
@@ -384,7 +386,7 @@ trait ValidatesBlueprintData
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $counterpart = $this->counterpart($counterparts, data_get($row, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $row, Sets::idHandle());
+            $counterpart = $this->counterpart($counterparts, data_get($row, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $row, $counterparts, Sets::idHandle());
 
             if (! $this->unchanged($row, $counterpart)) {
                 $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart)];

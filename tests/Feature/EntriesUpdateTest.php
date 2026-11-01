@@ -864,7 +864,7 @@ it('refuses a file of an unexposed container in a Bard set that only a stored pa
     'by id' => [['id' => 'figure01']],
 ]);
 
-it('sends back sets that share an id with their files of an unexposed container', function () {
+it('sends back sets that share an id with their files of an unexposed container', function (bool $patchOther) {
     Fixtures::site();
     Fixtures::assetContainer('images');
     Fixtures::landing();
@@ -872,6 +872,7 @@ it('sends back sets that share an id with their files of an unexposed container'
     Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
 
     $sets = [
+        ['id' => 'text0001', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'Intro'],
         ['id' => 'dup00001', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'A', 'image' => 'hero.jpg'],
         ['id' => 'dup00001', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'B', 'image' => 'hero.jpg'],
     ];
@@ -881,11 +882,14 @@ it('sends back sets that share an id with their files of an unexposed container'
     config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
 
     Server::actingAs(Fixtures::makeUser('edit landing entries'))
-        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Home v2', 'page_builder' => $sets]])
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Home v2', 'page_builder' => $patchOther ? ['text0001' => ['text' => 'Changed']] : $sets]])
         ->assertOk();
 
     expect(array_column(Entry::find($entry->id())->get('page_builder'), 'image'))->toBe(['hero.jpg', 'hero.jpg']);
-});
+})->with([
+    'the whole list' => [false],
+    'another set patched by id' => [true],
+]);
 
 it('checks that a file copied from another set still exists', function () {
     Fixtures::site();
