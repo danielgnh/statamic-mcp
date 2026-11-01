@@ -182,6 +182,14 @@ called out here explicitly.
   it does when the Control Panel saves the field. A stored set whose id is
   a list or another value with no string form no longer makes every later
   write of the field fail. Errors and results are otherwise unchanged.
+- **Augmented `terms_get` no longer returns the entries tagged with the
+  term.** Its `entries` key held every published entry carrying the term,
+  from any collection and with all of its fields, and `entries_count`
+  counted them. A role with only `view tags terms` could read entries of
+  collections it has no permission on, or that `resources.collections`
+  leaves out. No term screen in the Control Panel lists or counts a term's
+  entries, so both keys are gone rather than filtered. **Breaking:**
+  augmented `terms_get` has no `entries` or `entries_count` key.
 
 ## [0.9.1] - 2026-10-15
 

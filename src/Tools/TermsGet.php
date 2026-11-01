@@ -97,6 +97,7 @@ class TermsGet extends Tool
             // inline whole augmented items including their reverse entries.
             // shallow() reduces relations to id/title/api_url-style stubs.
             $data = collect((array) $localized->toAugmentedArray())
+                ->except(['entries', 'entries_count'])
                 ->map(fn ($value) => $value instanceof Value ? $value->shallow() : $value)
                 ->all();
         } else {
