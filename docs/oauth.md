@@ -102,6 +102,13 @@ automatically. (Passport 12+ ships no default consent view and never binds
 *"Target [Laravel\Passport\Contracts\AuthorizationViewResponse] is not
 instantiable"*. The addon closes that gap; `mcp:doctor` verifies it.)
 
+The screen shows the client's name, the access it asks for, the account that
+approves, and where approving sends the editor: the redirect URI's host and
+the full URI, both as the browser will reach them (lowercase, punycode for
+non-Latin names). Any caller can register a client under any name, so the
+host is what tells a real connector from a lookalike called "Claude". A view you
+publish or supply yourself should show the redirect URI too.
+
 To restyle it, publish the Blade and edit the copy — no need to publish
 laravel/mcp's own view, which depends on a compiled Vite/Tailwind bundle and
 500s on sites without one:

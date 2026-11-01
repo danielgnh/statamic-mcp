@@ -12,6 +12,9 @@
     $userName = $user->name ?? $user->email ?? 'User';
     $userIdentity = $user->email ?? $user->name ?? $user->getAuthIdentifier();
     $userAvatar = method_exists($user, 'avatar') ? $user->avatar() : null;
+
+    $redirectUri = $request->query('redirect_uri') ?: ($client->redirect_uris[0] ?? null);
+    $redirect = $redirectUri ? \Illuminate\Support\Uri::of($redirectUri) : null;
 @endphp
 
 <!DOCTYPE html>
@@ -237,6 +240,15 @@
         }
         .dark .ui-profile__identity { color: var(--theme-color-gray-100); }
 
+        .ui-redirect { min-width: 0; }
+        .ui-redirect__uri {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--theme-color-gray-500);
+            overflow-wrap: anywhere;
+        }
+        .dark .ui-redirect__uri { color: var(--theme-color-gray-400); }
+
         .ui-actions { display: flex; gap: 0.75rem; padding-top: 0.25rem; }
         .ui-actions form { flex: 1; margin: 0; }
         .ui-actions .ui-button { width: 100%; }
@@ -261,6 +273,16 @@
                         </li>
                     @endforeach
                 </ul>
+            @endif
+
+            @if ($redirect)
+                <div class="ui-redirect">
+                    <span class="ui-profile__label">Authorizing sends you to</span>
+                    @if ($redirect->host())
+                        <span class="ui-profile__identity">{{ $redirect->host() }}</span>
+                    @endif
+                    <span class="ui-redirect__uri">{{ $redirect->value() }}</span>
+                </div>
             @endif
 
             <div class="ui-profile">
