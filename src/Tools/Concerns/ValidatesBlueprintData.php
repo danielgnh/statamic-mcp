@@ -233,17 +233,32 @@ trait ValidatesBlueprintData
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return array<array-key, array<string, mixed>>
      */
-    private function storedById(mixed $stored, mixed $id, string $key): ?array
+    private function storedByUniqueId(mixed $stored, string $key): array
     {
-        if (! is_array($stored) || ! is_scalar($id) || (string) $id === '') {
-            return null;
+        if (! is_array($stored)) {
+            return [];
         }
 
-        $matches = array_values(array_filter($stored, fn (mixed $item) => is_array($item) && (string) data_get($item, $key) === (string) $id));
+        $byId = [];
 
-        return count($matches) === 1 ? $matches[0] : null;
+        foreach (Sets::positionsById($stored, $key) as $id => $positions) {
+            if (count($positions) === 1) {
+                $byId[$id] = $stored[$positions[0]];
+            }
+        }
+
+        return $byId;
+    }
+
+    /**
+     * @param  array<array-key, array<string, mixed>>  $counterparts
+     * @return array<string, mixed>|null
+     */
+    private function counterpart(array $counterparts, mixed $id): ?array
+    {
+        return is_scalar($id) ? ($counterparts[(string) $id] ?? null) : null;
     }
 
     /**
@@ -266,9 +281,10 @@ trait ValidatesBlueprintData
         }
 
         $messages = [];
+        $counterparts = $this->storedByUniqueId($stored, Sets::idHandle());
 
         foreach ($sets as $index => $set) {
-            $counterpart = $this->storedById($stored, data_get($set, Sets::idHandle()), Sets::idHandle()) ?? $this->storedWithoutIdAt($stored, $index, $set, Sets::idHandle());
+            $counterpart = $this->counterpart($counterparts, data_get($set, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $set, Sets::idHandle());
 
             $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart)];
         }
@@ -333,6 +349,7 @@ trait ValidatesBlueprintData
         }
 
         $messages = [];
+        $counterparts = $this->storedByUniqueId($stored, 'attrs.id');
 
         foreach ($nodes as $index => $node) {
             if (! is_array($node) || ! is_string(data_get($node, 'type'))) {
@@ -340,7 +357,7 @@ trait ValidatesBlueprintData
             }
 
             if ($node['type'] === 'set') {
-                $counterpart = $this->storedById($stored, data_get($node, 'attrs.id'), 'attrs.id') ?? $this->storedWithoutIdAt($stored, $index, $node, 'attrs.id');
+                $counterpart = $this->counterpart($counterparts, data_get($node, 'attrs.id')) ?? $this->storedWithoutIdAt($stored, $index, $node, 'attrs.id');
                 $storedValues = data_get($counterpart, 'type') === 'set' ? data_get($counterpart, 'attrs.values') : null;
 
                 $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", $storedValues)];
@@ -360,13 +377,14 @@ trait ValidatesBlueprintData
         }
 
         $messages = [];
+        $counterparts = $this->storedByUniqueId($stored, Sets::idHandle());
 
         foreach ($rows as $index => $row) {
             if (! is_array($row)) {
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $counterpart = $this->storedById($stored, data_get($row, Sets::idHandle()), Sets::idHandle()) ?? $this->storedWithoutIdAt($stored, $index, $row, Sets::idHandle());
+            $counterpart = $this->counterpart($counterparts, data_get($row, Sets::idHandle())) ?? $this->storedWithoutIdAt($stored, $index, $row, Sets::idHandle());
 
             if (! $this->unchanged($row, $counterpart)) {
                 $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart)];
