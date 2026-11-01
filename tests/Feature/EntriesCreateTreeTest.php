@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Statamic\Events\CollectionTreeSaving;
+use Statamic\Events\EntrySaved;
 use Statamic\Events\EntrySaving;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
@@ -263,6 +264,73 @@ it('keeps a tree change another call saved while it was creating an entry', func
     expect(Fixtures::storedPagesTree())->toBe([
         ['entry' => $about, 'children' => [['entry' => $contact], ['entry' => Fixtures::pageId('team')]]],
     ]);
+});
+
+it('says the tree placement was not stored when a listener cancels it, claiming no parent', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about]])->save();
+
+    Event::listen(CollectionTreeSaving::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team'], 'parent' => $about])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertSee(sprintf('"not_stored":["tree placement — cancelled by a listener on this site; Statamic lists the entry at the end of the top level, not under \'%s\' — move it with entries_update and parent, which needs \'reorder pages entries\'"]', $about))
+        ->assertDontSee('"parent"');
+
+    expect(Fixtures::pageId('team'))->not->toBeNull()
+        ->and(Fixtures::storedPagesTree())->toBe([['entry' => $about]]);
+});
+
+it('says a cancelled placement at the top level leaves the entry listed there, advising no move', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+
+    $about = Fixtures::page('about', 'About');
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $about]])->save();
+
+    Event::listen(CollectionTreeSaving::class, fn () => false);
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team']])
+        ->assertOk()
+        ->assertSee('"url":"/team"')
+        ->assertSee('"not_stored":["tree placement — cancelled by a listener on this site; the stored tree does not list the entry yet, and Statamic lists it at the end of the top level"]')
+        ->assertDontSee('"parent"');
+
+    expect(Fixtures::storedPagesTree())->toBe([['entry' => $about]]);
+});
+
+it('finishes the save when the tree stays locked, saying the placement was not stored', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure();
+    Fixtures::revisions('pages');
+
+    $saved = 0;
+    Event::listen(EntrySaved::class, function () use (&$saved) {
+        $saved++;
+    });
+
+    Cache::lock('statamic-mcp-tree:pages:en', 30)->get();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'data' => ['title' => 'Team']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertSee('"not_stored":["tree placement — another call was still saving the tree of collection \'pages\' (site \'en\'); the stored tree does not list the entry yet, and Statamic lists it at the end of the top level"]');
+
+    $entry = Entry::find(Fixtures::pageId('team'));
+
+    expect($entry->revisions())->toHaveCount(1)
+        ->and($saved)->toBe(1)
+        ->and(Fixtures::storedPagesTree())->toBe([]);
 });
 
 it('saves the tree under the collection lock of its site', function () {
