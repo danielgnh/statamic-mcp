@@ -105,8 +105,9 @@ instantiable"*. The addon closes that gap; `mcp:doctor` verifies it.)
 The screen shows the client's name, the access it asks for, the account that
 approves, and where approving sends the editor: the redirect URI's host and
 the full URI, both as the browser will reach them (lowercase, punycode for
-non-Latin names). Any caller can register a client under any name, so the
-host is what tells a real connector from a lookalike called "Claude". A view you
+non-Latin names). A URI over 64 characters folds into one line that expands on click; the
+host always shows in full. Any caller can register a client under any name,
+so the host is what tells a real connector from a lookalike called "Claude". A view you
 publish or supply yourself should show the redirect URI too.
 
 To restyle it, publish the Blade and edit the copy — no need to publish

@@ -15,6 +15,7 @@
 
     $redirectUri = $request->query('redirect_uri') ?: ($client->redirect_uris[0] ?? null);
     $redirect = $redirectUri ? \Illuminate\Support\Uri::of($redirectUri) : null;
+    $redirectIsShort = $redirect && mb_strlen($redirect->value()) <= 64;
 @endphp
 
 <!DOCTYPE html>
@@ -63,7 +64,7 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        main { width: 100%; max-width: 24rem; }
+        main { width: 100%; max-width: 24rem; min-width: 0; }
 
         /* ui/AuthCard.vue */
         .ui-auth-card {
@@ -201,7 +202,8 @@
         /* Scope list, styled like a flat ui/Card list */
         .ui-scopes {
             list-style: none;
-            margin: 0;
+            margin-inline: 0;
+            margin-block-end: 0;
             padding: 0;
             border: 1px solid var(--theme-color-gray-200);
             border-radius: 0.75rem;
@@ -248,8 +250,31 @@
             overflow-wrap: anywhere;
         }
         .dark .ui-redirect__uri { color: var(--theme-color-gray-400); }
+        .ui-redirect__uri summary {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            cursor: pointer;
+            list-style: none;
+            border-radius: 0.25rem;
+        }
+        .ui-redirect__uri summary::-webkit-details-marker { display: none; }
+        .ui-redirect__uri summary:hover { color: var(--theme-color-gray-700); }
+        .dark .ui-redirect__uri summary:hover { color: var(--theme-color-gray-200); }
+        .ui-redirect__uri summary:focus-visible { outline: 2px solid var(--theme-color-focus-outline); outline-offset: 2px; }
+        .ui-redirect__uri summary span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .ui-redirect__uri summary svg { flex: none; width: 1rem; height: 1rem; transition: transform 150ms; }
+        .ui-redirect__uri[open] summary { align-items: flex-start; }
+        .ui-redirect__uri[open] summary span { white-space: normal; }
+        .ui-redirect__uri[open] summary svg { transform: rotate(180deg); }
 
-        .ui-actions { display: flex; gap: 0.75rem; padding-top: 0.25rem; }
+        .ui-actions { display: flex; gap: 0.75rem; }
+        .ui-auth-card__inner > .ui-actions { margin-block-start: 2.75rem; }
         .ui-actions form { flex: 1; margin: 0; }
         .ui-actions .ui-button { width: 100%; }
     </style>
@@ -263,6 +288,14 @@
             <x-slot:logo>
                 <x-statamic-mcp::avatar :name="$client->name" size="lg" />
             </x-slot:logo>
+
+            <div class="ui-profile">
+                <x-statamic-mcp::avatar :name="$userName" :seed="$userIdentity" :src="$userAvatar" />
+                <div>
+                    <span class="ui-profile__label">Signed in as</span>
+                    <span class="ui-profile__identity">{{ $userIdentity }}</span>
+                </div>
+            </div>
 
             @if (count($scopes) > 0)
                 <ul class="ui-scopes">
@@ -281,17 +314,18 @@
                     @if ($redirect->host())
                         <span class="ui-profile__identity">{{ $redirect->host() }}</span>
                     @endif
-                    <span class="ui-redirect__uri">{{ $redirect->value() }}</span>
+                    @if ($redirectIsShort)
+                        <span class="ui-redirect__uri">{{ $redirect->value() }}</span>
+                    @else
+                        <details class="ui-redirect__uri">
+                            <summary>
+                                <span>{{ $redirect->value() }}</span>
+                                {!! Statamic::svg('icons/chevron-down') !!}
+                            </summary>
+                        </details>
+                    @endif
                 </div>
             @endif
-
-            <div class="ui-profile">
-                <x-statamic-mcp::avatar :name="$userName" :seed="$userIdentity" :src="$userAvatar" />
-                <div>
-                    <span class="ui-profile__label">Signed in as</span>
-                    <span class="ui-profile__identity">{{ $userIdentity }}</span>
-                </div>
-            </div>
 
             <div class="ui-actions">
                 <form method="POST" action="{{ route('passport.authorizations.deny') }}">

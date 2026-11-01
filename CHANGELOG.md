@@ -106,7 +106,9 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   included for a loopback address, or the client's registered URI when the
   request names none. The host reads the way the browser reaches it, in
   lowercase and with a non-Latin name in punycode, so `cIaude.ai` shows as
-  `ciaude.ai` and a Cyrillic "а" as `xn--`. A consent view you published with
+  `ciaude.ai` and a Cyrillic "а" as `xn--`. A URI over 64 characters
+  folds into one line that expands on click, and the host always shows in
+  full. A consent view you published with
   `vendor:publish --tag=statamic-mcp-views` keeps the old markup; see
   [UPGRADE.md](UPGRADE.md).
 - **OAuth mode accepts only tokens issued for Statamic users.** When the

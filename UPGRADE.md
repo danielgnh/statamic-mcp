@@ -59,10 +59,10 @@ Claude. If you published the view with
 `vendor:publish --tag=statamic-mcp-views`, your copy in
 `resources/views/vendor/statamic-mcp/oauth/authorize.blade.php` doesn't show
 it. Publish the view again with `--force` and reapply your changes. To patch
-your copy by hand instead, take all three parts from the addon's view, or
-the page fails: the two `$redirect…` lines at the end of the `@php` block at
-the top, the `.ui-redirect` styles, and the `@if ($redirect)` block above
-"Signed in as".
+your copy by hand instead, take every part from the addon's view, or the
+page fails or overflows on phones: the `$redirect…` lines at the end of the
+`@php` block at the top, the `.ui-redirect` styles, `min-width: 0` on
+`main`, and the `@if ($redirect)` block above the buttons.
 
 ### What agents and integrations see
 
