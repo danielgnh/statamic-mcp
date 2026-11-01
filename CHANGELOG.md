@@ -54,6 +54,15 @@ called out here explicitly.
   15-second budget, and once it runs out the upload stops with
   `source_url took longer than 15 seconds`, also when curl cuts off a hop at
   the deadline. The DNS lookup before each hop is not cut off by the budget.
+- **`source_url` uploads no longer treat NAT64, 6to4, and Teredo addresses as
+  public.** PHP's private and reserved range checks let these IPv6 forms of an
+  IPv4 address through, so on a server with a NAT64 gateway or 6to4 relay a
+  download could be routed to loopback or the cloud metadata endpoint. A NAT64
+  address in the well-known prefix (`64:ff9b::/96`) is now judged by the IPv4
+  address it carries, so servers on DNS64 networks that use it still download
+  from public hosts. The local-use NAT64 prefix (`64:ff9b:1::/48`), 6to4
+  (`2002::/16`), and Teredo (`2001::/32`) are refused. On a network whose
+  DNS64 uses the local-use prefix, every IPv4-only host is now refused.
 
 ## [0.9.1] - 2026-10-15
 
