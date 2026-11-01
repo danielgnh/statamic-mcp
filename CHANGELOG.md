@@ -95,9 +95,9 @@ called out here explicitly.
   one in a container that `assets_list` answers with "not found". A new
   path for a field whose container `resources` leaves out is now refused
   before any lookup, with an error that names no container. A path the
-  field already stores anywhere, in a set without an id or in a
-  navigation branch's data too, still goes back unchanged, and `null` still
-  clears the field.
+  field already stores still goes back unchanged, also in a set or row
+  without an id, matched by its position, and in a navigation branch's
+  data, and `null` still clears the field.
 
 ## [0.9.1] - 2026-10-15
 

@@ -752,6 +752,139 @@ it('keeps a stored file of an unexposed container in a set without an id', funct
         );
 });
 
+it('refuses a file of an unexposed container that the field only holds in text', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'page_builder' => [
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'hero.jpg'],
+        ],
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'hero.jpg', 'image' => 'hero.jpg'],
+        ]]])
+        ->assertHasErrors(['page_builder.0.image links a container not exposed to MCP — leave it out of data']);
+
+    expect(Entry::find($entry->id())->get('page_builder')[0])->not->toHaveKey('image');
+});
+
+it('refuses a file of an unexposed container that only another set type stores under the same handle', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    $planted = ['id' => 'text0001', 'type' => 'section_text_block', 'enabled' => true, 'text' => 'Old', 'image' => 'hero.jpg'];
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'page_builder' => [$planted],
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            $planted,
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'Hi', 'image' => 'hero.jpg'],
+        ]]])
+        ->assertHasErrors(['page_builder.1.image links a container not exposed to MCP — leave it out of data']);
+
+    expect(Entry::find($entry->id())->get('page_builder'))->toBe([$planted]);
+});
+
+it('refuses a file of an unexposed container in a Bard set that only a stored paragraph carries', function (array $attrs) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'body' => ['type' => 'bard', 'sets' => [
+            'main' => ['display' => 'Main', 'sets' => [
+                'figure' => ['display' => 'Figure', 'fields' => [
+                    ['handle' => 'image', 'field' => ['type' => 'assets', 'container' => 'images', 'max_files' => 1]],
+                ]],
+            ]],
+        ]],
+    ])->setHandle('landing_page')->setNamespace('collections.landing')->save();
+
+    Storage::disk('images')->put('secret.jpg', Fixtures::tinyPng());
+
+    $values = ['type' => 'figure', 'image' => 'secret.jpg'];
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'body' => [['type' => 'paragraph', 'attrs' => [...$attrs, 'values' => $values], 'content' => [['type' => 'text', 'text' => 'x']]]],
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['body' => [
+            ['type' => 'set', 'attrs' => [...$attrs, 'values' => $values]],
+        ]]])
+        ->assertHasErrors(['body.0.attrs.values.image links a container not exposed to MCP — leave it out of data']);
+})->with([
+    'by position' => [[]],
+    'by id' => [['id' => 'figure01']],
+]);
+
+it('sends back sets that share an id with their files of an unexposed container', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::disk('images')->put('hero.jpg', Fixtures::tinyPng());
+
+    $sets = [
+        ['id' => 'dup00001', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'A', 'image' => 'hero.jpg'],
+        ['id' => 'dup00001', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'B', 'image' => 'hero.jpg'],
+    ];
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data(['title' => 'Home', 'page_builder' => $sets]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => []]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Home v2', 'page_builder' => $sets]])
+        ->assertOk();
+
+    expect(array_column(Entry::find($entry->id())->get('page_builder'), 'image'))->toBe(['hero.jpg', 'hero.jpg']);
+});
+
+it('checks that a file copied from another set still exists', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    $entry = tap(Entry::make()->collection('landing')->slug('home')->data([
+        'title' => 'Home',
+        'page_builder' => [
+            ['id' => 'aaaaaaaa', 'type' => 'section_hero', 'enabled' => true, 'heading' => 'Old', 'image' => 'deleted.jpg'],
+        ],
+    ]))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['page_builder' => [
+            ['id' => 'aaaaaaaa'],
+            ['type' => 'section_hero', 'enabled' => true, 'heading' => 'New', 'image' => 'deleted.jpg'],
+        ]]])
+        ->assertHasErrors(["asset 'deleted.jpg' not found in container 'images' (page_builder.1.image) — pass a path from assets_list or assets_upload"]);
+
+    expect(Entry::find($entry->id())->get('page_builder'))->toHaveCount(1);
+});
+
 it('takes back exactly what entries_get returns as a no-op', function () {
     Fixtures::site();
 
