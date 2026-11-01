@@ -121,13 +121,14 @@ class OAuthFixtures
         ]);
     }
 
-    public static function client(string $name = 'Claude'): string
+    public static function client(string $name = 'Claude', ?string $provider = null): string
     {
         $model = Passport::clientModel();
 
         $attributes = [
             'id' => (string) Str::uuid(),
             'name' => $name,
+            'provider' => $provider,
             'created_at' => now(),
             'updated_at' => now(),
         ];
@@ -137,7 +138,7 @@ class OAuthFixtures
         return $attributes['id'];
     }
 
-    public static function accessToken(string $userId, string $clientId, array $overrides = []): string
+    public static function accessToken(?string $userId, string $clientId, array $overrides = []): string
     {
         $model = Passport::tokenModel();
 
