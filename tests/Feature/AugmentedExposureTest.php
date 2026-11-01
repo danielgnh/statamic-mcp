@@ -7,11 +7,17 @@ use Danielgnh\StatamicMcp\Tools\TermsGet;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
 use Statamic\Facades\AssetContainer;
+use Statamic\Facades\Blink;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
+
+function startNewRequest(): void
+{
+    Blink::flush();
+}
 
 function blogPostWithRelations(array $data): string
 {
@@ -35,6 +41,8 @@ it('leaves related entries of an unexposed collection out of augmented entries_g
     $post = blogPostWithRelations(['related' => [$offer, $other], 'featured' => $offer, 'cta' => "entry::{$offer}"]);
 
     config(['statamic.mcp.resources' => ['collections' => ['blog']]]);
+
+    startNewRequest();
 
     $user = Fixtures::makeUser('view blog entries', 'view pages entries');
 
