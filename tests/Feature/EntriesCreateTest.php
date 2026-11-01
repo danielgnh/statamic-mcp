@@ -111,11 +111,55 @@ it('refuses a slug whose URL another entry of the collection has, naming that en
         Entry::make()->collection('blog')->slug('hello-world')->data(['title' => 'Hello'])->published(true)
     )->save();
 
-    Server::actingAs(Fixtures::makeUser('create blog entries'))
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'create blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hello World'], 'slug' => 'hello-world'])
         ->assertHasErrors(["URL '/blog/hello-world' already belongs to entry '{$existing->id()}' in collection 'blog' — pick another slug"]);
 
     expect(Entry::query()->where('collection', 'blog')->count())->toBe(1);
+});
+
+it('refuses a URL an entry of an unexposed collection has without naming that entry', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Collection::findByHandle('pages')->routes('/blog/{slug}')->save();
+
+    $page = Fixtures::page('hello', 'Hello', published: false);
+
+    config(['statamic.mcp.resources.collections' => ['blog']]);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'create blog entries', 'view pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hello'], 'slug' => 'hello'])
+        ->assertHasErrors(["URL '/blog/hello' is already taken — pick another slug"])
+        ->assertDontSee($page)
+        ->assertDontSee('pages');
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
+});
+
+it('names the entry whose URL a create would take only to a caller who can view it', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Collection::findByHandle('pages')->routes('/blog/{slug}')->save();
+
+    $page = Fixtures::page('hello', 'Hello', published: false);
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'create blog entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hello'], 'slug' => 'hello'])
+        ->assertHasErrors(["URL '/blog/hello' is already taken — pick another slug"])
+        ->assertDontSee($page)
+        ->assertDontSee('pages');
+
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'create blog entries', 'view pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Hello'], 'slug' => 'hello'])
+        ->assertHasErrors(["URL '/blog/hello' already belongs to entry '{$page}' in collection 'pages' — pick another slug"]);
+
+    expect(Entry::query()->where('collection', 'blog')->count())->toBe(0);
 });
 
 it('allows a slug another entry has in a collection without a route, as the CP does', function () {
@@ -234,7 +278,7 @@ it('normalizes the slug the way Statamic will persist it before checking the URL
 
     // Entry::save() re-normalizes 'Hello World' to 'hello-world' — a check on
     // the raw value would miss this and silently produce two entries, one URL.
-    Server::actingAs(Fixtures::makeUser('create blog entries'))
+    Server::actingAs(Fixtures::makeUser('view blog entries', 'create blog entries'))
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Fresh'], 'slug' => 'Hello World'])
         ->assertHasErrors(["URL '/blog/hello-world' already belongs to entry '{$existing->id()}' in collection 'blog' — pick another slug"]);
 });

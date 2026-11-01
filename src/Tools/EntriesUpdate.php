@@ -177,7 +177,7 @@ class EntriesUpdate extends Tool
 
         if (! $dirty) {
             if ($move !== null && $move['from'] !== $move['to']) {
-                $this->ensureUniqueUriAfter($entry, $move);
+                $this->ensureUniqueUriAfter($user, $entry, $move);
             }
 
             $placement = $this->applyMove($entry, $move, $workingCopy);
@@ -210,7 +210,7 @@ class EntriesUpdate extends Tool
         // path only once the URL check has passed.
         $target = $this->applyChanges($amending ? $basis : clone $entry, $merged, $slug, $date);
 
-        $this->ensureUniqueUriAfter($target, $move);
+        $this->ensureUniqueUriAfter($user, $target, $move);
 
         $added = $this->addedSets($blueprint, $processed, $effective);
 
@@ -342,9 +342,10 @@ class EntriesUpdate extends Tool
     /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
-    private function ensureUniqueUriAfter(EntryContract $entry, ?array $move): void
+    private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move): void
     {
         $this->ensureUniqueUri(
+            $user,
             $entry,
             $this->placementTree($entry->collection(), $entry->locale()),
             $move === null ? $entry->parent()?->id() : $move['to'],

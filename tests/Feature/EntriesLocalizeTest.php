@@ -299,7 +299,7 @@ it('refuses a URL another entry of the target site already has', function () {
         Entry::make()->collection('blog')->slug('hello')->locale('de')->data(['title' => 'Hallo'])->published(true)
     )->save();
 
-    Server::actingAs(localizer())
+    Server::actingAs(localizer('view blog entries'))
         ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de'])
         ->assertHasErrors(["URL '/blog/hello' already belongs to entry '{$taken->id()}' in collection 'blog' — pick another slug"]);
 
