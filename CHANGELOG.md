@@ -80,6 +80,14 @@ called out here explicitly.
   from public hosts. The local-use NAT64 prefix (`64:ff9b:1::/48`), 6to4
   (`2002::/16`), and Teredo (`2001::/32`) are refused. On a network whose
   DNS64 uses the local-use prefix, every IPv4-only host is now refused.
+- **`blueprints_get` names only the collections, taxonomies, and asset
+  containers MCP exposes.** An entries, terms, or assets field showed every
+  handle its config names under `collections`, `taxonomies`, or `container`,
+  and the assets example note named the container, even when
+  `resources` leaves that resource out and every other tool answers its
+  handle with "not found". Those lists now hold only the handles `resources`
+  allows. A field that links nothing MCP exposes has no such key, a `null`
+  example, and a note in `example_notes` saying MCP cannot fill it.
 
 ## [0.9.1] - 2026-10-15
 
