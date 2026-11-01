@@ -88,6 +88,16 @@ called out here explicitly.
   handle with "not found". Those lists now hold only the handles `resources`
   allows. A field that links nothing MCP exposes has no such key, a `null`
   example, and a note in `example_notes` saying MCP cannot fill it.
+- **Writes no longer look up files in asset containers MCP does not
+  expose.** Every write that validates an assets field checked a new path
+  against the field's container and named the container in the error, so
+  `entries_create` or `entries_update` told an existing file from a missing
+  one in a container that `assets_list` answers with "not found". A new
+  path for a field whose container `resources` leaves out is now refused
+  before any lookup, with an error that names no container. A path the
+  field already stores still goes back unchanged, also in a set or row
+  without an id, matched by its position, and in a navigation branch's
+  data, and `null` still clears the field.
 
 ## [0.9.1] - 2026-10-15
 

@@ -247,6 +247,16 @@ trait ValidatesBlueprintData
     }
 
     /**
+     * @return array<string, mixed>|null
+     */
+    private function storedWithoutIdAt(mixed $stored, int $index, mixed $item, string $key): ?array
+    {
+        $candidate = is_array($stored) ? ($stored[$index] ?? null) : null;
+
+        return is_array($candidate) && blank(data_get($item, $key)) && blank(data_get($candidate, $key)) ? $candidate : null;
+    }
+
+    /**
      * @return list<string>
      */
     private function invalidSets(Replicator $fieldtype, mixed $sets, string $path, mixed $stored): array
@@ -258,7 +268,7 @@ trait ValidatesBlueprintData
         $messages = [];
 
         foreach ($sets as $index => $set) {
-            $counterpart = $this->storedById($stored, data_get($set, Sets::idHandle()), Sets::idHandle());
+            $counterpart = $this->storedById($stored, data_get($set, Sets::idHandle()), Sets::idHandle()) ?? $this->storedWithoutIdAt($stored, $index, $set, Sets::idHandle());
 
             $messages = [...$messages, ...$this->invalidSet($fieldtype, $set, "{$path}.".$this->setLabel($set, $index), $counterpart)];
         }
@@ -330,9 +340,10 @@ trait ValidatesBlueprintData
             }
 
             if ($node['type'] === 'set') {
-                $counterpart = $this->storedById($stored, data_get($node, 'attrs.id'), 'attrs.id');
+                $counterpart = $this->storedById($stored, data_get($node, 'attrs.id'), 'attrs.id') ?? $this->storedWithoutIdAt($stored, $index, $node, 'attrs.id');
+                $storedValues = data_get($counterpart, 'type') === 'set' ? data_get($counterpart, 'attrs.values') : null;
 
-                $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", data_get($counterpart, 'attrs.values'))];
+                $messages = [...$messages, ...$this->invalidSet($fieldtype, data_get($node, 'attrs.values'), "{$path}.{$index}.attrs.values", $storedValues)];
             }
         }
 
@@ -355,7 +366,7 @@ trait ValidatesBlueprintData
                 throw new ToolException("{$path}.{$index} must be a row object keyed by field handle");
             }
 
-            $counterpart = $this->storedById($stored, data_get($row, Sets::idHandle()), Sets::idHandle());
+            $counterpart = $this->storedById($stored, data_get($row, Sets::idHandle()), Sets::idHandle()) ?? $this->storedWithoutIdAt($stored, $index, $row, Sets::idHandle());
 
             if (! $this->unchanged($row, $counterpart)) {
                 $messages = [...$messages, ...$this->unknownFields($fieldtype->fields($index), $row, "{$path}.".$this->setLabel($row, $index), allowed: [Sets::idHandle()], stored: $counterpart)];
@@ -381,6 +392,14 @@ trait ValidatesBlueprintData
     {
         $container = $this->assetsFieldContainer($field);
 
+        $added = array_filter(Arr::wrap($value), fn (mixed $reference) => ! in_array($reference, Arr::wrap($stored), true));
+
+        $containerHandle = $field->get('container') ?: $container?->handle();
+
+        if ($added !== [] && is_scalar($containerHandle) && ! $this->exposureAllows('asset_containers', (string) $containerHandle)) {
+            throw new ToolException("{$path} links a container not exposed to MCP — leave it out of data");
+        }
+
         // An unresolvable container is a blueprint problem, not the agent's.
         if (! $container instanceof AssetContainerContract) {
             return;
@@ -388,11 +407,7 @@ trait ValidatesBlueprintData
 
         $handle = $container->handle();
 
-        foreach (Arr::wrap($value) as $reference) {
-            if (in_array($reference, Arr::wrap($stored), true)) {
-                continue;
-            }
-
+        foreach ($added as $reference) {
             $id = is_string($reference) && ! str_contains($reference, '::') ? "{$handle}::{$reference}" : $reference;
 
             if (! is_string($id) || ! str_starts_with($id, "{$handle}::") || ! Asset::find($id)) {
