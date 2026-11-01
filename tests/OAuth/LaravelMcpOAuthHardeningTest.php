@@ -44,7 +44,7 @@ it('requires laravel/mcp 1.1.2 so no other site can frame the consent page', fun
     expect($consent->headers->all('content-security-policy'))->toContain("frame-ancestors 'none'");
 });
 
-it('requires laravel/mcp 1.1.1 so one registration stores at most ten redirect URIs', function () {
+it('caps a client registration at ten redirect URIs, as laravel/mcp 1.1.1 and 0.9.7 do', function () {
     $response = $this->postJson('/oauth/register', [
         'client_name' => 'Claude',
         'redirect_uris' => collect(range(1, 11))->map(fn (int $i) => "https://client.example.com/callback/{$i}")->all(),
@@ -55,7 +55,7 @@ it('requires laravel/mcp 1.1.1 so one registration stores at most ten redirect U
     expect(Passport::client()->newQuery()->count())->toBe(0);
 });
 
-it('requires laravel/mcp 1.0.1 so a host that limits redirect domains to localhost refuses a lookalike', function () {
+it('refuses a localhost lookalike on a host that limits redirect domains, as laravel/mcp 1.0.1 and 0.9.6 do', function () {
     config(['mcp.redirect_domains' => ['https://claude.ai', 'http://localhost']]);
 
     $response = $this->postJson('/oauth/register', [

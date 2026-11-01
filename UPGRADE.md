@@ -15,33 +15,40 @@ Composer move `laravel/mcp` along with it:
 composer require danielgnh/statamic-mcp:^1.0 --with-all-dependencies
 ```
 
-If Composer stops with `found laravel/mcp[v1.1.2] but these were not loaded,
-likely because it conflicts with another require`, another package holds
-`laravel/mcp` at 0.x, and `composer why laravel/mcp` names it. It is usually
-`laravel/boost` older than 2.9.0, the first Boost that allows `laravel/mcp`
-1.x. Update both at once:
+If Composer stops with a conflict, something else holds `laravel/mcp` at 0.x,
+and `composer why laravel/mcp` names it:
 
-```bash
-composer require danielgnh/statamic-mcp:^1.0 --no-update
-composer update danielgnh/statamic-mcp laravel/boost --with-all-dependencies
-```
+- **Your own `composer.json`**, if you installed `laravel/mcp` yourself, as
+  Laravel's MCP docs do. Composer says the release `conflicts with your root
+  composer.json require`. Require both at once:
 
-For another package, put its name in place of `laravel/boost` once it has a
-release that allows `laravel/mcp` 1.x. If the app serves MCP servers of its own
-next to this addon, they move to `laravel/mcp` 1.x too; its
+  ```bash
+  composer require danielgnh/statamic-mcp:^1.0 laravel/mcp:^1.1.2 --with-all-dependencies
+  ```
+
+- **`laravel/boost` older than 2.9.0**, the first Boost that allows
+  `laravel/mcp` 1.x. Composer says `laravel/mcp[v1.1.2]` was not loaded
+  because it `conflicts with another require`. Update Boost in the same step:
+
+  ```bash
+  composer require danielgnh/statamic-mcp:^1.0 --no-update
+  composer update danielgnh/statamic-mcp laravel/boost --with-all-dependencies
+  ```
+
+- **Another package**: once it has a release that allows `laravel/mcp` 1.x,
+  update it the same way as Boost.
+
+If the app serves MCP servers of its own next to this addon, they move to
+`laravel/mcp` 1.x too; its
 [1.0.0 release notes](https://github.com/laravel/mcp/releases/tag/v1.0.0)
 list what changed.
 
-### Rebuild the route cache
+### Rebuild a cached route list
 
 The MCP and OAuth routes now check `enabled` and `auth` on every request,
-and client registration has its own throttle. A route cache built before
-the update keeps serving the old routes, so if your deploy doesn't rebuild
-it already, run:
-
-```bash
-php artisan optimize
-```
+and client registration is throttled. A route cache built before the update
+keeps serving the old routes. If the site caches routes and your deploy
+doesn't rebuild that cache, run `php artisan route:cache` after updating.
 
 ### What agents and integrations see
 
@@ -49,14 +56,22 @@ php artisan optimize
   entry that Statamic adds itself, such as `parent`, in Statamic's short
   form (`id`, `title`, `url`, `permalink`, `api_url`) instead of the whole
   entry. Every user, `updated_by` included, is `{id, name, api_url}`, with
-  `email` only for a caller who has `view users`. Augmented `terms_get` no longer has `entries`
-  or `entries_count`. Raw reads, the default, are unchanged.
+  `email` only for a caller who has `view users`. Augmented `terms_get` no
+  longer has `entries` or `entries_count`. Raw reads, the default, are
+  unchanged.
 - When `resources` limits what MCP exposes, agents no longer see the rest
   anywhere: not in navigation menus, related items, blueprint field options,
   or asset paths. A new link to something outside the exposure is refused.
+- Coming from `laravel/mcp` 0.x, a JSON-RPC error no longer comes back with
+  HTTP 200: an unknown method gets 404, an internal error 500, and any other
+  error, an unknown tool included, 400, each with the JSON-RPC error in the
+  body. MCP clients handle
+  this; check scripts that call the endpoint and expect 200.
 - In OAuth mode, only tokens issued for Statamic users sign in. A token from
   a Passport client of another user provider, or a client credentials token,
-  no longer does. Client registration allows 60 calls a minute per address.
+  no longer does. Client registration allows 60 requests a minute per
+  address, a budget it shares with `/oauth/token` and the MCP route's
+  default throttle.
 
 The [CHANGELOG](CHANGELOG.md) has the full list, with the fixes that need no
 action.

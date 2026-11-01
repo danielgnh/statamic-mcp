@@ -11,15 +11,16 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 ### Changed
 
 - **Breaking: requires `laravel/mcp` 1.1.2 or newer.** 0.8, 0.9, and 1.x
-  before 1.1.2 are no longer allowed, because fixes in 1.0.1 to 1.1.2 close
-  holes in the OAuth routes this addon mounts. 1.1.2 sends `X-Frame-Options: DENY` and
-  `frame-ancestors 'none'` with the consent page, so another site can't
-  frame it and trick a signed-in editor into approving a client. 1.1.1 lets
-  one client registration store at most ten redirect URIs of up to 1,024
-  characters. 1.0.1 checks a loopback redirect URI by its parsed host, so a
-  site that limits `mcp.redirect_domains` to `http://localhost` no longer
-  registers `http://localhost:80@attacker.example/`. Token mode was not
-  affected. [UPGRADE.md](UPGRADE.md) has the Composer command.
+  before 1.1.2 are no longer allowed. 1.1.2 is the first release that sends
+  `X-Frame-Options: DENY` and `frame-ancestors 'none'` with the OAuth
+  consent page, so another site can't load it in a hidden frame and trick a
+  signed-in editor into clicking Approve. It also limits a client
+  registration to ten redirect URIs of up to 1,024 characters and refuses a
+  redirect URI with a user part, so a site that limits
+  `mcp.redirect_domains` to `http://localhost` no longer registers
+  `http://localhost:80@attacker.example/`. 0.9.7 has those two fixes as
+  well. Token mode was not affected. [UPGRADE.md](UPGRADE.md) has
+  the Composer commands.
 
 ### Fixed
 

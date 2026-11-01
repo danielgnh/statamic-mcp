@@ -213,7 +213,9 @@ The doctor runs every check, even after one fails, and prints the fix for each p
 
 ## Versioning
 
-Releases follow [semantic versioning](https://semver.org). A minor or patch release keeps everything this README and [docs/](docs) describe working: tool names, their parameters and response fields, config keys and environment variables, Artisan and `please` commands, the HTTP routes, and the extension API in [docs/tools.md](docs/tools.md) (`Server`, `ToolRegistry`, the `Tool` base class with the helpers listed there, and `ToolException`). Other classes under `src/`, the traits in `Tools/Concerns` included, are internal and can change in any release.
+Releases follow [semantic versioning](https://semver.org). A minor or patch release keeps what this README and [docs/](docs) describe working: tool names, their parameters and response fields, config keys and environment variables, Artisan and `please` commands, the HTTP routes, and the extension API in [docs/tools.md](docs/tools.md). That API is `Server`, `ToolRegistry`, the `Tool` base class with the helpers listed there, `ToolException`, and the built-in tool classes, which you can replace, remove, or subclass by name.
+
+Two things can change in any release. A security fix may narrow what a response reveals, as 1.0.0 did with augmented output, and the CHANGELOG says so. What `laravel/mcp` handles itself, such as the protocol and OAuth client registration, follows its own releases. Other classes under `src/`, the traits in `Tools/Concerns` included, are internal.
 
 ## Development
 
