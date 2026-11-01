@@ -16,8 +16,8 @@
     ],
     "require": {
         "php": "^8.3",
-        "statamic/cms": "^6.31",
-        "laravel/mcp": "^0.8 || ^0.9 || ^1.0"
+        "laravel/mcp": "^1.1.2",
+        "statamic/cms": "^6.31"
     },
     "require-dev": {
         "driftingly/rector-laravel": "^2.5",

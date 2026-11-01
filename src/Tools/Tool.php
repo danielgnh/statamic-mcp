@@ -199,7 +199,7 @@ abstract class Tool extends BaseTool
 
     /**
      * Compact JSON in a text block. Response::json() encodes with
-     * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE (verified v0.8.2).
+     * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE (verified v1.1.2).
      *
      * @param  array<array-key, mixed>  $data
      */
