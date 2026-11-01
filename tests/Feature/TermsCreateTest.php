@@ -216,3 +216,32 @@ it('stores a single-file asset as a plain string', function () {
 
     expect(Term::find('topics::php')->value('icon'))->toBe('php.svg');
 });
+
+it('creates a term whose set ids are unique and addressable', function () {
+    Fixtures::site();
+
+    tap(Taxonomy::make('topics')->title('Topics'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'blocks' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'text' => ['fields' => [['handle' => 'text', 'field' => ['type' => 'textarea']]]],
+        ]]]],
+    ])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Server::actingAs(Fixtures::makeUser('create topics terms'))
+        ->tool(TermsCreate::class, ['taxonomy' => 'topics', 'data' => ['title' => 'Alpha', 'blocks' => [
+            ['id' => 'same0001', 'type' => 'text', 'text' => 'One'],
+            ['id' => 'same0001', 'type' => 'text', 'text' => 'Two'],
+            ['id' => '0', 'type' => 'text', 'text' => 'Zero'],
+            ['id' => 'keep0001', 'type' => 'text', 'text' => 'Kept'],
+        ]]])
+        ->assertOk();
+
+    $ids = array_column(Term::find('topics::alpha')->in('en')->get('blocks'), 'id');
+
+    expect($ids)->toHaveCount(4)
+        ->and(array_unique($ids))->toHaveCount(4)
+        ->and($ids[3])->toBe('keep0001')
+        ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
+});

@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
@@ -15,7 +16,7 @@ use Statamic\Facades\Term;
 use Statamic\Support\Str;
 
 #[Name('terms_create')]
-#[Description("Create a taxonomy term from raw field data (get the shape from blueprints_get; never send augmented data). Slug is generated from data.title when omitted. Terms are created in the taxonomy's origin site (its first configured site) — localize afterwards with terms_update and its site parameter. Terms have no draft state: a created term is live immediately.")]
+#[Description("Create a taxonomy term from raw field data (get the shape from blueprints_get; never send augmented data). Slug is generated from data.title when omitted. A new Replicator or Grid set whose id is blank, 0, or shared with another new set gets a fresh id; terms_get shows the stored ids. Terms are created in the taxonomy's origin site (its first configured site) — localize afterwards with terms_update and its site parameter. Terms have no draft state: a created term is live immediately.")]
 class TermsCreate extends Tool
 {
     use ComparesPatchData;
@@ -93,6 +94,8 @@ class TermsCreate extends Tool
         }
 
         $this->rejectUnknownKeys($blueprint, $data);
+
+        $data = Sets::withoutUnaddressableIds($blueprint->fields(), $data);
 
         // Resolve the slug BEFORE blueprint validation: v6 injects a required
         // 'slug' field into term blueprints, and the CP satisfies it by
