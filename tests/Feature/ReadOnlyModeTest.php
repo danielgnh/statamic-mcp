@@ -291,8 +291,7 @@ it('refuses a stale-cached write tool call over HTTP in read_only mode', functio
         ],
     ], $token, $sessionId);
 
-    // laravel/mcp 0.x sends JSON-RPC errors with HTTP 200, 1.x with 400.
-    expect($call->status())->toBeIn([200, 400]);
+    expect($call->status())->toBe(400);
 
     // Whether laravel/mcp rejects the unregistered tool at dispatch (JSON-RPC
     // 'error') or the handler's own re-check fires (tool result isError),

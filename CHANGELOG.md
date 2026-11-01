@@ -2,11 +2,25 @@
 
 All notable changes to `danielgnh/statamic-mcp` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
-adheres to [Semantic Versioning](https://semver.org). The package is pre-1.0:
-until `v1.0.0`, breaking changes may land in minor (`0.x`) releases and are
-called out here explicitly.
+adheres to [Semantic Versioning](https://semver.org). Before `v1.0.0`,
+breaking changes landed in minor (`0.x`) releases and are called out here
+explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
+
+### Changed
+
+- **Breaking: requires `laravel/mcp` 1.1.2 or newer.** 0.8, 0.9, and 1.x
+  before 1.1.2 are no longer allowed. 1.1.2 is the first release that sends
+  `X-Frame-Options: DENY` and `frame-ancestors 'none'` with the OAuth
+  consent page, so another site can't load it in a hidden frame and trick a
+  signed-in editor into clicking Approve. It also limits a client
+  registration to ten redirect URIs of up to 1,024 characters and refuses a
+  redirect URI with a user part, so a site that limits
+  `mcp.redirect_domains` to `http://localhost` no longer registers
+  `http://localhost:80@attacker.example/`. 0.9.7 has those two fixes as
+  well. Token mode was not affected. [UPGRADE.md](UPGRADE.md) has
+  the Composer commands.
 
 ### Fixed
 

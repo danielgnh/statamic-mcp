@@ -8,7 +8,7 @@
 
 Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus, and read the submissions your forms collect. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
 
-It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package and works with its 0.8, 0.9, and 1.x releases. This addon is still pre-1.0, so a minor release can contain breaking changes, and [CHANGELOG.md](CHANGELOG.md) lists every one.
+It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package, version 1.1.2 or newer. Coming from 0.x? [UPGRADE.md](UPGRADE.md) has the steps, and [CHANGELOG.md](CHANGELOG.md) lists every change.
 
 ## Requirements
 
@@ -210,6 +210,12 @@ php please mcp:doctor
 ```
 
 The doctor runs every check, even after one fails, and prints the fix for each problem. It exits non-zero on failure, so it also works as a deploy step. [docs/troubleshooting.md](docs/troubleshooting.md) explains each check and what a 401, 403, 404, or 503 from the endpoint means.
+
+## Versioning
+
+Releases follow [semantic versioning](https://semver.org). A minor or patch release keeps what this README and [docs/](docs) describe working: tool names, their parameters and response fields, config keys and environment variables, Artisan and `please` commands, the HTTP routes, and the extension API in [docs/tools.md](docs/tools.md). That API is `Server`, `ToolRegistry`, the `Tool` base class with the helpers listed there, `ToolException`, and the built-in tool classes, which you can replace, remove, or subclass by name.
+
+Two things can change in any release. A security fix may narrow what a response reveals, as 1.0.0 did with augmented output, and the CHANGELOG says so. What `laravel/mcp` handles itself, such as the protocol and OAuth client registration, follows its own releases. Other classes under `src/`, the traits in `Tools/Concerns` included, are internal.
 
 ## Development
 
