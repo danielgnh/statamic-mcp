@@ -32,9 +32,10 @@ called out here explicitly.
   missed fields it requires. Collections now default to the first visible
   blueprint, as Statamic does. Taxonomies keep their first blueprint, which
   is what `terms_create` uses, and `available_blueprints` still lists hidden
-  ones, which stay readable by handle. A collection blueprint read by handle
-  now also includes the fields an addon adds through `EntryBlueprintFound`,
-  which `entries_create` already accepted.
+  ones, which stay readable by handle. Collection and taxonomy blueprints
+  now also include the fields an addon adds through `EntryBlueprintFound`
+  or `TermBlueprintFound`, which `entries_create` and `terms_create`
+  already accepted.
 
 ### Security
 

@@ -101,6 +101,7 @@ class BlueprintsGet extends Tool
 
         $blueprint = match (true) {
             $type === 'collection' => Collection::findOrFail($handle)->entryBlueprint($requested),
+            $type === 'taxonomy' => Taxonomy::findOrFail($handle)->termBlueprint($requested),
             $requested === null => $blueprints->first(),
             default => $blueprints->get($requested),
         };

@@ -4,14 +4,17 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\EntriesCreate;
+use Danielgnh\StatamicMcp\Tools\TermsCreate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Mcp\Request;
 use Statamic\Events\EntryBlueprintFound;
+use Statamic\Events\TermBlueprintFound;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Taxonomy;
+use Statamic\Facades\Term;
 
 it('returns fields and a bounded example payload for a collection blueprint', function () {
     Fixtures::site();
@@ -443,6 +446,29 @@ it('describes the fields a listener adds to a collection blueprint, as entries_c
 })->with([
     'by default' => [[]],
     'by handle' => [['blueprint' => 'landing']],
+]);
+
+it('describes the fields a listener adds to a taxonomy blueprint, as terms_create takes them', function (array $arguments) {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Event::listen(TermBlueprintFound::class, fn (TermBlueprintFound $event) => $event->blueprint->ensureField('seo_title', ['type' => 'text']));
+
+    $user = Fixtures::makeUser('view tags terms', 'create tags terms');
+
+    Server::actingAs($user)
+        ->tool(BlueprintsGet::class, ['type' => 'taxonomy', 'handle' => 'tags', ...$arguments])
+        ->assertOk()
+        ->assertSee('"handle":"seo_title"');
+
+    Server::actingAs($user)
+        ->tool(TermsCreate::class, ['taxonomy' => 'tags', 'data' => ['title' => 'Hello', 'seo_title' => 'Hello there']])
+        ->assertOk();
+
+    expect(Term::query()->where('taxonomy', 'tags')->first()->get('seo_title'))->toBe('Hello there');
+})->with([
+    'by default' => [[]],
+    'by handle' => [['blueprint' => 'tag']],
 ]);
 
 it('emits obviously fake placeholders for entries and users relation fields', function () {
