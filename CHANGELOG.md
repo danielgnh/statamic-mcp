@@ -96,6 +96,21 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ### Security
 
+- **The OAuth consent page shows where approving sends you.** It named the
+  client only by the name the client registered, which anyone who calls
+  `POST /oauth/register` picks. A client registered as "Claude" with an
+  attacker's redirect URI looked like Claude, and approving sent the
+  authorization code to the attacker, who could exchange it for an MCP
+  token as the editor who approved. The page now shows the redirect URI the
+  code goes to, with its host in dark text and the rest in gray: the URI in
+  the request, its port included for a loopback address, or the client's
+  registered URI when the request names none. It reads the way the browser
+  reaches it, in lowercase and with a non-Latin host in punycode, so
+  `cIaude.ai` shows as `ciaude.ai` and a Cyrillic "а" as `xn--`. A URI over
+  64 characters folds after its host into one line that expands on click;
+  the host always shows in full. A consent view you published with
+  `vendor:publish --tag=statamic-mcp-views` keeps the old markup; see
+  [UPGRADE.md](UPGRADE.md).
 - **OAuth mode accepts only tokens issued for Statamic users.** When the
   site's own API also runs on Passport with a second user provider, tokens
   from that provider's Passport clients signed in to MCP as the Statamic

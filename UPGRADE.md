@@ -2,9 +2,10 @@
 
 ## From 0.9 to 1.0
 
-1.0.0 adds no config keys, migrations, or views. Two things change around it:
-the addon needs `laravel/mcp` 1.1.2 or newer, and augmented reads return
-related entries and users in a shorter form.
+1.0.0 adds no config keys or migrations. Two things change around it: the
+addon needs `laravel/mcp` 1.1.2 or newer, and augmented reads return related
+entries and users in a shorter form. A site that published the OAuth consent
+view has one more step.
 
 ### Update the packages
 
@@ -49,6 +50,19 @@ The MCP and OAuth routes now check `enabled` and `auth` on every request,
 and client registration is throttled. A route cache built before the update
 keeps serving the old routes. If the site caches routes and your deploy
 doesn't rebuild that cache, run `php artisan route:cache` after updating.
+
+### A published consent view
+
+The consent page now shows where approving sends the editor, so a client
+registered as "Claude" with someone else's redirect URI can't pass for
+Claude. If you published the view with
+`vendor:publish --tag=statamic-mcp-views`, your copy in
+`resources/views/vendor/statamic-mcp/oauth/authorize.blade.php` doesn't show
+it. Publish the view again with `--force` and reapply your changes. To patch
+your copy by hand instead, take every part from the addon's view, or the
+page fails or overflows on phones: the `$redirect…` lines at the end of the
+`@php` block at the top, the `.ui-redirect` styles, `min-width: 0` on
+`main`, and the `@if ($redirect)` block above the buttons.
 
 ### What agents and integrations see
 
