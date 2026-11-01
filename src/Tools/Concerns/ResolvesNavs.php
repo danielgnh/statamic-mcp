@@ -38,28 +38,42 @@ trait ResolvesNavs
     }
 
     /**
+     * @return list<string>
+     */
+    protected function linkableCollections(NavContract $nav): array
+    {
+        return $nav->collections()->map->handle()
+            ->intersect($this->exposedHandles('collections'))
+            ->values()
+            ->all();
+    }
+
+    /**
      * The stored branches, plus a 'resolved' block on entry branches: the
      * entry's own title, url, and status, for reading the menu. It is never
      * stored — navigations_update ignores it, so the tree round-trips as is.
      *
      * @param  array<int, array<string, mixed>>  $branches
+     * @param  list<string>|null  $exposed
      * @return list<array<string, mixed>>
      */
-    protected function presentBranches(array $branches): array
+    protected function presentBranches(array $branches, ?array $exposed = null): array
     {
-        return array_values(array_map(function (array $branch): array {
+        $exposed ??= $this->exposedHandles('collections');
+
+        return array_values(array_map(function (array $branch) use ($exposed): array {
             $presented = Arr::except($branch, 'children');
 
             if (is_string($id = data_get($branch, 'entry'))) {
                 $entry = Entry::find($id);
 
-                $presented['resolved'] = $entry
+                $presented['resolved'] = $entry && in_array($entry->collectionHandle(), $exposed, true)
                     ? ['title' => $entry->value('title'), 'url' => $entry->url(), 'status' => $entry->status()]
                     : ['status' => 'missing'];
             }
 
             if (filled($children = data_get($branch, 'children'))) {
-                $presented['children'] = $this->presentBranches($children);
+                $presented['children'] = $this->presentBranches($children, $exposed);
             }
 
             return $presented;
