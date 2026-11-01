@@ -175,9 +175,13 @@ class EntriesUpdate extends Tool
             || ($slug !== null && $slug !== $basis->slug())
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
 
+        $liveMoveRetry = $workingCopy && $move !== null
+            ? "a move is live at once, under the live slug '{$entry->slug()}': pick another parent, or publish a new slug before moving"
+            : null;
+
         if (! $dirty) {
             if ($move !== null && $move['from'] !== $move['to']) {
-                $this->ensureUniqueUriAfter($user, $entry, $move);
+                $this->ensureUniqueUriAfter($user, $entry, $move, $liveMoveRetry);
             }
 
             $placement = $this->applyMove($entry, $move, $workingCopy);
@@ -209,6 +213,10 @@ class EntriesUpdate extends Tool
         // saved on the working-copy path, and takes the changes on the live
         // path only once the URL check has passed.
         $target = $this->applyChanges($amending ? $basis : clone $entry, $merged, $slug, $date);
+
+        if ($liveMoveRetry !== null) {
+            $this->ensureUniqueUriAfter($user, $entry, $move, $liveMoveRetry);
+        }
 
         $this->ensureUniqueUriAfter($user, $target, $move);
 
@@ -342,13 +350,14 @@ class EntriesUpdate extends Tool
     /**
      * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
      */
-    private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move): void
+    private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move, ?string $retry = null): void
     {
         $this->ensureUniqueUri(
             $user,
             $entry,
             $this->placementTree($entry->collection(), $entry->locale()),
             $move === null ? $entry->parent()?->id() : $move['to'],
+            $retry,
         );
     }
 
@@ -371,7 +380,16 @@ class EntriesUpdate extends Tool
             return ['parent' => $to, 'move' => $to === null ? 'no-op — already at the top level' : "no-op — already under '{$to}'"];
         }
 
-        if (! $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $tree->move($entry->id(), $to))) {
+        try {
+            $saved = $this->saveTreeChange($entry->collection(), $entry->locale(), fn (CollectionTree $tree) => $this->ensureUniqueUriInLockedTree(
+                $tree->move($entry->id(), $this->parentInLockedTree($tree, $to, $entry->id())),
+                $entry->id(),
+            ));
+        } catch (TreeChangedException $changed) {
+            throw new ToolException("the entry was not moved — {$changed->getMessage()}. Any other change in this update was saved.", $changed->getCode(), $changed);
+        }
+
+        if (! $saved) {
             throw new ToolException('the move was cancelled by a listener on this site — the entry was not moved, and any other change in this update was saved');
         }
 
