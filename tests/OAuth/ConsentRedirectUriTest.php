@@ -6,6 +6,7 @@ use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Str;
 use Illuminate\Support\Uri;
+use Laravel\Passport\ClientRepository;
 use Statamic\Facades\User;
 
 uses(RegistersOAuthProbeRoute::class);
@@ -104,3 +105,17 @@ it('shows the port a loopback redirect uses, not the one registered', function (
 
     expect(($this->approve)()->headers->get('Location'))->toStartWith('http://127.0.0.1:43210/callback?');
 });
+
+it('shows a registered redirect URI with a user part exactly as the browser receives it', function (string $uri) {
+    $client = app(ClientRepository::class)->createAuthorizationCodeGrantClient('Claude', [$uri], confidential: false);
+
+    ($this->consent)($client->getKey(), ['redirect_uri' => $uri])
+        ->assertOk()
+        ->assertSee('<span class="ui-redirect__host">attacker.example</span>', false)
+        ->assertSeeText($uri);
+})->with([
+    'a name' => 'https://claude.ai@attacker.example/cb',
+    'with a password' => 'https://claude.ai:secret@attacker.example/cb',
+    'zero' => 'https://0@attacker.example/cb',
+    'empty' => 'https://@attacker.example/cb',
+]);

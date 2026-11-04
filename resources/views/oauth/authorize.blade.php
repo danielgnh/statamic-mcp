@@ -15,8 +15,9 @@
 
     $redirectUri = $request->query('redirect_uri') ?: ($client->redirect_uris[0] ?? null);
     $redirect = $redirectUri ? \Illuminate\Support\Uri::of($redirectUri) : null;
-    $redirectScheme = $redirect ? $redirect->scheme().'://' : null;
-    $redirectRest = $redirect ? mb_substr($redirect->value(), mb_strlen($redirectScheme.$redirect->host())) : null;
+    $redirectUser = $redirect?->user(withPassword: true);
+    $redirectOrigin = $redirect ? $redirect->scheme().'://'.($redirectUser === null ? '' : $redirectUser.'@') : null;
+    $redirectRest = $redirect ? mb_substr($redirect->value(), mb_strlen($redirectOrigin.$redirect->host())) : null;
     $redirectIsShort = $redirect && mb_strlen($redirect->value()) <= 64;
 @endphp
 
@@ -340,11 +341,11 @@
                     <div>
                         <span class="ui-profile__label">Authorizing sends you to</span>
                         @if ($redirectIsShort)
-                            <span class="ui-redirect__uri"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                            <span class="ui-redirect__uri"><span class="ui-redirect__origin">{{ $redirectOrigin }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
                         @else
                             <details class="ui-redirect__uri">
                                 <summary>
-                                    <span class="ui-redirect__text"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                                    <span class="ui-redirect__text"><span class="ui-redirect__origin">{{ $redirectOrigin }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
                                     {!! Statamic::svg('icons/chevron-down') !!}
                                 </summary>
                             </details>
