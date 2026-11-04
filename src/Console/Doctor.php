@@ -7,6 +7,8 @@ use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Error;
+use ErrorException;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Routing\CompiledRouteCollection;
@@ -14,10 +16,14 @@ use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Laravel\Mcp\Server as McpServer;
+use PDOException;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
-use Throwable;
+use TypeError;
 
 class Doctor extends Command
 {
@@ -36,14 +42,16 @@ class Doctor extends Command
         $this->prereqs = $prereqs;
 
         $mode = config('statamic.mcp.auth', 'token');
+        $route = config('statamic.mcp.route', 'mcp/statamic');
 
         $this->line('Statamic MCP doctor');
         $this->line('');
-        $this->line('  Endpoint:  '.url(config()->string('statamic.mcp.route', 'mcp/statamic')));
+        $this->line('  Endpoint:  '.(is_string($route) ? url($route) : 'none'));
         $this->line('  Auth mode: '.$mode);
         $this->line('');
 
         $this->checkEnabled();
+        $this->checkRoute();
         $this->checkServer();
         $this->checkMiddleware();
         $this->checkAppUrl();
@@ -94,7 +102,13 @@ class Doctor extends Command
 
     protected function mountedRoute(): ?RoutingRoute
     {
-        $uri = trim((string) config('statamic.mcp.route', 'mcp/statamic'), '/');
+        $path = config('statamic.mcp.route', 'mcp/statamic');
+
+        if (! is_string($path)) {
+            return null;
+        }
+
+        $uri = trim($path, '/');
 
         foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
@@ -105,11 +119,30 @@ class Doctor extends Command
         return null;
     }
 
+    protected function checkRoute(): void
+    {
+        $route = config('statamic.mcp.route', 'mcp/statamic');
+
+        if (is_string($route) && filled($route)) {
+            return;
+        }
+
+        $given = is_string($route) ? $route : get_debug_type($route);
+
+        $this->problem("Configured route '{$given}' is not a path — the MCP route cannot mount. Set 'route' in config/statamic/mcp.php, for example to 'mcp/statamic'.");
+    }
+
     protected function checkServer(): void
     {
         $server = config('statamic.mcp.server', Server::class);
 
-        if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+        try {
+            if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+                return;
+            }
+        } catch (Error $e) {
+            $this->problem("Configured server '{$server}' cannot load ({$e->getMessage()}) — the MCP route cannot mount. Point 'server' in the statamic.mcp config at a class that loads, or remove the key.");
+
             return;
         }
 
@@ -126,6 +159,10 @@ class Doctor extends Command
 
         foreach ($entries as $entry) {
             if (! is_string($entry)) {
+                $broken = true;
+
+                $this->problem(sprintf("Configured middleware has an entry of type %s, not a name — the MCP route cannot mount. List only class names, aliases, or groups under 'middleware'.", get_debug_type($entry)));
+
                 continue;
             }
             if ($this->middlewareResolves($entry)) {
@@ -205,14 +242,26 @@ class Doctor extends Command
         try {
             $records = $tokens->all();
 
-            [$active, $expired, $orphaned] = $this->classifyTokens($records);
-        } catch (Throwable $e) {
+            $unexpired = array_filter($records, fn (array $record) => ! ($record['expires_at'] ?? null) || ! Carbon::parse($record['expires_at'])->isPast());
+
+            Validator::validate($unexpired, ['*.user' => ['required'], '*.user.*' => ['prohibited']]);
+        } catch (ErrorException|InvalidArgumentException|TypeError|ValidationException $e) {
             $this->problem('tokens.yaml is corrupt or unreadable ('.$e->getMessage().') — authentication fails closed. Restore it from backup, or delete it and re-issue tokens with: php please mcp:token you@site.com');
 
             return;
         }
 
+        try {
+            $orphaned = count(array_filter($unexpired, fn (array $record) => ! User::find($record['user'])));
+        } catch (ErrorException|InvalidArgumentException|PDOException $e) {
+            $this->problem('Could not look up the users in tokens.yaml ('.$e->getMessage().') — the file itself is fine. Fix the user store and run this again.');
+
+            return;
+        }
+
         $total = count($records);
+        $expired = $total - count($unexpired);
+        $active = count($unexpired) - $orphaned;
 
         $breakdown = implode(', ', array_filter([
             $expired ? $expired.' expired' : null,
@@ -228,27 +277,6 @@ class Doctor extends Command
         } else {
             $this->info("[ OK ] {$total} token(s) issued ({$active} active, {$breakdown}).");
         }
-    }
-
-    /**
-     * @param  array<string, array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}>  $records
-     * @return array{0: int, 1: int, 2: int} [active, expired, orphaned]
-     */
-    protected function classifyTokens(array $records): array
-    {
-        $active = $expired = $orphaned = 0;
-
-        foreach ($records as $record) {
-            if (($record['expires_at'] ?? null) && Carbon::parse($record['expires_at'])->isPast()) {
-                $expired++;
-            } elseif (! User::find($record['user'])) {
-                $orphaned++;
-            } else {
-                $active++;
-            }
-        }
-
-        return [$active, $expired, $orphaned];
     }
 
     protected function checkOAuth(): void
