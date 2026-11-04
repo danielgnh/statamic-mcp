@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Http\Controllers;
 
+use Illuminate\Contracts\View\View;
 use Inertia\Inertia;
 use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
