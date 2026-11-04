@@ -1,5 +1,14 @@
 # Upgrading
 
+## From 1.0 to 1.1
+
+1.1.0 adds no config keys or migrations. If the site caches routes and your
+deploy doesn't rebuild that cache, run `php artisan route:cache` after updating.
+A route cache built before the update points the Connections page at a
+controller method that moved, so that page answers 500. It also keeps the MCP
+route's old middleware order, so GET and DELETE skip the kill switch and the
+throttle.
+
 ## From 0.9 to 1.0
 
 1.0.0 adds no config keys or migrations. Two things change around it: the

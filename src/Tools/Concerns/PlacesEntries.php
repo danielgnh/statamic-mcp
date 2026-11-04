@@ -113,12 +113,12 @@ trait PlacesEntries
         $level = $parent && ! $parent->isRoot() ? $parent->pages()->all() : $probe->pages()->all();
         $uri = $page->uri();
 
-        $taken = $level->first(fn (Page $other) => $other->id() !== $id && $other->uri() === $uri);
+        $taken = $level->contains(fn (Page $other) => $other->id() !== $id && $other->uri() === $uri);
 
         Blink::store('structure-uris')->forget($id);
 
         if ($taken) {
-            throw TreeChangedException::in($tree, "URL '{$uri}' already belongs to entry '{$taken->id()}' in collection '{$tree->collection()->handle()}' — pick another slug or parent");
+            throw TreeChangedException::in($tree, "URL '{$uri}' is already taken — pick another slug or parent");
         }
 
         return $tree;

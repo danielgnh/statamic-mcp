@@ -9,10 +9,12 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Intervention\Image\Exceptions\DecoderException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use League\Flysystem\UnableToReadFile;
 use Statamic\Assets\AssetUploader;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
 use Statamic\Rules\AllowedFile;
@@ -22,6 +24,10 @@ use Statamic\Rules\AllowedFile;
 class AssetsUpload extends Tool
 {
     use ResolvesAssets;
+
+    private const int MAX_FILENAME_BYTES = 250;
+
+    private const string UNREADABLE_IMAGE = "image presets — the file is stored, but Statamic could not read it as an image, and the site's log has the error. Check it, and delete it if it is wrong.";
 
     #[\Override]
     public function schema(JsonSchema $schema): array
@@ -79,6 +85,10 @@ class AssetsUpload extends Tool
             $this->resolveBasename($validated['filename'] ?? null, $derivedName),
         );
 
+        if (strlen($basename) > self::MAX_FILENAME_BYTES) {
+            throw new ToolException(sprintf('filename is longer than %d bytes — pick a shorter one', self::MAX_FILENAME_BYTES));
+        }
+
         $path = ltrim(($folder === null ? '' : $folder.'/').$basename, '/');
 
         if ($existing = $this->findAsset($container, $path)) {
@@ -91,22 +101,33 @@ class AssetsUpload extends Tool
         }
 
         $file = $this->makeUploadedFile($contents, $basename);
+        $asset = $container->makeAsset($path);
+        $unreadable = false;
 
         try {
             $this->validateAgainstContainerRules($container, $file);
 
-            $asset = $container->makeAsset($path)->upload($file);
-
-            if ($asset === false) {
+            if ($asset->upload($file) === false) {
                 throw new ToolException('the upload was cancelled by a listener on this site — nothing was created');
             }
+        } catch (UnableToReadFile|DecoderException $e) {
+            report($e);
+
+            $unreadable = true;
         } finally {
             @unlink($file->getPathname());
+        }
+
+        if (! $container->disk()->exists($asset->path())) {
+            $asset->deleteQuietly();
+
+            throw new ToolException(sprintf("the disk did not store '%s' — nothing was created. It may be read-only, or out of space.", $path));
         }
 
         return $this->json([
             ...$this->assetSummary($asset),
             ...$this->liveness($asset, self::LIVENESS_UPLOADED),
+            ...($unreadable ? ['not_stored' => [self::UNREADABLE_IMAGE]] : []),
         ]);
     }
 

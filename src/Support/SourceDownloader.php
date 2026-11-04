@@ -11,6 +11,7 @@ use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -72,7 +73,11 @@ class SourceDownloader
                     throw new ToolException('source_url redirected without a Location header — nothing was uploaded');
                 }
 
-                $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                try {
+                    $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                } catch (InvalidArgumentException $e) {
+                    throw new ToolException('source_url redirected to an invalid URL — nothing was uploaded', $e->getCode(), $e);
+                }
 
                 continue;
             }
@@ -103,6 +108,12 @@ class SourceDownloader
 
         if ($parts === false || ! isset($parts['host'])) {
             throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url));
+        }
+
+        try {
+            new Uri($url);
+        } catch (InvalidArgumentException $e) {
+            throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url), $e->getCode(), $e);
         }
 
         if (! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) {

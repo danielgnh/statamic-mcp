@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server as McpServer;
+use Laravel\Mcp\Server\Middleware\ReorderJsonAccept;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
@@ -101,16 +102,19 @@ class ServiceProvider extends AddonServiceProvider
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
-        $middleware = [
+        $route = $this->routePath();
+        $server = $this->serverClass();
+        $beforeHeaderChecks = [
+            ReorderJsonAccept::class,
             EnsureMcpEnabled::forCurrentAuth(),
             ...$this->configuredMiddleware(),
-            ...($oauth
-                ? [AuthenticateOAuth::class]
-                : [AuthenticateMcpToken::class]),
+        ];
+        $afterHeaderChecks = [
+            $oauth ? AuthenticateOAuth::class : AuthenticateMcpToken::class,
             EnsureMcpPermission::class,
         ];
 
-        Mcp::web($this->routePath(), $this->serverClass())->middleware($middleware);
+        Route::group(['middleware' => $beforeHeaderChecks], fn () => Mcp::web($route, $server)->middleware($afterHeaderChecks));
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();

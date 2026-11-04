@@ -495,3 +495,52 @@ it('does not mistake a null-clear of an empty-string value for a no-op', functio
         ->assertOk()
         ->assertSee('updated — live');
 });
+
+it('refuses a localized slug another term has in that site, as the Control Panel does', function () {
+    Fixtures::multisite();
+
+    Taxonomy::make('topics')->title('Topics')->sites(['en', 'de'])->save();
+    Blueprint::makeFromFields(['title' => ['type' => 'text']])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+    Term::make()->taxonomy('topics')->slug('beta')->data(['title' => 'Beta'])->save();
+
+    $user = Fixtures::makeUser('edit topics terms', 'access de site', 'access en site');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'alpha', 'data' => []])
+        ->assertHasErrors(["term 'alpha' already exists in taxonomy 'topics'"]);
+
+    expect(Term::find('topics::beta')->in('de')->slug())->toBe('beta');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'beta-de', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"beta-de"');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'beta', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"beta"');
+});
+
+it('allows a localized slug another term only has in another site, as the Control Panel does', function () {
+    Fixtures::multisite();
+
+    Taxonomy::make('topics')->title('Topics')->sites(['en', 'de'])->save();
+    Blueprint::makeFromFields(['title' => ['type' => 'text']])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+    Term::make()->taxonomy('topics')->slug('beta')->data(['title' => 'Beta'])->save();
+
+    $user = Fixtures::makeUser('edit topics terms', 'access de site', 'access en site');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'site' => 'de', 'slug' => 'alpha-de', 'data' => []])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'alpha', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"alpha"');
+});

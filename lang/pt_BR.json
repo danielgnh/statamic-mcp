@@ -56,6 +56,7 @@
     "Unknown client": "Cliente desconhecido",
     "Use the Create token button to issue your first token and connect an MCP client.": "Use o botão “Criar token” para emitir seu primeiro token e conectar um cliente MCP.",
     "Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead. See the section on connecting a client in the README.": "Funciona com Claude Code, Cursor e qualquer cliente MCP capaz de enviar um cabeçalho Authorization fixo. Conectores individuais do claude.ai e do Claude Desktop precisam do modo OAuth. Veja a seção sobre como conectar um cliente no README.",
+    "You hold :max tokens, the most one user can have — revoke one first.": "Você já tem :max tokens, o máximo por usuário. Revogue um primeiro.",
     "Your connections": "Suas conexões",
     "Your leftover tokens": "Seus tokens restantes",
     "Your tokens": "Seus tokens",

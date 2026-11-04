@@ -4,15 +4,28 @@ use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\TermsGet;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\LazyCollection;
 use Laravel\Mcp\Request;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blink;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Form;
+use Statamic\Facades\GlobalSet;
+use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
+use Statamic\Facades\User;
+use Statamic\Fields\Values;
+
+enum StringBackedForTest: string
+{
+    case Draft = 'draft';
+}
 
 function startNewRequest(): void
 {
@@ -353,4 +366,380 @@ it('returns the parent of an entry as a stub, as Statamic\'s REST API does, not 
         ->assertOk()
         ->assertDontSee('Parent summary')
         ->assertSee('"parent":{"id":"'.$parent.'","title":"About","url":"/about","permalink":"http://localhost/about","api_url":null}');
+});
+
+it('filters computed values holding many entries or users by exposure and the view users permission', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    tap(Entry::make()->collection('blog')->locale('en')->slug('confidential')->data([
+        'title' => 'Confidential post',
+        'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Secret body text']]]],
+    ]))->save();
+
+    Collection::computed('pages', 'posts', fn () => Entry::query()->where('collection', 'blog')->get());
+    Collection::computed('pages', 'post_list', fn () => Entry::query()->where('collection', 'blog')->get()->all());
+    Collection::computed('pages', 'nested', fn () => ['featured' => ['items' => Entry::query()->where('collection', 'blog')->get()], 'count' => 2]);
+    Collection::computed('pages', 'siblings', fn () => Entry::query()->where('collection', 'pages')->where('slug', 'about')->get());
+    Collection::computed('pages', 'editors', fn () => User::all());
+
+    $editor = tap(Fixtures::makeSuper()->set('name', 'Other Editor'))->save();
+
+    $home = Fixtures::page('home', 'Home');
+    Fixtures::page('about', 'About us');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"posts":[]')
+        ->assertSee('"post_list":[]')
+        ->assertSee('"nested":{"featured":{"items":[]},"count":2}')
+        ->assertSee('About us')
+        ->assertSee('Other Editor')
+        ->assertDontSee('Confidential post')
+        ->assertDontSee('Secret body text')
+        ->assertDontSee('/blog/confidential')
+        ->assertDontSee($editor->email())
+        ->assertDontSee('"super"');
+});
+
+it('reduces computed global variables and submissions to stubs, and drops unexposed ones', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::settings();
+    Fixtures::form();
+    Fixtures::submission('contact', ['name' => 'Visitor', 'email' => 'visitor@site.test', 'message' => 'Private message']);
+
+    Collection::computed('pages', 'site_settings', fn () => GlobalSet::find('settings')->inDefaultSite());
+    Collection::computed('pages', 'messages', fn () => Form::find('contact')->submissions());
+
+    $home = Fixtures::page('home', 'Home');
+    $user = Fixtures::makeUser('view pages entries');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"site_settings":null')
+        ->assertSee('"messages":[]')
+        ->assertDontSee('Acme')
+        ->assertDontSee('visitor@site.test');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages'], 'globals' => ['settings'], 'forms' => ['contact']]]);
+
+    startNewRequest();
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"site_settings":{')
+        ->assertSee('"messages":[{')
+        ->assertDontSee('Acme')
+        ->assertDontSee('visitor@site.test')
+        ->assertDontSee('Private message');
+});
+
+it('renders a Bard image of an unexposed container the same whether the file exists or not', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::pages();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+    Storage::disk('images')->put('public.png', Fixtures::tinyPng());
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text'], 'body' => ['type' => 'bard']])
+        ->setHandle('page')->setNamespace('collections.pages')->save();
+
+    config([
+        'statamic.mcp.resources.collections' => ['pages'],
+        'statamic.mcp.resources.asset_containers' => ['images'],
+    ]);
+
+    $image = fn (string $src) => ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => $src, 'alt' => 'guess']]]];
+
+    $entry = tap(Entry::make()->collection('pages')->slug('home')->data(['title' => 'Home', 'body' => [
+        $image('asset::private::payroll-2026.png'),
+        $image('asset::private::nope.png'),
+        $image('asset::images::public.png'),
+    ]]))->save();
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented', 'fields' => ['body']])
+        ->assertOk()
+        ->assertSee('<p><img></p><p><img></p><p><img src=\"/assets/images/public.png\" alt=\"guess\"></p>');
+});
+
+function pageWithComputedSummary(string $sourceCollection, string $shape): array
+{
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'owner' => ['type' => 'users'],
+        'related' => ['type' => 'entries', 'collections' => ['blog']],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+
+    Blueprint::find('collections.blog.article')
+        ->ensureField('owner', ['type' => 'users'])
+        ->ensureField('related', ['type' => 'entries', 'collections' => ['blog']])
+        ->save();
+
+    Collection::computed('pages', 'summary', function () use ($sourceCollection, $shape) {
+        $source = Entry::query()->where('collection', $sourceCollection)->where('slug', 'source')->first();
+
+        return $shape === 'collection'
+            ? $source->toAugmentedCollection(['title', 'related', 'owner'])
+            : $source->toAugmentedArray(['title', 'related', 'owner']);
+    });
+
+    $owner = tap(Fixtures::makeSuper()->set('name', 'Owner'))->save();
+    $reader = Fixtures::page('reader', 'Reader');
+
+    $hidden = tap(Entry::make()->collection('blog')->locale('en')->slug('hidden-post')->data(['title' => 'Hidden post']))->save();
+
+    Entry::make()->collection($sourceCollection)->locale('en')->slug('source')
+        ->data(['title' => 'Source title', 'owner' => [$owner->id()], 'related' => [$hidden->id()]])
+        ->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    return [$reader, $owner];
+}
+
+it('drops every value of a computed augmented entry from an unexposed collection', function (string $shape) {
+    [$reader, $owner] = pageWithComputedSummary('blog', $shape);
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $reader, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertDontSee('Source title')
+        ->assertDontSee('Hidden post')
+        ->assertDontSee($owner->email())
+        ->assertDontSee('"super"');
+})->with(['collection', 'array']);
+
+it('presents the values of a computed augmented entry from an exposed collection like any other', function (string $shape) {
+    [$reader, $owner] = pageWithComputedSummary('pages', $shape);
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $reader, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"title":"Source title"')
+        ->assertSee('"related":[]')
+        ->assertSee('Owner')
+        ->assertDontSee('Hidden post')
+        ->assertDontSee($owner->email())
+        ->assertDontSee('"super"');
+})->with(['collection', 'array']);
+
+it('keeps the shape of a computed collection holding plain arrayable objects', function () {
+    Fixtures::site();
+    Fixtures::pages();
+
+    Collection::computed('pages', 'prices', fn () => collect([new class implements Arrayable
+    {
+        public function toArray(): array
+        {
+            return ['label' => 'ten'];
+        }
+    }]));
+
+    $home = Fixtures::page('home', 'Home');
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"prices":[{"label":"ten"}]');
+});
+
+it('filters unexposed entries out of a computed value however it wraps them', function (string $shape) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Entry::make()->collection('blog')->locale('en')->slug('confidential')->data([
+        'title' => 'Confidential post',
+        'content' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Secret body text']]]],
+    ])->save();
+
+    Collection::computed('pages', 'wrapped', function () use ($shape) {
+        $posts = Entry::query()->where('collection', 'blog');
+
+        return match ($shape) {
+            'paginator' => $posts->paginate(5),
+            'lazy collection' => LazyCollection::make($posts->get()->all()),
+            'augmented arrays' => $posts->get()->toAugmentedArray(),
+            'augmented collections' => $posts->get()->toAugmentedCollection(),
+            'json serializable object' => new readonly class($posts->get()) implements JsonSerializable
+            {
+                public function __construct(private mixed $posts) {}
+
+                public function jsonSerialize(): array
+                {
+                    return ['posts' => $this->posts];
+                }
+            },
+            'arrayable object' => new readonly class($posts->get()) implements Arrayable
+            {
+                public function __construct(private mixed $posts) {}
+
+                public function toArray(): array
+                {
+                    return ['posts' => $this->posts];
+                }
+            },
+        };
+    });
+
+    $home = Fixtures::page('home', 'Home');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertDontSee('Confidential post')
+        ->assertDontSee('Secret body text')
+        ->assertDontSee('/blog/confidential');
+})->with(['paginator', 'lazy collection', 'augmented arrays', 'augmented collections', 'json serializable object', 'arrayable object']);
+
+it('keeps augmented arrays of users and of unexposed global sets out of computed values', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::settings();
+
+    Collection::computed('pages', 'people', fn () => User::all()->map->toAugmentedArray()->all());
+    Collection::computed('pages', 'site_settings', fn () => GlobalSet::find('settings')->inDefaultSite()->toAugmentedArray());
+
+    $editor = tap(Fixtures::makeSuper()->set('name', 'Other Editor'))->save();
+    $home = Fixtures::page('home', 'Home');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertDontSee($editor->email())
+        ->assertDontSee('"super":true')
+        ->assertDontSee('Acme');
+});
+
+it('keeps link and text branches of a computed navigation, without an entry to check, and drops unexposed ones', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+    Fixtures::nav();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('hidden-post')->data(['title' => 'Hidden post']))->save();
+
+    Collection::computed('pages', 'menu', fn () => Nav::find('main')->in('en')->pages()->all());
+
+    $home = Fixtures::page('home', 'Home');
+
+    Nav::find('main')->makeTree('en', [
+        ['id' => 'link', 'title' => 'Docs', 'url' => 'https://docs.example.com'],
+        ['id' => 'text', 'title' => 'Heading'],
+        ['id' => 'page', 'entry' => $home],
+        ['id' => 'post', 'entry' => $post->id()],
+        ['id' => 'gone', 'entry' => 'no-such-entry'],
+    ])->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('https://docs.example.com')
+        ->assertSee('Heading')
+        ->assertDontSee('Hidden post')
+        ->assertDontSee('hidden-post');
+});
+
+it('filters unexposed entries and users out of computed plain objects', function (string $shape) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    Entry::make()->collection('blog')->locale('en')->slug('confidential')->data(['title' => 'Confidential post'])->save();
+
+    $editor = tap(Fixtures::makeSuper()->set('name', 'Other Editor'))->save();
+
+    Collection::computed('pages', 'wrapped', function () use ($shape) {
+        $items = ['posts' => Entry::query()->where('collection', 'blog')->get()->all(), 'editors' => User::all()];
+
+        return match ($shape) {
+            'object' => (object) $items,
+            'public properties' => new readonly class($items)
+            {
+                public function __construct(public array $items) {}
+            },
+            'array object' => new ArrayObject($items),
+            'array iterator' => new ArrayIterator($items),
+            'values' => new Values($items),
+        };
+    });
+
+    $home = Fixtures::page('home', 'Home');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertDontSee('Confidential post')
+        ->assertDontSee($editor->email())
+        ->assertDontSee('"super"');
+})->with(['object', 'public properties', 'array object', 'array iterator', 'values']);
+
+it('keeps the shape of computed plain values and objects that hold nothing to filter', function () {
+    Fixtures::site();
+    Fixtures::pages();
+
+    Collection::computed('pages', 'plain', fn () => [
+        'number' => 42,
+        'list' => ['a', 'b'],
+        'map' => ['x' => 1],
+        'date' => Carbon::parse('2026-01-02 03:04:05', 'UTC'),
+        'enum' => StringBackedForTest::Draft,
+        'object' => (object) ['name' => 'Ann'],
+    ]);
+
+    $home = Fixtures::page('home', 'Home');
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"plain":{"number":42,"list":["a","b"],"map":{"x":1},"date":"2026-01-02T03:04:05.000000Z","enum":"draft","object":{"name":"Ann"}}');
 });

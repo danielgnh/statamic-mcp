@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 
 function mcpPostRoute(): ?Illuminate\Routing\Route
@@ -43,4 +44,38 @@ it('merges default config under statamic.mcp', function () {
         ->and(config('statamic.mcp.deletes'))->toBeFalse()
         ->and(config('statamic.mcp.resources.collections'))->toBeTrue()
         ->and(config('statamic.mcp.per_page'))->toBe(25);
+});
+
+it('counts every anonymous request against the throttle, also one laravel/mcp refuses for its headers', function () {
+    config(['cache.default' => 'array']);
+
+    $mismatch = fn () => $this->withHeaders([
+        'Accept' => 'application/json, text/event-stream',
+        'MCP-Protocol-Version' => '1999-01-01',
+    ])->postJson('/mcp/statamic', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list', 'params' => (object) []]);
+
+    $mismatch()->assertStatus(400);
+    $this->get('/mcp/statamic')->assertStatus(405)->assertHeader('Allow', 'POST');
+
+    expect(RateLimiter::attempts(sha1('|127.0.0.1')))->toBe(2);
+});
+
+it('keeps the discovery hint on a 401 now that the throttle runs before the header checks', function () {
+    $this->withHeaders(['Accept' => 'application/json, text/event-stream'])
+        ->postJson('/mcp/statamic', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])
+        ->assertUnauthorized()
+        ->assertHeader('WWW-Authenticate');
+});
+
+it('answers a throttled request as JSON, also for a client listing event-stream first', function () {
+    config(['cache.default' => 'array']);
+
+    foreach (range(1, 60) as $i) {
+        $this->get('/mcp/statamic');
+    }
+
+    $this->withHeaders(['Accept' => 'text/event-stream, application/json'])
+        ->post('/mcp/statamic', [])
+        ->assertTooManyRequests()
+        ->assertHeader('Content-Type', 'application/json');
 });

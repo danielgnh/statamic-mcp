@@ -16,14 +16,14 @@ class EnvWriter
             return EditResult::Bailed;
         }
 
-        $pattern = '/^'.preg_quote($key, '/').'=(.*)$/m';
+        $pattern = '/^([ \t]*(?:export[ \t]+)?'.preg_quote($key, '/').'[ \t]*=[ \t]*)(.*)$/m';
 
-        if (preg_match($pattern, $contents, $matches)) {
-            if (trim($matches[1]) === $value) {
+        if (preg_match_all($pattern, $contents, $matches)) {
+            if (array_unique(array_map(trim(...), $matches[2])) === [$value]) {
                 return EditResult::Skipped;
             }
 
-            file_put_contents($path, preg_replace_callback($pattern, fn () => $key.'='.$value, $contents, 1));
+            file_put_contents($path, preg_replace_callback($pattern, fn (array $assignment) => $assignment[1].$value, $contents));
 
             return EditResult::Applied;
         }

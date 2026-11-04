@@ -4,7 +4,7 @@ All notable changes to `danielgnh/statamic-mcp` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org). Before `v1.0.0`,
 breaking changes landed in minor (`0.x`) releases and are called out here
-explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
+explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
@@ -20,6 +20,11 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ### Changed
 
+- **Rebuild a cached route list after updating.** The Connections page moved to
+  another controller method, and the MCP route's middleware order changed. With
+  a route cache from an older version, Connections answers 500, and GET and
+  DELETE still skip the kill switch and the throttle. Run
+  `php artisan route:cache` or `php artisan optimize`.
 - **Tools → MCP opens on a page for choosing Connections or Guidelines.** Super
   admins used to land on Guidelines. Users who can only open Connections still
   go straight to it. Connections now comes first in the sidebar too.
@@ -28,6 +33,9 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   unmounted and reports the failure. Any other exception while registering the
   routes now surfaces, as it would from any other package, instead of quietly
   turning MCP off.
+- **One user can hold at most 100 tokens through the Control Panel.** Every MCP
+  request parses the whole token file, so one user issuing tokens without end
+  slowed everybody down. `mcp:token` on the console has no limit.
 
 ### Fixed
 
@@ -70,6 +78,38 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   mount.** A `route` that wasn't a string crashed the command, and so did a
   `server` class that couldn't load. A `middleware` entry that wasn't a string
   passed as fine.
+- **`assets_upload` no longer reports a file it did not store.** When the disk
+  refuses the write, for example a read-only disk, the tool answers with an
+  error and leaves nothing behind. It used to answer "uploaded — live". A
+  filename over 250 bytes is refused up front: its `.yaml` sidecar wouldn't fit
+  the 255 bytes filesystems allow, and on the file cache store the upload ended
+  in an internal error.
+- **`assets_upload` names a stored file Statamic can't read as an image.** On a
+  sync queue, an HTML error page from a `source_url`, say, was stored and live
+  while the tool answered with an internal error. The result now names the file
+  and says what failed under `not_stored`.
+- **`assets_upload` refuses a `.meta` folder and control characters in
+  `folder`.** A file stored under `.meta` could not be read or deleted by any
+  later call.
+- **A `source_url` redirect to an unparseable URL is a tool error,** not an
+  internal error.
+- **`search` on `entries_list`, `terms_list`, and `submissions_list` matches
+  plain text on the default Stache driver.** `%` and `_` used to act as
+  wildcards, so a search for `50%` also found `500`, and a search full of `%`
+  could cost hundreds of times a normal one. SQL-backed repositories keep their
+  wildcards, because SQLite and SQL Server have no default escape character.
+- **`terms_update` refuses a localized slug another term has in that site,** as
+  the Control Panel does.
+- **New sets of a Replicator or Grid inside a Group get fresh ids** when their
+  id is blank, `0`, or sent twice, like everywhere else.
+- **A route cache built without the MCP routes no longer breaks the Control
+  Panel.** Caching routes while MCP was off, or before installing the addon,
+  and then turning it on made every Control Panel page answer 500. The Tools →
+  MCP item now stays away until the cache is rebuilt.
+- **The OAuth consent page shows a redirect URI with a user part as it is.** It
+  used to print the part after the host wrong.
+- **`mcp:setup` changes every line of a key that appears twice in `.env`.** It
+  rewrote the first and reported "applied" while the last one kept winning.
 
 ### Security
 
@@ -105,6 +145,27 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   so the endpoint stayed up without authentication: an anonymous caller could
   initialize and list the tools. Tool calls still refused without a user. Any
   entry that isn't a string now keeps the route unmounted.
+- **Computed values no longer bypass exposure in `format=augmented`.** A
+  computed value that returned a collection, paginator, or array of entries,
+  terms, assets, or users came back in full: another collection's content, and
+  other users' emails and super flags. It now gets the same treatment as a
+  relation field: items outside the exposure are dropped, and the rest are
+  reduced to stubs. Global variables and form submissions are handled the same
+  way. A computed value that returns plain data, such as a string or an
+  entry's `toArray()`, still comes back as written, because nothing marks where
+  it came from: keep such values out of collections an agent may read.
+- **A Bard image in an unexposed container no longer reveals whether the file
+  exists.** `format=augmented` rendered an existing and a missing file
+  differently, so writing guessed paths and reading them back told them apart.
+- **The tree URL check inside the lock no longer names an entry the caller
+  can't view.** When another call took a URL between the check and the save,
+  the message named that entry's id. It now says the URL is taken.
+- **The kill switch and the throttle now cover the whole endpoint.** GET and
+  DELETE skipped both, and a POST that laravel/mcp refused for its headers was
+  answered before them. With `enabled` off and routes cached, every verb is now
+  a 404. Without a route cache the route isn't mounted at all, so Statamic's
+  frontend route answers, with a 419 for a POST or DELETE. Every request counts
+  against `statamic.mcp.middleware`.
 
 ## [1.0.0] - 2026-11-01
 

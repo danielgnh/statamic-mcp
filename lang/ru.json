@@ -56,6 +56,7 @@
     "Unknown client": "Неизвестный клиент",
     "Use the Create token button to issue your first token and connect an MCP client.": "Нажмите «Создать токен», чтобы выпустить первый токен и подключить MCP-клиент.",
     "Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead. See the section on connecting a client in the README.": "Работает с Claude Code, Cursor и любым MCP-клиентом, который может отправлять постоянный заголовок Authorization. Отдельным коннекторам claude.ai и Claude Desktop нужен режим OAuth. См. раздел о подключении клиента в README.",
+    "You hold :max tokens, the most one user can have — revoke one first.": "У вас уже :max токенов, это максимум для одного пользователя. Сначала отзовите один из них.",
     "Your connections": "Ваши подключения",
     "Your leftover tokens": "Ваши оставшиеся токены",
     "Your tokens": "Ваши токены",
