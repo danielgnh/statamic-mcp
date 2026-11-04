@@ -6,7 +6,6 @@ use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
-use Exception;
 use Facades\Statamic\Structures\BranchIdGenerator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -80,14 +79,11 @@ class NavigationsUpdate extends Tool
 
         $this->rejectDuplicateIds($branches);
 
-        try {
-            $nav->validateTree($branches, $site);
-        } catch (Exception $e) {
+        if ($nav->expectsRoot() && isset($branches[0]['children'])) {
             throw new ToolException(sprintf(
-                "%s — navigation '%s' expects a root page, its first branch: move the children to the top level",
-                lcfirst($e->getMessage()),
+                "root page cannot have children — navigation '%s' expects a root page, its first branch: move the children to the top level",
                 $handle,
-            ), $e->getCode(), $e);
+            ));
         }
 
         if ($this->normalize($branches) === $this->normalize($tree->tree())) {

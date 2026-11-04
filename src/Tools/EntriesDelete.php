@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
+use Exception;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection;
 use Laravel\Mcp\Request;
@@ -72,8 +73,8 @@ class EntriesDelete extends Tool
 
             try {
                 $entry->deleteDescendants();
-            } catch (\Exception $cascadeFailure) {
-                //
+            } catch (Exception $e) {
+                $cascadeFailure = $e;
             }
 
             $survivors = $entry->descendants()->map->fresh()->filter();

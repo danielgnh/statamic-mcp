@@ -29,7 +29,11 @@ class KeyStore
             return null;
         }
 
-        return rescue(fn () => Crypt::decryptString($cipher), null, report: false);
+        try {
+            return Crypt::decryptString($cipher);
+        } catch (DecryptException) {
+            return null;
+        }
     }
 
     public function undecryptable(): bool
