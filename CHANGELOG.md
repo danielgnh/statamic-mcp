@@ -8,6 +8,31 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The docs now say what the code does.**
+  - `enabled: false` doesn't remove Passport's own routes, such as
+    `/oauth/authorize` and `/oauth/token`, though the README, UPGRADE, and the
+    `mcp:doctor` warning said all OAuth routes went off.
+    [docs/oauth.md](docs/oauth.md#turning-mcp-off) now covers what they do with
+    MCP off and how to remove them.
+  - A missing or invalid tool argument answers HTTP 200 with `isError: true`,
+    not the 400 `docs/troubleshooting.md` gave.
+  - `resources` doesn't hide stored values everywhere, as UPGRADE said. A raw
+    read returns an entry id, term slug, or asset path outside the exposure,
+    `navigations_get` returns a linked entry's id and any title set on the
+    branch, and `entries`, `terms`, and `link` fields can store a value outside
+    the exposure.
+  - `uploads.max_size` doesn't always stop a download early. A body without a
+    `Content-Length` is refused when the transfer ends, which can take the full
+    15 seconds.
+  - The edit chart added up to 1,868 tokens because it left out the 100-token
+    result of `entries_update`. The 1,968 total was right, and the chart and
+    README now show the 100.
+- **Code snippets on the Connections page follow the Control Panel's theme.**
+  The Claude Code and Cursor snippets, in How to connect and on a newly created
+  token, stayed dark in light mode.
+
 ### Security
 
 - **`assets_upload` connects to the address the guard checked.** The guard read
@@ -37,28 +62,6 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   public address of Azure's wire server. A site that downloads from one of
   these ranges on its own network now gets a refusal, and
   `uploads.source_allowlist` doesn't override it.
-
-### Fixed
-
-- **The docs now say what the code does.**
-  - `enabled: false` doesn't remove Passport's own routes, such as
-    `/oauth/authorize` and `/oauth/token`, though the README, UPGRADE, and the
-    `mcp:doctor` warning said all OAuth routes went off.
-    [docs/oauth.md](docs/oauth.md#turning-mcp-off) now covers what they do with
-    MCP off and how to remove them.
-  - A missing or invalid tool argument answers HTTP 200 with `isError: true`,
-    not the 400 `docs/troubleshooting.md` gave.
-  - `resources` doesn't hide stored values everywhere, as UPGRADE said. A raw
-    read returns an entry id, term slug, or asset path outside the exposure,
-    `navigations_get` returns a linked entry's id and any title set on the
-    branch, and `entries`, `terms`, and `link` fields can store a value outside
-    the exposure.
-  - `uploads.max_size` doesn't always stop a download early. A body without a
-    `Content-Length` is refused when the transfer ends, which can take the full
-    15 seconds.
-  - The edit chart added up to 1,868 tokens because it left out the 100-token
-    result of `entries_update`. The 1,968 total was right, and the chart and
-    README now show the 100.
 
 ## [1.0.0] - 2026-11-01
 
