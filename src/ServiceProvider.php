@@ -16,6 +16,8 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
+use Illuminate\Contracts\Translation\HasLocalePreference;
+use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
@@ -35,6 +37,8 @@ use Throwable;
 class ServiceProvider extends AddonServiceProvider
 {
     protected $config = false;
+
+    protected $translations = false;
 
     protected $commands = [
         IssueToken::class,
@@ -60,6 +64,8 @@ class ServiceProvider extends AddonServiceProvider
         ], 'statamic-mcp-views');
 
         Blade::anonymousComponentPath(__DIR__.'/../resources/views/components', 'statamic-mcp');
+
+        $this->loadJsonTranslationsFrom(__DIR__.'/../lang');
 
         $this->registerPermission();
 
@@ -131,9 +137,23 @@ class ServiceProvider extends AddonServiceProvider
             // unless someone calls authorizationView(). Guarded on `! bound` so a host
             // app's own Passport::authorizationView() wins whichever boots first.
             if (! app()->bound(AuthorizationViewResponse::class)) {
-                Passport::authorizationView('statamic-mcp::oauth.authorize');
+                Passport::authorizationView(fn (array $parameters) => $this->consentView($parameters));
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function consentView(array $parameters): Response
+    {
+        $user = $parameters['user'] ?? null;
+
+        if ($user instanceof HasLocalePreference && ($locale = $user->preferredLocale()) !== null) {
+            app()->setLocale($locale);
+        }
+
+        return response()->view('statamic-mcp::oauth.authorize', $parameters);
     }
 
     /** @return class-string<McpServer> */

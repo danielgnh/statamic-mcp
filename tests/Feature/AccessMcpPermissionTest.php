@@ -13,3 +13,10 @@ it('registers the access mcp permission in the mcp group', function () {
     expect($permission)->not->toBeNull()
         ->and($permission->label())->toBe('Access MCP');
 });
+
+it('labels the permission in the control panel language', function () {
+    app()->setLocale('de');
+    Permission::boot();
+
+    expect(Permission::get('access mcp')->label())->toBe('Zugriff auf MCP');
+});

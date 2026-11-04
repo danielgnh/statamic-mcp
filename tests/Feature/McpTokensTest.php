@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Js;
 
@@ -335,4 +336,31 @@ it('403s revocation without the access mcp permission, even for own tokens', fun
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
+});
+
+it("renders in the user's control panel language", function () {
+    $user = tap(Fixtures::makeUser('access cp')->setPreference('locale', 'de'))->save();
+
+    $this->actingAs($user)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('text="Token erstellen"', false)
+        ->assertDontSee('text="Create token"', false);
+});
+
+it('formats dates in the locale Carbon is set to, as the relative times beside them already do', function () {
+    $user = Fixtures::makeUser('access cp');
+
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00'), fn () => app(TokenRepository::class)->issue($user, 'dated'));
+
+    Carbon::setLocale('de');
+
+    try {
+        $this->actingAs($user)
+            ->get(cp_route('mcp.connections.index'))
+            ->assertOk()
+            ->assertSee('5. Mär 2026', false);
+    } finally {
+        Carbon::setLocale('en');
+    }
 });

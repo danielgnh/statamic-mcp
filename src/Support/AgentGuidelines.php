@@ -149,32 +149,32 @@ class AgentGuidelines
         return [
             'tabs' => [
                 'main' => [
-                    'display' => 'Main',
+                    'display' => __('Main'),
                     'sections' => [
                         [
                             'fields' => [
                                 ['handle' => 'site', 'field' => [
                                     'type' => 'markdown',
-                                    'display' => 'Site',
-                                    'instructions' => 'For every agent, in everything it writes: voice and tone, words to use or avoid, how formal to be. Agents read this first, with statamic_overview.',
+                                    'display' => __('Site'),
+                                    'instructions' => __('For every agent, in everything it writes: voice and tone, words to use or avoid, how formal to be. Agents read this first, with statamic_overview.'),
                                     'validate' => [$plain],
                                 ]],
                                 ['handle' => 'resources', 'field' => [
                                     'type' => 'replicator',
-                                    'display' => 'Collections and taxonomies',
-                                    'instructions' => 'How an entry or term is put together: which blocks open it, which never repeat, how many a page usually has, which existing entry to follow. An agent gets a row with every blueprint of the collections and taxonomies it names, through blueprints_get. A rule about one field or block belongs in that blueprint instead.',
-                                    'button_label' => 'Add guidelines',
+                                    'display' => __('Collections and taxonomies'),
+                                    'instructions' => __('How an entry or term is put together: which blocks open it, which never repeat, how many a page usually has, which existing entry to follow. An agent gets a row with every blueprint of the collections and taxonomies it names, through blueprints_get. A rule about one field or block belongs in that blueprint instead.'),
+                                    'button_label' => __('Add guidelines'),
                                     'sets' => [
                                         'main' => [
-                                            'display' => 'Main',
+                                            'display' => __('Main'),
                                             'sets' => [
                                                 'resource' => [
-                                                    'display' => 'Guidelines',
-                                                    'instructions' => 'One row per group of collections and taxonomies that share the same rules.',
+                                                    'display' => __('Guidelines'),
+                                                    'instructions' => __('One row per group of collections and taxonomies that share the same rules.'),
                                                     'fields' => [
-                                                        ['handle' => 'collections', 'field' => ['type' => 'collections', 'display' => 'Collections', 'mode' => 'select', 'width' => 50]],
-                                                        ['handle' => 'taxonomies', 'field' => ['type' => 'taxonomies', 'display' => 'Taxonomies', 'mode' => 'select', 'width' => 50]],
-                                                        ['handle' => 'guidelines', 'field' => ['type' => 'markdown', 'display' => 'Guidelines', 'validate' => ['required', $plain]]],
+                                                        ['handle' => 'collections', 'field' => ['type' => 'collections', 'display' => __('Collections'), 'mode' => 'select', 'width' => 50]],
+                                                        ['handle' => 'taxonomies', 'field' => ['type' => 'taxonomies', 'display' => __('Taxonomies'), 'mode' => 'select', 'width' => 50]],
+                                                        ['handle' => 'guidelines', 'field' => ['type' => 'markdown', 'display' => __('Guidelines'), 'validate' => ['required', $plain]]],
                                                     ],
                                                 ],
                                             ],

@@ -8,6 +8,16 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **The Control Panel pages speak the user's language.** Tools → MCP, the
+  OAuth consent page, and the Access MCP permission follow each user's
+  Control Panel language, with translations for German (`de`, `de_CH`),
+  Spanish, French, Italian, Dutch, Norwegian, Portuguese (Brazil), and
+  Russian. Other languages keep English, and an app overrides any wording
+  from its own `lang/<locale>.json`. Dates on the Connections page follow
+  Carbon's locale, as the relative times beside them already did.
+
 ## [1.0.0] - 2026-11-01
 
 ### Changed
