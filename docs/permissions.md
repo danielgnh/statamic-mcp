@@ -12,6 +12,10 @@ always Statamic's native permission system. Four gates, in order:
    on every call in case a client cached the old tool list. `entries_preview` stays,
    because a preview link changes no content.
 2. **Exposure allowlist** — `resources` decides what exists as far as MCP is concerned.
+   Stored values stay: a raw read returns an entry id, term slug, or asset path
+   outside it, `navigations_get` returns a linked entry's id and any title set on
+   the branch, and opening that id answers not found. `entries`, `terms`, and
+   `link` fields don't check it, so writes can store a value outside it.
 3. **Native permissions on every call** — `view/edit/create/delete {handle} entries`
    (and term/global equivalents) via the user's roles. Reading a navigation takes
    `view {nav} nav`, and changing its tree takes `edit {nav} nav`. Reading a form's

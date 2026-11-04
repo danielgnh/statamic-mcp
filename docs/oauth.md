@@ -133,6 +133,22 @@ If any prerequisite is missing, the MCP endpoint answers **503 with the exact re
 (and a pointer to `mcp:doctor`) — the rest of your site is untouched, and token mode
 keeps working if you switch back.
 
+## Turning MCP off
+
+`STATAMIC_MCP_ENABLED=false` turns off the MCP endpoint, OAuth discovery, client
+registration, and the Tools → MCP pages. If Passport is installed, the routes it
+registers itself stay: `/oauth/authorize`, `/oauth/token`, and the device routes.
+An existing token still can't reach MCP, because the endpoint is gone.
+
+With MCP off at boot, the addon doesn't load its database-managed keys or bind the
+consent view, so on a site that relies on either, Passport's routes answer 500.
+That includes the site's own API if it uses Passport with those keys.
+
+To remove Passport's routes as well, call `Passport::ignoreRoutes()` in the
+`register()` method of a service provider. MCP's OAuth mode needs those routes, so
+take the call out before turning it back on, and leave it out if the site's own
+API uses Passport.
+
 ## Upgrading from the Eloquent-users setup
 
 Earlier versions required database (Eloquent) users, the Passport `api` guard, and

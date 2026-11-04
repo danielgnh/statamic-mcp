@@ -132,16 +132,32 @@ entries scheduled in the CP.
 
 `assets_upload` accepts a `source_url` (the server downloads the file) or inline
 `content_base64` (small files). URL fetching is **fail-closed**: only `http`/`https`;
-the server resolves DNS itself and refuses any host with a private, loopback,
-link-local, carrier-grade-NAT, or otherwise reserved address (IPv4 and IPv6,
-cloud metadata endpoints included); the connection is pinned to the validated IP
-(no DNS-rebinding window); every redirect hop (max 3) is re-validated; the
-requests of one download, redirects included, share 15 seconds, though a slow
-DNS lookup is not cut off; and downloads abort past `uploads.max_size` —
-`Content-Length` is never trusted.
-Set `uploads.source_allowlist` to pin uploads to known hosts. Container-level
-validation rules (e.g. `mimes:jpg,png`) and Statamic's global file guards apply
-on top, exactly as in the Control Panel.
+the server resolves DNS itself and refuses a host if any of its addresses is
+private, loopback, link-local, carrier-grade NAT, documentation, benchmarking,
+multicast, or in another IANA special-purpose range that isn't globally
+reachable. For IPv6 it accepts only global unicast (`2000::/3`) and the NAT64
+form of an address it would accept. That covers the metadata addresses
+`169.254.169.254`, `100.100.100.200`, and `fd00:ec2::254`, and the guard also
+refuses Azure's wire server, `168.63.129.16`. The connection goes to the
+validated IP whatever host curl reads from the URL (no DNS-rebinding window);
+every redirect hop (max 3) is re-validated; the requests of one download, redirects included, share 15 seconds,
+though a slow DNS lookup is not cut off. A `Content-Length` over
+`uploads.max_size` aborts the download. Without one, a larger body is refused
+when the transfer ends, which can take the full 15 seconds. URL uploads need
+`ext-curl` with `curl_exec` enabled and are refused without it.
+
+The guard knows address ranges, not your network. A public address that your
+network treats as internal still passes, and so does another cloud provider's
+internal service on a public address. Set `uploads.source_allowlist` to pin
+uploads to known hosts if the server can reach anything like that. The allowlist
+narrows the guard and doesn't override it, so a listed host that resolves to a
+refused address stays refused.
+
+Container-level validation rules (e.g. `mimes:jpg,png`) and Statamic's global
+file guards apply on top, exactly as in the Control Panel. The global guards go
+by the filename the caller sends, and the response gives the asset's URL, so
+without a `mimes` rule a caller can store what the URL returned as `x.txt` and
+read it.
 
 ## Your own tools
 

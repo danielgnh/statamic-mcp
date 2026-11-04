@@ -38,7 +38,7 @@ class McpTokensController extends CpController
             'token' => $plain->token,
             'tokenId' => $plain->tokenId,
             'name' => $plain->name,
-            'expiresAt' => $plain->expiresAt?->toFormattedDateString(),
+            'expiresAt' => $plain->expiresAt?->isoFormat('ll'),
         ]);
     }
 

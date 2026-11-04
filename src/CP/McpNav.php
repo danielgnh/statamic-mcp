@@ -15,8 +15,8 @@ class McpNav
                 ->icon('ai-sparks')
                 ->can('access mcp')
                 ->children(fn () => array_filter([
-                    User::current()?->isSuper() ? Nav::item('Guidelines')->route('mcp.guidelines.edit') : null,
                     Nav::item('Connections')->route('mcp.connections.index'),
+                    User::current()?->isSuper() ? Nav::item('Guidelines')->route('mcp.guidelines.edit') : null,
                 ]));
         });
     }

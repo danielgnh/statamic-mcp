@@ -9,8 +9,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class McpController extends CpController
 {
-    public function index(): Response
+    public function index(): View|Response
     {
-        return Inertia::location(cp_route(User::current()?->isSuper() ? 'mcp.guidelines.edit' : 'mcp.connections.index'));
+        return User::current()?->isSuper()
+            ? view('statamic-mcp::mcp.index')
+            : Inertia::location(cp_route('mcp.connections.index'));
     }
 }
