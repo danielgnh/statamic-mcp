@@ -5,8 +5,12 @@ namespace Danielgnh\StatamicMcp\Tools\Concerns;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use Error;
+use ErrorException;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
+use Statamic\Exceptions\AssetNotFoundException;
 use Statamic\Facades\Asset;
 use Statamic\Facades\AssetContainer;
 use Statamic\Fields\Blueprint;
@@ -66,7 +70,7 @@ trait ValidatesBlueprintData
             }
 
             return in_array($field->handle(), $only, true)
-                ? rescue(fn () => $field->preProcess(), fn () => throw $this->unprocessable($field), report: false)
+                ? $this->orUnprocessable($field, fn () => $field->preProcess())
                 : $field->preProcess();
         }));
 
@@ -87,7 +91,7 @@ trait ValidatesBlueprintData
                 return [$handle => $value];
             }
 
-            return [$handle => rescue(fn () => $field->process()->value(), fn () => throw $this->unprocessable($field), report: false)];
+            return [$handle => $this->orUnprocessable($field, fn () => $field->process()->value())];
         })->all();
     }
 
@@ -411,13 +415,19 @@ trait ValidatesBlueprintData
         return $containers->count() === 1 ? $containers->first() : null;
     }
 
-    private function unprocessable(Field $field): ToolException
+    private function orUnprocessable(Field $field, callable $process): mixed
     {
-        return new ToolException(sprintf(
-            "field %s has a value its fieldtype (%s) can't process — send the raw shape the get tools return; blueprints_get shows each field's example",
-            $field->handle(),
-            $field->type(),
-        ));
+        try {
+            return $process();
+        } catch (Error|ErrorException|InvalidArgumentException|AssetNotFoundException $e) {
+            report_if($e instanceof Error || $e instanceof ErrorException, $e);
+
+            throw new ToolException(sprintf(
+                "field %s has a value its fieldtype (%s) can't process — send the raw shape the get tools return; blueprints_get shows each field's example",
+                $field->handle(),
+                $field->type(),
+            ), $e->getCode(), $e);
+        }
     }
 
     /**
