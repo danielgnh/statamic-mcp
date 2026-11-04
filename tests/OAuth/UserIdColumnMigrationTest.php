@@ -99,3 +99,14 @@ it('converts the columns on the next migrate of a site whose earlier run came to
     expect(strtolower(Schema::getColumnType('oauth_access_tokens', 'user_id')))->not->toContain('int')
         ->and(strtolower(Schema::getColumnType('oauth_auth_codes', 'user_id')))->not->toContain('int');
 });
+
+it('keeps the converted columns on rollback, because going back to bigint would truncate UUID ids', function () {
+    OAuthFixtures::migratePassportWithBigintUserIds();
+
+    runUserIdMigration();
+
+    $migration = require glob(dirname(__DIR__, 2).'/database/migrations/*_make_passport_user_id_columns_fit_statamic_ids.php')[0];
+    $migration->down();
+
+    expect(strtolower(Schema::getColumnType('oauth_access_tokens', 'user_id')))->not->toContain('int');
+});

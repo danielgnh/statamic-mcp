@@ -59,6 +59,15 @@ it('rejects an unauthenticated request with 401 and WWW-Authenticate', function 
         ->and($response->headers->get('WWW-Authenticate'))->toBe('Bearer');
 });
 
+it('leaves the default guard alone when authentication fails, because the exception handler would run a failing bearer again', function () {
+    $default = Auth::getDefaultDriver();
+
+    $response = oauthHandle(Request::create('/mcp/statamic', 'POST'));
+
+    expect($response->getStatusCode())->toBe(401)
+        ->and(Auth::getDefaultDriver())->toBe($default);
+});
+
 it('passes through and pins the addon guard as default when the token grants mcp:use', function () {
     $user = Fixtures::makeSuper();
 

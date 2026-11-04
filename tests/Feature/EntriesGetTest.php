@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
+use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -344,4 +345,28 @@ it('returns a previewed value in full via fields, a stored key outside the bluep
     Server::actingAs($user)
         ->tool(EntriesGet::class, ['id' => $entry->id(), 'fields' => ['schema_jsonld'], 'format' => 'augmented'])
         ->assertHasErrors(['unknown field schema_jsonld']);
+});
+
+it('shows the staged url and leaves the live url alone, because Statamic caches URIs by entry id', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = makeBlogEntryForGet();
+    $super = Fixtures::makeSuper();
+
+    Server::actingAs($super)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'slug' => 'renamed'])
+        ->assertOk();
+
+    $live = Entry::find($entry->id());
+    $liveUri = $live->uri();
+
+    Server::actingAs($super)
+        ->tool(EntriesGet::class, ['id' => $entry->id()])
+        ->assertOk()
+        ->assertSee('/blog/renamed');
+
+    expect($live->uri())->toBe($liveUri);
 });
