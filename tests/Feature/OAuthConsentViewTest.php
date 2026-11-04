@@ -1,5 +1,6 @@
 <?php
 
+use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\UsesOAuthMode;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Http\Responses\SimpleViewResponse;
@@ -62,4 +63,27 @@ it('lets a host app override the consent view (addon steps aside when already bo
     }
 
     expect(app(AuthorizationViewResponse::class))->toBe($sentinel);
+});
+
+it("renders the consent page in the signing-in user's control panel language", function () {
+    $this->app->register(PassportServiceProvider::class);
+
+    $user = tap(Fixtures::makeUser()->setPreference('locale', 'de'))->save();
+
+    $html = app(AuthorizationViewResponse::class)
+        ->withParameters([
+            'client' => (object) ['id' => 'client-123', 'name' => 'Claude Connector'],
+            'user' => $user,
+            'scopes' => [],
+            'request' => request(),
+            'authToken' => 'auth-token-abc',
+        ])
+        ->toResponse(request())
+        ->getContent();
+
+    expect($html)->toContain('lang="de"')
+        ->toContain('Angemeldet als')
+        ->toContain($user->email())
+        ->toContain('Autorisieren')
+        ->not->toContain('Signed in as');
 });

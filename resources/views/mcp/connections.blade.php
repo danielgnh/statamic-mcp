@@ -1,5 +1,5 @@
 @extends('statamic::layout')
-@section('title', Statamic::crumb(__('Connections'), __('MCP')))
+@section('title', Statamic::crumb(__('Connections'), 'MCP'))
 
 @section('content')
 {{--
@@ -34,19 +34,19 @@
                 @if ($oauthMode)
                     <ui-description text="{{ __('Clients register themselves and each person signs in with their own Statamic account — there is nothing to paste but the endpoint.') }}"></ui-description>
 
-                    <ui-subheading text="{{ __('claude.ai, Claude Desktop, ChatGPT') }}"></ui-subheading>
+                    <ui-subheading text="claude.ai, Claude Desktop, ChatGPT"></ui-subheading>
                     <ui-description text="{{ __('Add a custom connector, paste the endpoint, and approve access when the sign-in window opens.') }}"></ui-description>
 
-                    <ui-subheading text="{{ __('Claude Code') }}"></ui-subheading>
+                    <ui-subheading text="Claude Code"></ui-subheading>
                     <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }}</pre>
                     <ui-description text="{{ __('Then run /mcp and choose Authenticate.') }}"></ui-description>
                 @else
                     <ui-description text="{{ __('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead. See the section on connecting a client in the README.') }}"></ui-description>
 
-                    <ui-subheading text="{{ __('Claude Code') }}"></ui-subheading>
+                    <ui-subheading text="Claude Code"></ui-subheading>
                     <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
 
-                    <ui-subheading text="{{ __('Cursor (.cursor/mcp.json)') }}"></ui-subheading>
+                    <ui-subheading text="Cursor (.cursor/mcp.json)"></ui-subheading>
                     <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                 @endif
             </ui-modal>
@@ -123,7 +123,7 @@
                                 <tr>
                                     <td><span v-pre>{{ $connection['client_name'] }}</span></td>
                                     @if ($isSuper)<td>@include('statamic-mcp::mcp.partials.user', ['user' => $connection['user'], 'userId' => $connection['user_id']])</td>@endif
-                                    <td>{{ $connection['connected_at']->toFormattedDateString() }}</td>
+                                    <td>{{ $connection['connected_at']->isoFormat('ll') }}</td>
                                     <td>{{ $connection['last_refreshed_at']->diffForHumans() }}</td>
                                     <td>
                                         @if ($connection['active'])
@@ -165,12 +165,12 @@
                     <ui-description text="{{ __('Expires') }}: {{ $plainToken['expiresAt'] ?? __('never') }}"></ui-description>
 
                     <div class="space-y-2">
-                        <ui-subheading text="{{ __('Claude Code') }}"></ui-subheading>
+                        <ui-subheading text="Claude Code"></ui-subheading>
                         <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer {{ $plainToken['token'] }}"</pre>
                     </div>
 
                     <div class="space-y-2">
-                        <ui-subheading text="{{ __('Cursor (.cursor/mcp.json)') }}"></ui-subheading>
+                        <ui-subheading text="Cursor (.cursor/mcp.json)"></ui-subheading>
                         <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer '.$plainToken['token']]]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                     </div>
                 </ui-card>

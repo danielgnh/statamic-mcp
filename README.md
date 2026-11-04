@@ -145,6 +145,10 @@ php please mcp:guidelines
 
 The command lists the blocks that still have no instructions. On a site coming from 0.6.0, it first moves the guidelines out of the old global set. [docs/guidelines.md](docs/guidelines.md) covers the details.
 
+## Languages
+
+The Tools → MCP pages, the OAuth consent page, and the Access MCP permission follow each user's Control Panel language. Translations ship for German (`de`, `de_CH`), Spanish, French, Italian, Dutch, Norwegian, Portuguese (Brazil), and Russian. Any other language shows English. To change a wording or add a language, put the English text and its translation in your app's `lang/<locale>.json`, which takes precedence over the addon's. Console output stays English.
+
 ## Adding your own tools
 
 The server is a `laravel/mcp` server class. Extend it, override `tools()`, and add, replace, or remove tools on the registry it receives:
