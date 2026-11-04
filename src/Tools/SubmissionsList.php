@@ -28,7 +28,7 @@ class SubmissionsList extends Tool
     {
         return [
             'form' => $schema->string()->description('Form handle, e.g. "contact" (statamic_overview lists them).')->required(),
-            'search' => $schema->string()->description('Substring match over the text, textarea, and integer fields, as in the Control Panel; % and _ are wildcards. Use since and before for dates.'),
+            'search' => $schema->string()->description('Substring match over the text, textarea, and integer fields, as in the Control Panel. Use since and before for dates.'),
             'since' => $schema->string()->description('Only submissions on or after this date, e.g. 2026-09-20 or 2026-09-20T09:00:00+02:00.'),
             'before' => $schema->string()->description('Only submissions before this date (exclusive), e.g. 2026-09-27 for everything up to the end of the 26th.'),
             'limit' => $schema->integer()->description('Page size. Defaults to the server default (25); hard-capped at 100.'),
