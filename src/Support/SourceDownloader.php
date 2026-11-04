@@ -53,6 +53,10 @@ class SourceDownloader
      */
     public function download(string $url): array
     {
+        if (! function_exists('curl_exec')) {
+            throw new ToolException('source_url downloads need curl_exec, which this server has disabled — nothing was uploaded');
+        }
+
         $maxBytes = self::maxKilobytes() * 1024;
         $deadline = now()->addSeconds(self::TIMEOUT_SECONDS);
 

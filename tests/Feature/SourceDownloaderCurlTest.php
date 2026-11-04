@@ -60,3 +60,9 @@ it('answers an error status with a tool error even when its Content-Length is ov
     expect(fn () => fetchOverRealCurl('/not-found-announcing-too-much'))
         ->toThrow(ToolException::class, 'could not download source_url: HTTP request returned status code 404');
 });
+
+it('refuses a URL upload where curl_exec is disabled, because no other handler honors the pinned address', function () {
+    $download = new Process([PHP_BINARY, '-d', 'disable_functions=curl_exec,curl_multi_exec', __DIR__.'/../__fixtures__/download-without-curl.php']);
+
+    expect($download->mustRun()->getOutput())->toContain('source_url downloads need curl_exec');
+});
