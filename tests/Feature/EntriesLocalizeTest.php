@@ -582,3 +582,20 @@ it('places a localization under its localized parent past max_depth, as the CP d
         ['entry' => $kontakt, 'children' => [['entry' => $aboutDe->id(), 'children' => [['entry' => Fixtures::pageId('team', 'de')]]]]],
     ]);
 });
+
+it("requires 'access {site} site' for the root a localization originates from, not only for the entry passed", function () {
+    Fixtures::multisite(true);
+    Fixtures::tags();
+    Fixtures::blog();
+    Collection::findByHandle('blog')->originBehavior('root')->save();
+
+    $origin = makeBlogOrigin();
+    $de = tap($origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();
+    $user = Fixtures::makeUser('edit blog entries', 'access de site', 'access at site');
+
+    Server::actingAs($user)
+        ->tool(EntriesLocalize::class, ['id' => $de->id(), 'site' => 'at'])
+        ->assertHasErrors(["requires 'access en site'"]);
+
+    expect($origin->in('at'))->toBeNull();
+});

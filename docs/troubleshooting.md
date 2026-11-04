@@ -12,10 +12,11 @@ runtime.
 ## What doctor checks
 
 - **Kill switch and mounting** — is MCP enabled, and is the route actually mounted?
-  "Enabled but not mounted" means boot failed: the addon never bricks the host site,
-  it logs `Statamic MCP failed to mount; run php please mcp:doctor`, and until the
-  underlying exception is fixed, requests to the endpoint reach Statamic's frontend
-  route: a 404, or a 419 for a POST.
+  "Enabled but not mounted" means the `route`, `server`, or `middleware` config has the
+  wrong shape: the addon keeps the host site up, reports
+  `Statamic MCP failed to mount; run php please mcp:doctor` with the cause, and until the
+  config is fixed, requests to the endpoint reach Statamic's frontend route: a 404, or a
+  419 for a POST.
 - **Middleware** — every configured middleware entry must resolve to a class, alias,
   or group; a typo'd entry mounts fine and then 500s every request.
 - **APP_URL** — warns on the Laravel default (`http://localhost`) and on plain
@@ -42,7 +43,8 @@ runtime.
 | `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: Passport's ResourceServer rejected the bearer, or its user no longer resolves. |
 | `403` "requires 'access mcp'…" | The user authenticated fine but lacks the `Access MCP` permission — grant it to one of their roles in the CP. |
 | `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. Only the MCP route is affected. |
-| `400`, `404`, or `500` with a JSON-RPC `error` in the body | The endpoint works and refused that one request: `404` for a method the server doesn't offer, `500` for an internal error, `400` for anything else, such as an unknown tool or invalid arguments. The `message` says which. |
+| `400`, `404`, or `500` with a JSON-RPC `error` in the body | The endpoint works and refused that one request: `404` for a method the server doesn't offer, `500` for an internal error, `400` for anything else, such as an unknown tool. The `message` says which. |
+| `200` with `isError: true` in the result | The tool ran and refused: a missing or invalid argument, a missing permission, or something that doesn't exist. The text says which. |
 | `404` without a JSON-RPC body, or `419` for a POST, on the endpoint | MCP is disabled, or enabled but failed to mount, so Statamic's frontend route answers instead. Check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. If the site caches routes, a 404 also means the cache was built under another `enabled` or `auth` setting: run `php artisan optimize`. |
 
 ## Token store locking

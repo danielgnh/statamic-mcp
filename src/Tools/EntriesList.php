@@ -70,7 +70,7 @@ class EntriesList extends Tool
             ->where('site', $site);
 
         if ($status = $validated['status'] ?? null) {
-            $query->whereStatus($status); // v6: never where('status', ...)
+            $query->whereStatus($status);
         }
 
         if ($search = $validated['search'] ?? null) {
@@ -80,9 +80,6 @@ class EntriesList extends Tool
         $total = (clone $query)->count();
         $totalPages = max((int) ceil($total / $perPage), 1);
 
-        // Deterministic order — the Stache builder's natural order is traversal
-        // order (date-ASCENDING for dated collections), and offset pagination
-        // without a stable order repeats/skips entries between calls.
         $dated
             ? $query->orderByDesc('date')->orderBy('id')
             : $query->orderBy('title')->orderBy('id');
@@ -92,7 +89,7 @@ class EntriesList extends Tool
         return $this->json([
             'entries' => $entries->map(fn ($entry) => [
                 'id' => $entry->id(),
-                'title' => $entry->value('title'), // value() recurses the full origin chain
+                'title' => $entry->value('title'),
                 'slug' => $entry->slug(),
                 'status' => $entry->status(),
                 'url' => $entry->url(),

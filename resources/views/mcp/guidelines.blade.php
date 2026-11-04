@@ -1,5 +1,5 @@
 @extends('statamic::layout')
-@section('title', Statamic::crumb(__('Guidelines'), __('MCP')))
+@section('title', Statamic::crumb(__('Guidelines'), 'MCP'))
 
 @section('content')
     {{--

@@ -2,10 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Setup;
 
-/**
- * Sets KEY=value in a dotenv file: replaces the existing assignment when the
- * key is present, appends otherwise. Never touches any other line.
- */
 class EnvWriter
 {
     public function apply(string $path, string $key, string $value): EditResult

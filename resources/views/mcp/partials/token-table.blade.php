@@ -25,8 +25,8 @@
                         </div>
                     </td>
                     @if ($isSuper)<td>@include('statamic-mcp::mcp.partials.user', ['user' => $token['user'], 'userId' => $token['user_id']])</td>@endif
-                    <td>{{ $token['created_at']->toFormattedDateString() }}</td>
-                    <td>{{ $token['expires_at']?->toFormattedDateString() ?? __('never') }}</td>
+                    <td>{{ $token['created_at']->isoFormat('ll') }}</td>
+                    <td>{{ $token['expires_at']?->isoFormat('ll') ?? __('never') }}</td>
                     <td>
                         @if ($token['expired'])
                             <ui-badge color="red" pill>{{ __('Expired') }}</ui-badge>

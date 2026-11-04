@@ -9,19 +9,12 @@ use Illuminate\Http\Request;
 use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 
-/**
- * Route-level authorization is the 'can:access mcp' middleware on every
- * Tools → MCP route (routes/cp.php). store() always issues for
- * the CURRENT user — issuing for someone else stays a console operation.
- */
 class McpTokensController extends CpController
 {
     private const int MAX_TOKENS_PER_USER = 100;
 
     public function store(Request $request, TokenRepository $tokens): RedirectResponse
     {
-        // OAuth mode hides the whole token UI, and nothing would accept a token
-        // issued here — so the route refuses too rather than minting a dud.
         abort_if(config('statamic.mcp.auth') === 'oauth', 403);
 
         $validated = $request->validate([
@@ -53,7 +46,7 @@ class McpTokensController extends CpController
             'token' => $plain->token,
             'tokenId' => $plain->tokenId,
             'name' => $plain->name,
-            'expiresAt' => $plain->expiresAt?->toFormattedDateString(),
+            'expiresAt' => $plain->expiresAt?->isoFormat('ll'),
         ]);
     }
 
@@ -67,11 +60,7 @@ class McpTokensController extends CpController
 
         abort_if($user === null, 401);
 
-        // Owner-or-super, enforced server-side — the view hiding other users'
-        // rows is cosmetic, this is the actual gate. 'user' is coalesced
-        // because tokens.yaml is hand-editable and a pruned key must fail
-        // closed (403), not warn.
-        // @phpstan-ignore nullCoalesce.offset (hand-edited tokens.yaml can lack 'user'; docblock widening deferred to v1.1)
+        // @phpstan-ignore nullCoalesce.offset
         abort_unless($user->isSuper() || ($record['user'] ?? null) === (string) $user->id(), 403);
 
         try {

@@ -1,6 +1,7 @@
 <?php
 
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
+use Danielgnh\StatamicMcp\OAuth\PassportKeys;
 use Danielgnh\StatamicMcp\Tests\RegistersOAuthProbeRoute;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Illuminate\Support\Facades\Crypt;
@@ -112,4 +113,59 @@ it('degrades gracefully when the key-store table is not migrated yet', function 
     // stock missing-file complaint surfaces and the preflight 503 names it.
     expect(fn () => app(ResourceServer::class))->toThrow(LogicException::class)
         ->and(config('passport.private_key'))->toBeNull();
+});
+
+it('serves nothing for a stored key it cannot derive a public half from, and never regenerates over it', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put('not a private key');
+
+    expect((new PassportKeys(new KeyStore))->resolve())->toBeNull()
+        ->and((new KeyStore)->get())->toBe('not a private key');
+});
+
+it('hands out the winner when two servers provision at once, because every server must sign with one pair', function () {
+    OAuthFixtures::migrateKeyStore();
+    $winner = OAuthFixtures::rsaPrivateKey();
+
+    $keys = new class(new KeyStore, $winner) extends PassportKeys
+    {
+        public function __construct(KeyStore $store, private readonly string $winner)
+        {
+            parent::__construct($store);
+        }
+
+        #[Override]
+        public function generate(): string
+        {
+            $this->store->put($this->winner);
+
+            return OAuthFixtures::rsaPrivateKey();
+        }
+    };
+
+    expect($keys->resolve())->toMatchArray(['private' => $winner, 'source' => 'generated']);
+});
+
+it('hands out the winner when two servers adopt different key files at once, because every server must sign with one pair', function () {
+    OAuthFixtures::migrateKeyStore();
+
+    $own = OAuthFixtures::rsaPrivateKey();
+    $winner = OAuthFixtures::rsaPrivateKey();
+
+    file_put_contents($this->keyDir.'/oauth-private.key', $own);
+    file_put_contents($this->keyDir.'/oauth-public.key', (new KeyStore)->publicKeyFor($own));
+
+    $store = new class($winner) extends KeyStore
+    {
+        public function __construct(private readonly string $winner) {}
+
+        #[Override]
+        public function put(string $privatePem): void
+        {
+            parent::put($this->winner);
+            parent::put($privatePem);
+        }
+    };
+
+    expect((new PassportKeys($store))->resolve())->toMatchArray(['private' => $winner, 'source' => 'files']);
 });

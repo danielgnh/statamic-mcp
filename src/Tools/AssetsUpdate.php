@@ -63,27 +63,15 @@ class AssetsUpdate extends Tool
 
         $asset = $this->resolveAsset($container, $validated['path']);
 
-        // supportsFields: false — assets_get has no fields parameter, the
-        // remediation text must not invent one.
         $this->rejectPreviewObjects($patch, 'assets_get', supportsFields: false);
 
-        // Assets always have a blueprint (Statamic falls back to a default
-        // one) — unknown keys are rejected so typos never become metadata.
-        // 'focus' is exempt: the CP's focal-point editor writes it into data
-        // OUTSIDE the blueprint (AssetsController@update merges it around
-        // field processing), so a get → edit → update round-trip must carry
-        // it.
         $blueprint = $asset->blueprint();
         $this->rejectUnknownKeys($blueprint, Arr::except($patch, ['focus']));
 
         $existing = $asset->data()->all();
 
-        // 'focus' is not a blueprint field, so it passes through unprocessed.
         $merged = array_merge($existing, $this->processAgainstBlueprint($blueprint, [...$existing, ...$patch], array_keys($patch)));
 
-        // Strict compare over normalized values: assoc key
-        // order is irrelevant, but types matter — loose == would turn an
-        // explicit null-clear of a falsy value into a false no-op.
         if ($this->normalize($merged) === $this->normalize($existing)) {
             return $this->json([
                 'id' => $asset->id(),
@@ -93,8 +81,6 @@ class AssetsUpdate extends Tool
             ]);
         }
 
-        // save() returns false when an AssetSaving listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $asset->data($merged)->save()) {
             throw new ToolException('the save was cancelled by a listener — the asset metadata was not updated');
         }

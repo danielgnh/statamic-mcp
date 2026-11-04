@@ -50,13 +50,8 @@ class NavigationsGet extends Tool
 
         $nav = $this->findNav($handle);
 
-        // A navigation only has trees in its own sites; the trait enforces
-        // 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $this->navSites($nav));
 
-        // makeTree() is the empty stand-in for a navigation without a tree
-        // yet, never saved here. Neither is NavTree::ensureBranchIds() called,
-        // which saves: branches without an id come back without one.
         $tree = $nav->in($site) ?? $nav->makeTree($site);
 
         return $this->json([
@@ -73,9 +68,6 @@ class NavigationsGet extends Tool
     }
 
     /**
-     * The blueprint fields branch data is keyed by. title and url are branch
-     * keys of their own, never data, even when the blueprint defines them.
-     *
      * @return list<array<string, mixed>>
      */
     private function branchFields(NavContract $nav): array

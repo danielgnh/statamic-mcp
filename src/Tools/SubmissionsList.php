@@ -2,10 +2,9 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesForms;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -21,6 +20,7 @@ use Statamic\Fields\Field;
 #[IsReadOnly]
 class SubmissionsList extends Tool
 {
+    use NormalizesEntryInput;
     use ResolvesForms;
 
     #[\Override]
@@ -56,8 +56,6 @@ class SubmissionsList extends Tool
 
         $this->ensureCanViewSubmissions($this->user($request), $handle);
 
-        // date is what the CP's listing sorts by; ids are microsecond
-        // timestamps, so the order is stable across pages.
         $query = FormSubmission::query()
             ->where('form', $handle)
             ->orderBy('date', 'desc');
@@ -94,10 +92,6 @@ class SubmissionsList extends Tool
         ]);
     }
 
-    /**
-     * The Control Panel's search on the submissions listing: the date plus
-     * the text, textarea, and integer fields (vendor QueriesFormSubmissionSearch).
-     */
     private function applySearch(SubmissionQueryBuilder $query, FormContract $form, string $search): void
     {
         $like = $this->containsPattern($query, $search);
@@ -109,18 +103,5 @@ class SubmissionsList extends Tool
                 ->filter(fn (Field $field) => in_array($field->type(), ['text', 'textarea', 'integer'], true))
                 ->each(fn (Field $field) => $query->orWhere($field->handle(), 'like', $like));
         });
-    }
-
-    /**
-     * A time without an offset is read in app.timezone, the zone
-     * statamic_overview reports as server.timezone.
-     */
-    private function parseDate(string $date, string $parameter): Carbon
-    {
-        try {
-            return Carbon::parse($date, config('app.timezone'));
-        } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse %s '%s' — use e.g. 2026-09-20 or 2026-09-20T09:00:00+02:00", $parameter, $date));
-        }
     }
 }

@@ -36,6 +36,24 @@ it('issues a token in the mcp_{tokenId}_{secret} format', function () {
         ->and($plain->expiresAt)->toBeNull();
 });
 
+it('keeps tokens.yaml and its directory private whatever the umask, because the file holds token hashes', function () {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    chmod(storage_path('statamic/mcp'), 0755);
+
+    $umask = umask(0);
+
+    try {
+        $this->repo->issue($this->user);
+    } finally {
+        umask($umask);
+    }
+
+    clearstatcache();
+
+    expect(fileperms(storage_path('statamic/mcp')) & 0777)->toBe(0700)
+        ->and(fileperms(storage_path('statamic/mcp/tokens.yaml')) & 0777)->toBe(0600);
+});
+
 it('stores only the sha-256 hash in tokens.yaml — never the plaintext secret', function () {
     $plain = $this->repo->issue($this->user, 'laptop');
 

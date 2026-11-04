@@ -49,11 +49,6 @@ class TermsDelete extends Tool
 
         $user = $this->user($request);
 
-        // CP parity (vendor TermPolicy::delete): the delete permission alone
-        // gates this — no site-access sweep, even though the delete takes
-        // every site's view of the term with it. Localizations are data
-        // overrides within the one term, not separate entities, so there is
-        // no entries-style per-site cascade to authorize either.
         $this->ensurePermission($user, "delete {$taxonomyHandle} terms");
 
         if (! $term = Term::find($id)) {
@@ -62,23 +57,12 @@ class TermsDelete extends Tool
 
         $sites = $term->taxonomy()->sites()->all();
 
-        // Reference-cleanup integrity (same fact as the rename path):
-        // vendor's UpdateTermReferences listener keys its TermDeleted cleanup
-        // off getOriginal('slug'), and a file-hydrated term has no synced
-        // original — without this, references in entries would dangle
-        // forever. (Term::find returns a LocalizedTerm — dirty state lives on
-        // the underlying Term, hence ->term().)
         $term->term()->syncOriginal();
 
-        // delete() returns false when a TermDeleting listener cancels
-        // (approval addons do this) — never report success for it, same rule
-        // as save(). Vendor never throws here and never blocks in-use terms.
         if (! $term->delete()) {
             throw new ToolException('the delete was cancelled by a listener — the term was not deleted');
         }
 
-        // Outcome statement only — deliberately NO cp_edit_url: the deleted
-        // term's CP page would 404 (amended spec exception).
         return $this->json([
             'deleted' => true,
             'id' => $id,

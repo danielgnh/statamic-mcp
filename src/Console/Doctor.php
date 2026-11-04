@@ -7,6 +7,8 @@ use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Error;
+use ErrorException;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Routing\CompiledRouteCollection;
@@ -14,17 +16,15 @@ use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Laravel\Mcp\Server as McpServer;
+use PDOException;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
-use Throwable;
+use TypeError;
 
-/**
- * One command that answers "why doesn't my MCP endpoint work?". Every [FAIL]
- * carries the same remedy text the middleware answers with at runtime, checks
- * never short-circuit (all problems are named at once), and any [FAIL] exits
- * FAILURE while [WARN]s alone exit SUCCESS.
- */
 class Doctor extends Command
 {
     use RunsInPlease;
@@ -42,14 +42,16 @@ class Doctor extends Command
         $this->prereqs = $prereqs;
 
         $mode = config('statamic.mcp.auth', 'token');
+        $route = config('statamic.mcp.route', 'mcp/statamic');
 
         $this->line('Statamic MCP doctor');
         $this->line('');
-        $this->line('  Endpoint:  '.url(config()->string('statamic.mcp.route', 'mcp/statamic')));
+        $this->line('  Endpoint:  '.(is_string($route) ? url($route) : 'none'));
         $this->line('  Auth mode: '.$mode);
         $this->line('');
 
         $this->checkEnabled();
+        $this->checkRoute();
         $this->checkServer();
         $this->checkMiddleware();
         $this->checkAppUrl();
@@ -77,7 +79,7 @@ class Doctor extends Command
     protected function checkEnabled(): void
     {
         if (! config('statamic.mcp.enabled')) {
-            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint, the OAuth routes and the Tools → MCP pages are off. Set STATAMIC_MCP_ENABLED=true to serve requests.");
+            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint, OAuth discovery and client registration, and the Tools → MCP pages are off. If Passport is installed, its own /oauth routes stay. Set STATAMIC_MCP_ENABLED=true to serve requests.");
 
             return;
         }
@@ -94,15 +96,19 @@ class Doctor extends Command
         } elseif ($routesCached) {
             $this->problem("MCP is enabled but the route cache holds no MCP route — it was built while MCP was off, or while the route failed to mount. Rebuild it: php artisan optimize. If the route is still missing, check the log for 'Statamic MCP failed to mount'.");
         } else {
-            // Enabled but no route: bootAddon caught a mount failure and logged
-            // 'Statamic MCP failed to mount' instead of bricking the host site.
             $this->problem("MCP is enabled but its route is not mounted — boot failed, so requests to the endpoint reach Statamic's frontend route and get a 404, or a 419 for a POST. Check the log for 'Statamic MCP failed to mount' and fix the reported exception.");
         }
     }
 
     protected function mountedRoute(): ?RoutingRoute
     {
-        $uri = trim((string) config('statamic.mcp.route', 'mcp/statamic'), '/');
+        $path = config('statamic.mcp.route', 'mcp/statamic');
+
+        if (! is_string($path)) {
+            return null;
+        }
+
+        $uri = trim($path, '/');
 
         foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
@@ -113,11 +119,30 @@ class Doctor extends Command
         return null;
     }
 
+    protected function checkRoute(): void
+    {
+        $route = config('statamic.mcp.route', 'mcp/statamic');
+
+        if (is_string($route) && filled($route)) {
+            return;
+        }
+
+        $given = is_string($route) ? $route : get_debug_type($route);
+
+        $this->problem("Configured route '{$given}' is not a path — the MCP route cannot mount. Set 'route' in config/statamic/mcp.php, for example to 'mcp/statamic'.");
+    }
+
     protected function checkServer(): void
     {
         $server = config('statamic.mcp.server', Server::class);
 
-        if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+        try {
+            if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+                return;
+            }
+        } catch (Error $e) {
+            $this->problem("Configured server '{$server}' cannot load ({$e->getMessage()}) — the MCP route cannot mount. Point 'server' in the statamic.mcp config at a class that loads, or remove the key.");
+
             return;
         }
 
@@ -134,6 +159,10 @@ class Doctor extends Command
 
         foreach ($entries as $entry) {
             if (! is_string($entry)) {
+                $broken = true;
+
+                $this->problem(sprintf("Configured middleware has an entry of type %s, not a name — the MCP route cannot mount. List only class names, aliases, or groups under 'middleware'.", get_debug_type($entry)));
+
                 continue;
             }
             if ($this->middlewareResolves($entry)) {
@@ -141,8 +170,6 @@ class Doctor extends Command
             }
             $broken = true;
 
-            // A typo'd class mounts fine and 500s every request — the one
-            // misconfiguration the route itself can never report.
             $this->problem("Configured middleware '{$entry}' is neither a class nor a registered middleware alias or group — every MCP request would 500. Fix 'middleware' in the statamic.mcp config.");
         }
 
@@ -153,14 +180,12 @@ class Doctor extends Command
 
     protected function middlewareResolves(string $entry): bool
     {
-        $name = explode(':', $entry, 2)[0]; // strip alias parameters like throttle:60,1
+        $name = explode(':', $entry, 2)[0];
 
         if (class_exists($name)) {
             return true;
         }
 
-        // Aliases and groups are synced from the HTTP Kernel to the router in
-        // the Kernel's constructor — a console run may never have built it.
         app(HttpKernel::class);
 
         $router = app('router');
@@ -180,12 +205,6 @@ class Doctor extends Command
         }
     }
 
-    /**
-     * Statamic's auth:migration is not idempotent — a second file re-adds the
-     * `super` column and crashes `php artisan migrate`. An interrupted OAuth
-     * setup leaves exactly that: a duplicate *_statamic_auth_tables.php the
-     * installer never ran. A healthy site has exactly one, so 2+ is the tell.
-     */
     protected function checkAuthMigrations(): void
     {
         $files = glob(database_path('migrations/*_statamic_auth_tables.php')) ?: [];
@@ -206,8 +225,6 @@ class Doctor extends Command
         $dir = storage_path('statamic/mcp');
         $file = $dir.'/tokens.yaml';
 
-        // The directory may not exist before the first token is issued —
-        // probe the closest existing ancestor for writability.
         $probe = $dir;
 
         while (! is_dir($probe)) {
@@ -217,26 +234,34 @@ class Doctor extends Command
         if (! is_writable($probe)) {
             $this->problem('Token store is not writable — fix permissions on '.$probe.' so tokens can be saved to '.$file.'.');
         } elseif (file_exists($file) && ! is_writable($file)) {
-            // Ownership mismatch (e.g. tokens issued as root, served as the
-            // deploy user): the ancestor probe passes but writes still fail.
             $this->problem($file.' exists but is not writable — it was probably created by a different user (e.g. tokens issued as root). Fix its ownership or permissions.');
         } else {
             $this->info('[ OK ] Token store is writable ('.$dir.').');
         }
 
-        // Corrupt YAML must not crash the very command that diagnoses it —
-        // authentication reads the same file and fails closed.
         try {
             $records = $tokens->all();
 
-            [$active, $expired, $orphaned] = $this->classifyTokens($records);
-        } catch (Throwable $e) {
+            $unexpired = array_filter($records, fn (array $record) => ! ($record['expires_at'] ?? null) || ! Carbon::parse($record['expires_at'])->isPast());
+
+            Validator::validate($unexpired, ['*.user' => ['required'], '*.user.*' => ['prohibited']]);
+        } catch (ErrorException|InvalidArgumentException|TypeError|ValidationException $e) {
             $this->problem('tokens.yaml is corrupt or unreadable ('.$e->getMessage().') — authentication fails closed. Restore it from backup, or delete it and re-issue tokens with: php please mcp:token you@site.com');
 
             return;
         }
 
+        try {
+            $orphaned = count(array_filter($unexpired, fn (array $record) => ! User::find($record['user'])));
+        } catch (ErrorException|InvalidArgumentException|PDOException $e) {
+            $this->problem('Could not look up the users in tokens.yaml ('.$e->getMessage().') — the file itself is fine. Fix the user store and run this again.');
+
+            return;
+        }
+
         $total = count($records);
+        $expired = $total - count($unexpired);
+        $active = count($unexpired) - $orphaned;
 
         $breakdown = implode(', ', array_filter([
             $expired ? $expired.' expired' : null,
@@ -246,8 +271,6 @@ class Doctor extends Command
         if ($total === 0) {
             $this->warn('[WARN] No tokens issued — the endpoint is a locked door. Run: php please mcp:token you@site.com');
         } elseif ($active === 0) {
-            // Dead tokens are worse than none: everything looks issued while
-            // every request 401s.
             $this->warn("[WARN] {$total} token(s) issued but none are active ({$breakdown}) — the endpoint is a locked door. Run: php please mcp:token you@site.com");
         } elseif ($active === $total) {
             $this->info('[ OK ] '.$total.' token(s) issued.');
@@ -256,36 +279,6 @@ class Doctor extends Command
         }
     }
 
-    /**
-     * Active means the authentication middleware would accept it: unexpired
-     * AND its user still exists.
-     *
-     * @param  array<string, array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}>  $records
-     * @return array{0: int, 1: int, 2: int} [active, expired, orphaned]
-     */
-    protected function classifyTokens(array $records): array
-    {
-        $active = $expired = $orphaned = 0;
-
-        foreach ($records as $record) {
-            if (($record['expires_at'] ?? null) && Carbon::parse($record['expires_at'])->isPast()) {
-                $expired++;
-            } elseif (! User::find($record['user'])) {
-                $orphaned++;
-            } else {
-                $active++;
-            }
-        }
-
-        return [$active, $expired, $orphaned];
-    }
-
-    /**
-     * Mirrors AuthenticateOAuth's preflight (same prerequisites, same remedy
-     * texts) but never short-circuits — every missing piece is named at once.
-     * No user-repository check on purpose: OAuth mode works with file users
-     * and Eloquent users alike, via the addon's own guard.
-     */
     protected function checkOAuth(): void
     {
         $passportInstalled = $this->prereqs->passportInstalled();
@@ -296,8 +289,6 @@ class Doctor extends Command
             $this->problem("Laravel Passport is not installed. Run 'composer require laravel/passport' and follow the OAuth setup in the statamic-mcp README, or switch to token mode ('auth' => 'token').");
         }
 
-        // The remaining checks presuppose Passport (keys, tables, view
-        // binding) — the [FAIL] above owns the remedy; more would be noise.
         if (! $passportInstalled) {
             return;
         }
@@ -309,9 +300,6 @@ class Doctor extends Command
 
     protected function checkPassportKeys(): void
     {
-        // Named first: an undecryptable stored key looks exactly like a
-        // missing one, and the missing-keys remedy (provision a fresh pair)
-        // would silently 401 every connected client.
         if ($this->prereqs->passportKeysUndecryptable()) {
             $this->problem("Passport's stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the row in '".KeyStore::TABLE."' to let a fresh pair provision (every connected client must then reconnect).");
 
@@ -346,12 +334,6 @@ class Doctor extends Command
         $this->info("[ OK ] Passport tables exist and user_id columns fit Statamic's ids.");
     }
 
-    /**
-     * Passport 12+ ships no default consent view and never binds
-     * AuthorizationViewResponse, so /oauth/authorize 500s ("Target [...] is not
-     * instantiable") the moment a connector reaches consent — while every other
-     * check stays green.
-     */
     protected function checkAuthorizationView(): void
     {
         if ($this->prereqs->authorizationViewBound()) {

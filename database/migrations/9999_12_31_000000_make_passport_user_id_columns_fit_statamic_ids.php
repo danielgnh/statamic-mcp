@@ -4,25 +4,10 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * Passport's stock tables give user_id a bigint column, but Statamic ids are
- * UUID strings for file users (and for Eloquent users imported from files).
- * Convert user_id to string(36) wherever a Passport table carries one —
- * integer ids from a stock Eloquent install still fit, so the change is safe
- * on every setup. Loaded only in OAuth mode.
- *
- * Dated far ahead on purpose: vendor:publish stamps Passport's migrations
- * with the moment they are published, so this one must sort after whatever
- * date that is, or it runs before their tables exist and does nothing.
- *
- * One-way on purpose: reverting to bigint would truncate UUID rows.
- */
 return new class extends Migration
 {
     public function up(): void
     {
-        // No ->index() here: Passport's original migrations already created
-        // the user_id indexes, and they survive the column type change.
         $columns = [
             'oauth_auth_codes' => fn (Blueprint $table) => $table->string('user_id', 36)->change(),
             'oauth_access_tokens' => fn (Blueprint $table) => $table->string('user_id', 36)->nullable()->change(),
@@ -38,7 +23,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Intentionally empty — see the class comment.
+        //
     }
 
     protected function needsConversion(string $table): bool

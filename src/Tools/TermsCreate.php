@@ -70,8 +70,6 @@ class TermsCreate extends Tool
             throw new ToolException($this->notFoundMessage('taxonomy', $taxonomyHandle, $this->exposedHandles('taxonomies')));
         }
 
-        // A term's origin locale is the taxonomy's FIRST configured site
-        // (Term::defaultLocale()), not necessarily the global default site.
         $defaultSite = $taxonomy->sites()->first();
 
         if (($site = $validated['site'] ?? null) && $site !== $defaultSite) {
@@ -82,9 +80,6 @@ class TermsCreate extends Tool
             ));
         }
 
-        // CP parity (TermPolicy::store gates the target site): the created
-        // term lives in the origin site, so the user must be able to access
-        // it.
         $this->ensureSiteAccess($user, $defaultSite);
 
         $blueprint = $taxonomy->termBlueprint();
@@ -97,20 +92,10 @@ class TermsCreate extends Tool
 
         $data = Sets::withoutUnaddressableIds($blueprint->fields(), $data);
 
-        // Resolve the slug BEFORE blueprint validation: v6 injects a required
-        // 'slug' field into term blueprints, and the CP satisfies it by
-        // validating the request's slug value alongside the data — feed the
-        // resolved slug in the same way.
         $slug = $this->resolveSlug($validated['slug'] ?? null, $data);
 
-        // The CP's term store path (TermsController@store, 6.x) passes no rule
-        // placeholder replacements — slug uniqueness is its own explicit rule
-        // there, and our collision check below covers it.
         $data = $this->processAgainstBlueprint($blueprint, [...$data, 'slug' => $slug], array_keys($data));
 
-        // The id IS taxonomy::slug, so the collision check doubles as the
-        // uniqueness rule — and a collided save would silently OVERWRITE the
-        // existing term rather than fail.
         if ($existing = Term::find("{$taxonomyHandle}::{$slug}")) {
             throw new ToolException(sprintf(
                 "term '%s' already exists — use terms_update with id '%s'",
@@ -122,9 +107,6 @@ class TermsCreate extends Tool
         $term = Term::make()->taxonomy($taxonomyHandle)->slug($slug);
         $localized = $term->in($defaultSite)->data($data);
 
-        // CP parity: created terms carry updated_by/updated_at. save()
-        // returns false when a TermCreating/TermSaving listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $localized->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener — nothing was created');
         }
@@ -134,8 +116,6 @@ class TermsCreate extends Tool
             'taxonomy' => $taxonomyHandle,
             'slug' => $slug,
             'site' => $defaultSite,
-            // Terms have no draft state — a created term
-            // is live immediately.
             ...$this->liveness($localized, self::LIVENESS_CREATED),
         ]);
     }
@@ -151,10 +131,6 @@ class TermsCreate extends Tool
             $slug = is_string($title) ? $title : '';
         }
 
-        // Term::slug() re-normalizes through Str::slug() on set — language-
-        // agnostic, unlike entries' site-language Routable::slug() — so run
-        // the exact same call here: the collision check must see what will
-        // actually be persisted as the id.
         $slug = Str::slug($slug);
 
         if ($slug === '') {

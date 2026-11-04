@@ -29,6 +29,15 @@ it('round-trips the private key and stores it encrypted at rest', function () {
         ->and($store->has())->toBeTrue();
 });
 
+it('lets a failure other than a wrong key through, because only a wrong key means undecryptable', function () {
+    OAuthFixtures::migrateKeyStore();
+    (new KeyStore)->put(OAuthFixtures::rsaPrivateKey());
+
+    Crypt::shouldReceive('decryptString')->andThrow(new RuntimeException('not about the key'));
+
+    expect(fn () => (new KeyStore)->get())->toThrow(RuntimeException::class, 'not about the key');
+});
+
 it('returns null and has() false when no key is stored', function () {
     OAuthFixtures::migrateKeyStore();
 

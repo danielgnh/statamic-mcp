@@ -9,18 +9,6 @@ use Statamic\Facades\Entry;
 
 trait ResolvesEntries
 {
-    /**
-     * Exposure, site-match, and site-access checks in one place — every
-     * id-based entry lookup must go through here so none of them can become
-     * a site-permission bypass. Requires ResolvesSites (ensureSiteAccess()).
-     *
-     * Missing and exists-but-unexposed are indistinguishable by design.
-     * A supplied $site must match the entry's own
-     * site — selecting a localization by site is the collection + slug
-     * lookup's job. The mismatch check runs before the site-access check on
-     * purpose: the access denial names the site anyway, so erroring earlier
-     * with the sibling localization ids reveals nothing the denial wouldn't.
-     */
     protected function findExposedEntry(string $id, UserContract $user, ?string $site = null): EntryContract
     {
         $entry = Entry::find($id);

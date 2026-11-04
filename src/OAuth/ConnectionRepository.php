@@ -9,22 +9,8 @@ use Illuminate\Support\Facades\Schema;
 use Laravel\Passport\Passport;
 use Laravel\Passport\Token;
 
-/**
- * Derives connector "connections" — (user, client) pairs — live from
- * Passport's tables; the addon stores nothing. Every public method degrades
- * to an empty result when the OAuth prerequisites are missing, so the CP
- * utility page renders (with a remedy alert) on a half-configured site
- * instead of 500ing. Model classes come from Passport's accessors, so apps
- * that customize them stay supported.
- */
 class ConnectionRepository
 {
-    /**
-     * The same prerequisites AuthenticateOAuth preflights and mcp:doctor
-     * checks — delegated to OAuthPrerequisites so the three can never drift —
-     * plus the migrated table: oauth mode switched on before `php artisan
-     * migrate` must not break the page.
-     */
     public function ready(): bool
     {
         return app(OAuthPrerequisites::class)->passportInstalled()
@@ -32,13 +18,6 @@ class ConnectionRepository
     }
 
     /**
-     * One row per (user, client) pair, newest activity first. 'active'
-     * answers "can this connector still get in?" — a live refresh token
-     * counts even when every access token has expired, because the refresh
-     * grant needs no re-consent; but a revoked access token kills its
-     * refresh token too (Passport checks both rows), so revoked never
-     * counts.
-     *
      * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool}>
      */
     public function all(): Collection
@@ -85,19 +64,11 @@ class ConnectionRepository
     }
 
     /**
-     * The set of "{user_id}|{client_id}" pairs that still have a way in,
-     * resolved in the database so the scan is bounded by live tokens, never
-     * the whole history. A pair is active when it holds a token that is not
-     * revoked AND (not expired, OR backed by a live refresh token) — the same
-     * predicate the old in-PHP usable() applied, one Passport row at a time.
-     *
      * @param  class-string<Token>  $tokenModel
      * @return Collection<non-falsy-string, int> flipped for O(1) has() lookups
      */
     protected function activePairKeys(string $tokenModel): Collection
     {
-        // Non-revoked, unexpired refresh tokens keep an otherwise-expired
-        // access token alive (the refresh grant needs no re-consent).
         $refreshModel = Passport::refreshTokenModel();
         $liveRefreshTokenIds = $refreshModel::query()
             ->where('revoked', false)
@@ -117,12 +88,6 @@ class ConnectionRepository
             ->flip();
     }
 
-    /**
-     * Revokes every access token for the pair AND each token's refresh
-     * tokens — revoking only access tokens would leave a silent way back in
-     * via the refresh grant. Returns false when the pair has no tokens at
-     * all (the controller 404s); an already-dead pair is a successful no-op.
-     */
     public function disconnect(string $userId, string $clientId): bool
     {
         if (! $this->ready()) {

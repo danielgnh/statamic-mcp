@@ -14,11 +14,6 @@ use Statamic\Fieldtypes\Replicator;
 use Statamic\Fieldtypes\RowId;
 use Stringable;
 
-/**
- * The sets (page builder blocks) of a Replicator or Bard field. Reads both
- * config formats: grouped sets, and the legacy flat list that
- * Replicator::flattenedSetsConfig() detects the same way.
- */
 class Sets
 {
     /**
@@ -54,11 +49,6 @@ class Sets
         return $sets;
     }
 
-    /**
-     * Whether the field stores a list Statamic stamps ids on, so single sets
-     * can be addressed by id: a Replicator's sets or a Grid's rows. Bard
-     * extends Replicator but keeps its sets inside ProseMirror nodes.
-     */
     public static function addressable(?Field $field): bool
     {
         $fieldtype = $field?->fieldtype();
@@ -66,11 +56,6 @@ class Sets
         return ($fieldtype instanceof Replicator || $fieldtype instanceof Grid) && ! $fieldtype instanceof Bard;
     }
 
-    /**
-     * Whether a large value is read as an index of its sets: Replicators,
-     * whose sets have a type and text to preview. A Grid's rows read like a
-     * table, where an index of ids saves little.
-     */
     public static function indexed(Field $field): bool
     {
         return self::addressable($field) && ! $field->fieldtype() instanceof Grid;
@@ -81,17 +66,12 @@ class Sets
         return app(RowId::class)->handle();
     }
 
-    /**
-     * What one item of the field is called in errors and previews.
-     */
     public static function noun(Field $field): string
     {
         return $field->fieldtype() instanceof Grid ? 'row' : 'set';
     }
 
     /**
-     * The keys Statamic stores beside a set's fields.
-     *
      * @return list<string>
      */
     public static function reservedKeys(Field $field): array
@@ -102,8 +82,6 @@ class Sets
     }
 
     /**
-     * The set's own fields, which a Replicator keys by set type.
-     *
      * @param  array<string, mixed>  $set
      */
     public static function fieldsOf(Field $field, array $set): Fields
@@ -136,7 +114,7 @@ class Sets
 
     /**
      * @param  list<mixed>  $sets
-     * @param  list<int>  $new  the positions of the sets the list adds
+     * @param  list<int>  $new
      * @return list<mixed>
      */
     public static function withoutUnaddressableIdsAt(Field $field, array $sets, array $new): array
@@ -168,13 +146,8 @@ class Sets
     }
 
     /**
-     * The position of the set with that id. The id 0 is refused: an object
-     * whose keys start at 0 is a list to PHP, so {"0": {...}} could never
-     * round-trip as a set patch. Every other id, digits included, is a
-     * string key.
-     *
      * @param  array<int, mixed>  $sets
-     * @param  array<array-key, list<int>>  $positions  positionsById($sets)
+     * @param  array<array-key, list<int>>  $positions
      */
     public static function find(Field $field, array $sets, array $positions, string $id, string $path): int
     {

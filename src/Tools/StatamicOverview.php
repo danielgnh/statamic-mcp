@@ -37,7 +37,7 @@ class StatamicOverview extends Tool
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
-        return []; // zero parameters
+        return [];
     }
 
     protected function execute(Request $request): Response
@@ -82,8 +82,6 @@ class StatamicOverview extends Tool
                 'locale' => $site->locale(),
             ];
 
-            // The same predicate ensureSiteAccess enforces, so the model is
-            // never offered a site it will be denied on (single-site: no flag).
             if ($multisite) {
                 $shape['can_access'] = $this->canAccessSite($user, $site->handle());
             }
@@ -132,8 +130,6 @@ class StatamicOverview extends Tool
                     $resource['can_delete'] = $this->can($user, "delete {$handle} entries");
                 }
 
-                // The same author rule the entry tools enforce: with an author
-                // field, entries you are not an author of need these instead.
                 if ($blueprints->contains(fn ($blueprint) => $blueprint->hasField('author'))) {
                     $resource['can_edit_other_authors'] = $this->can($user, "edit other authors {$handle} entries");
                     $resource['can_publish_other_authors'] = $this->can($user, "publish other authors {$handle} entries");
@@ -165,7 +161,6 @@ class StatamicOverview extends Tool
                     'handle' => $handle,
                     'title' => $taxonomy->title(),
                     'blueprints' => $taxonomy->termBlueprints()->map->handle()->values()->all(),
-                    // no can_publish: v6 has no 'publish {taxonomy} terms' permission — terms have no status
                     'can_create' => $this->can($user, "create {$handle} terms"),
                     'can_edit' => $this->can($user, "edit {$handle} terms"),
                 ];
@@ -188,12 +183,11 @@ class StatamicOverview extends Tool
         $sets = GlobalSet::all()->keyBy->handle();
 
         return $this->sortedExposed('globals')
-            // v6 has no 'view {global} globals' permission — the CP itself gates viewing on edit
             ->filter(fn (string $handle) => $this->can($user, "edit {$handle} globals"))
             ->map(fn (string $handle) => [
                 'handle' => $handle,
                 'title' => $sets->get($handle)->title(),
-                'can_edit' => true, // the visibility filter above IS the edit-permission check
+                'can_edit' => true,
             ])
             ->values()
             ->all();
@@ -212,8 +206,6 @@ class StatamicOverview extends Tool
                 $resource = [
                     'handle' => $handle,
                     'title' => $containers->get($handle)->title(),
-                    // no allow_uploads flag: v6 has no per-container upload
-                    // toggle — the upload permission is the whole gate
                     'can_upload' => $this->can($user, "upload {$handle} assets"),
                     'can_edit' => $this->can($user, "edit {$handle} assets"),
                 ];
@@ -259,10 +251,6 @@ class StatamicOverview extends Tool
     }
 
     /**
-     * Reading takes the per-form view permission or the configure forms
-     * umbrella, the way Statamic's form policies decide it; there is no
-     * edit flag because nothing edits a submission, in the CP either.
-     *
      * @return array<int, array<string, mixed>>
      */
     private function forms(UserContract $user): array
@@ -277,7 +265,6 @@ class StatamicOverview extends Tool
                 $resource = [
                     'handle' => $handle,
                     'title' => $form->title(),
-                    // store: false forms send their email and keep nothing
                     'stores_submissions' => $form->store(),
                     'submissions' => FormSubmission::query()->where('form', $handle)->count(),
                 ];

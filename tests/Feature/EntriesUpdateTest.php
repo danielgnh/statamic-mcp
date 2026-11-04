@@ -1115,3 +1115,41 @@ it('refuses a value of its own for a field that is not localizable on a localiza
     expect(Entry::find($localization->id())->get('title'))->toBe('Hallo')
         ->and(Entry::find($localization->id())->value('hero_image'))->toBe('hallo.jpg');
 });
+
+it('answers with the staged url and leaves the live url alone, because Statamic caches URIs by entry id', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = makeUpdatableBlogEntry();
+    $liveUri = $entry->uri();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [], 'slug' => 'renamed'])
+        ->assertOk()
+        ->assertSee('/blog/renamed');
+
+    expect($entry->uri())->toBe($liveUri);
+});
+
+it('does not count an entry against itself for a unique value, so updating any of its fields still passes', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    tap(Collection::make('products')->title('Products')->sites(['en'])->routes('/products/{slug}'))->save();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text', 'validate' => 'required'],
+        'sku' => ['type' => 'text', 'validate' => ['new \Statamic\Rules\UniqueEntryValue({collection}, {id}, {site})']],
+    ])->setHandle('product')->setNamespace('collections.products')->save();
+
+    $entry = tap(
+        Entry::make()->collection('products')->slug('first')->data(['title' => 'First', 'sku' => 'ABC-1'])->published(true)
+    )->save();
+
+    Server::actingAs(Fixtures::makeUser('edit products entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed']])
+        ->assertOk();
+});

@@ -2,7 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Tokens;
 
-use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -10,17 +9,6 @@ use Illuminate\Support\Str;
 use Statamic\Contracts\Auth\User;
 use Statamic\Facades\YAML;
 
-/**
- * Every mutation serializes the FULL read-modify-write behind Cache::lock —
- * CLI commands and the CP utility can write concurrently, and interleaved
- * revoke() + issue() must never write back pre-revoke state and resurrect a
- * token. Mutual exclusion is only as good as the default cache store: it must
- * support atomic locks and be shared by every writer (array/null stores, or
- * per-server caches in front of a shared tokens.yaml, degrade to no
- * cross-process locking). Lock acquisition fails closed (LockTimeoutException,
- * nothing written); the torn-write failure mode also fails closed: corrupt
- * YAML breaks authentication, it never opens it up.
- */
 class TokenRepository
 {
     public function __construct(protected int $lockWaitSeconds = 5) {}
@@ -68,9 +56,6 @@ class TokenRepository
     }
 
     /**
-     * Returns the raw record regardless of expiry — expiry is enforced by the
-     * authentication middleware.
-     *
      * @return array{user: string, name: ?string, hash: string, created_at: string, expires_at: ?string}|null
      */
     public function find(string $tokenId): ?array
@@ -100,8 +85,6 @@ class TokenRepository
      *
      * @param  callable(): T  $operation
      * @return T
-     *
-     * @throws LockTimeoutException fail closed — no partial write
      */
     protected function withLock(callable $operation): mixed
     {
@@ -131,7 +114,7 @@ class TokenRepository
         $directory = dirname($this->path());
 
         File::ensureDirectoryExists($directory, 0700);
-        File::chmod($directory, 0700); // mkdir's mode is umask-subject; chmod is not
+        File::chmod($directory, 0700);
 
         File::put($this->path(), YAML::dump($tokens), lock: true);
         File::chmod($this->path(), 0600);

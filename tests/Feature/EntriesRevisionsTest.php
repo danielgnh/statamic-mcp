@@ -324,3 +324,29 @@ it('reports the staged slug with its own URL when it stages a working copy', fun
 
     expect(Entry::find($entry->id())->url())->toBe('/blog/live-post');
 });
+
+it('keeps staging while the entry is live, even when its working copy was staged as unpublished', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions();
+
+    $entry = tap(
+        Entry::make()
+            ->collection('blog')
+            ->slug('live-post')
+            ->data(['title' => 'Live Title', 'hero_image' => 'hero.jpg'])
+            ->published(true)
+    )->save();
+
+    $user = Fixtures::makeUser('edit blog entries');
+
+    (clone $entry)->published(false)->makeWorkingCopy()->user($user)->save();
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Edited Title']])
+        ->assertOk()
+        ->assertSee('working copy amended — live entry unchanged');
+
+    expect(Entry::find($entry->id())->get('title'))->toBe('Live Title');
+});

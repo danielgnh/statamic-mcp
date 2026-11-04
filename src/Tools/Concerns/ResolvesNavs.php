@@ -12,11 +12,6 @@ use Statamic\Support\Arr;
 
 trait ResolvesNavs
 {
-    /**
-     * Call after ensureExposed(): it checked the handle against Nav::all(),
-     * but the index and the item fetch can drift (a deploy deleting the
-     * navigation under a warm Stache), so a miss gets the same not-found shape.
-     */
     protected function findNav(string $handle): NavContract
     {
         return Nav::find($handle)
@@ -24,10 +19,6 @@ trait ResolvesNavs
     }
 
     /**
-     * A navigation exists in the sites it has a tree for. One without any
-     * tree yet (defined in YAML, or made in code) counts as a default-site
-     * navigation, the site the CP creates its first tree in.
-     *
      * @return Collection<int, string>
      */
     protected function navSites(NavContract $nav): Collection
@@ -49,10 +40,6 @@ trait ResolvesNavs
     }
 
     /**
-     * The stored branches, plus a 'resolved' block on entry branches: the
-     * entry's own title, url, and status, for reading the menu. It is never
-     * stored — navigations_update ignores it, so the tree round-trips as is.
-     *
      * @param  array<int, array<string, mixed>>  $branches
      * @param  list<string>|null  $exposed
      * @return list<array<string, mixed>>

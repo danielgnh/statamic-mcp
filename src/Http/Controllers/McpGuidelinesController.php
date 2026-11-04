@@ -9,10 +9,6 @@ use Statamic\CP\PublishForm;
 use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 
-/**
- * The Guidelines page under Tools → MCP. Only super admins reach it: what agents
- * read here shapes everything they write on the site.
- */
 class McpGuidelinesController extends CpController
 {
     public function edit(AgentGuidelines $guidelines): View

@@ -57,10 +57,6 @@ class EntriesPublish extends Tool
             ]);
         }
 
-        // CP parity (PublishedEntriesController@store, 6.x): Publishable::
-        // publish() flips the flag on plain collections and, with revisions,
-        // publishes the working copy with an attributed 'publish' revision.
-        // Both paths return false when a listener cancels the save.
         $live = $entry->publish(['user' => $user, 'message' => 'via MCP entries_publish']);
 
         if ($live === false) {
