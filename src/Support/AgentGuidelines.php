@@ -10,12 +10,6 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Fields\Blueprint as BlueprintInstance;
 use Statamic\Globals\GlobalSet as GlobalSetInstance;
 
-/**
- * Guidelines for agents live in the addon's settings, under the guidelines
- * key, and super admins edit them under Tools → MCP → Guidelines. The site
- * text holds voice and tone for every agent; each row of resources names
- * collections and taxonomies and says how their entries are put together.
- */
 class AgentGuidelines
 {
     public function site(): ?string
@@ -24,8 +18,6 @@ class AgentGuidelines
     }
 
     /**
-     * The enabled rows naming this resource, in their order.
-     *
      * @param  'collections'|'taxonomies'|'globals'|'forms'|'navigations'  $type
      */
     public function for(string $type, string $handle): ?string
@@ -43,9 +35,6 @@ class AgentGuidelines
     }
 
     /**
-     * The stored values as written, without the Antlers rendering Statamic
-     * applies to every addon setting.
-     *
      * @return array<string, mixed>
      */
     public function values(): array
@@ -61,9 +50,6 @@ class AgentGuidelines
         $this->settings()->set('guidelines', $values)->save();
     }
 
-    /**
-     * Neither a site text nor a row, even after a Save with nothing in it.
-     */
     public function isEmpty(): bool
     {
         return $this->isBlank($this->values());
@@ -74,11 +60,6 @@ class AgentGuidelines
         return Blueprint::make('mcp_guidelines')->setContents($this->contents());
     }
 
-    /**
-     * The global set 0.6.0 kept guidelines in, while one is left: the set the
-     * old config key names, with a blueprint of exactly the two guideline
-     * fields. A set by that name with other fields is the site's own.
-     */
     public function leftoverSet(): ?GlobalSetInstance
     {
         $set = GlobalSet::find((string) config('statamic.mcp.guidelines', 'guidelines'));
@@ -93,8 +74,6 @@ class AgentGuidelines
     }
 
     /**
-     * What the 0.6.0 set holds for its first site, the only one 0.6.0 read.
-     *
      * @return array<string, mixed>
      */
     public function leftoverValues(): array
@@ -110,11 +89,6 @@ class AgentGuidelines
     }
 
     /**
-     * Until mcp:guidelines moves a 0.6.0 site's guidelines, agents keep
-     * reading them from the global set, so updating never leaves them without.
-     * A settings file edited by hand can fail to load; agents then work
-     * without guidelines rather than not at all.
-     *
      * @return array<string, mixed>
      */
     private function forAgents(): array

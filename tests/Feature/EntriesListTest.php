@@ -235,3 +235,18 @@ it("requires 'access {site} site' on multisite, the default site included", func
         ->assertOk()
         ->assertSee('"total":0');
 });
+
+it('breaks a date tie by id, so pages never repeat or skip an entry', function () {
+    Fixtures::site();
+
+    tap(Collection::make('news')->title('News')->dated(true)->sites(['en'])->routes('/news/{slug}'))->save();
+
+    Entry::make()->id('bbb')->collection('news')->slug('a-story')->date('2026-01-01')->data(['title' => 'A'])->published(true)->save();
+    Entry::make()->id('aaa')->collection('news')->slug('b-story')->date('2026-01-01')->data(['title' => 'B'])->published(true)->save();
+
+    Server::actingAs(Fixtures::makeUser('view news entries'))
+        ->tool(EntriesList::class, ['collection' => 'news', 'limit' => 1, 'page' => 1])
+        ->assertOk()
+        ->assertSee('b-story')
+        ->assertDontSee('a-story');
+});

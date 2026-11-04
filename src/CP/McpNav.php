@@ -5,10 +5,6 @@ namespace Danielgnh\StatamicMcp\CP;
 use Statamic\Facades\CP\Nav;
 use Statamic\Facades\User;
 
-/**
- * Tools → MCP for everyone with Access MCP, with its pages listed under it
- * the way Utilities lists its own. Guidelines is for super admins only.
- */
 class McpNav
 {
     public static function register(): void

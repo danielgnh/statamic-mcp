@@ -57,6 +57,13 @@ it('rejects an oversized authorization header before parsing', function () {
         ->assertStatus(401);
 });
 
+it('never looks a token up for an oversized header, so a huge header costs no file read or hashing', function () {
+    $this->mock(TokenRepository::class)->shouldNotReceive('find');
+
+    $this->postJson('/mcp-auth-probe', [], ['Authorization' => 'Bearer mcp_abcdefghijkl_'.str_repeat('a', 300)])
+        ->assertStatus(401);
+});
+
 it('rejects an unknown token id', function () {
     $this->postJson('/mcp-auth-probe', [], ['Authorization' => 'Bearer mcp_unknownnnnnn_'.Str::random(40)])
         ->assertStatus(401);

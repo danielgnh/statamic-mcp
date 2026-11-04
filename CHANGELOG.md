@@ -23,6 +23,11 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 - **Tools → MCP opens on a page for choosing Connections or Guidelines.** Super
   admins used to land on Guidelines. Users who can only open Connections still
   go straight to it. Connections now comes first in the sidebar too.
+- **Only bad config keeps MCP off at boot.** A `route`, `server`, or
+  `middleware` value of the wrong shape still leaves the site up with MCP
+  unmounted and reports the failure. Any other exception while registering the
+  routes now surfaces, as it would from any other package, instead of quietly
+  turning MCP off.
 
 ### Fixed
 
@@ -48,6 +53,23 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 - **Code snippets on the Connections page follow the Control Panel's theme.**
   The Claude Code and Cursor snippets, in How to connect and on a newly created
   token, stayed dark in light mode.
+- **`mcp:doctor` no longer suggests deleting `tokens.yaml` when the user store
+  fails.** A failed user lookup was reported as a corrupt file. It now says the
+  file is fine and names the failure.
+- **An outage or a bug no longer reads as the agent's mistake.** A database
+  outage inside a fieldtype told the agent its value was bad, and an unexpected
+  error during a `source_url` download read as a bad URL. Neither was reported.
+  With `APP_DEBUG` off, both now reach your exception handler and the agent gets
+  `An internal server error occurred.`; with it on, `laravel/mcp` gives the
+  agent the raw message instead. A PHP error inside a fieldtype still names the
+  field for the agent and is now reported too, since it can be a bug as easily
+  as a bad value. A third-party fieldtype that throws a plain `Exception` on a
+  bad value now gives the agent the generic error; throw
+  `InvalidArgumentException` to keep a message that names the field.
+- **`mcp:doctor` names a `route`, `server`, or `middleware` config that can't
+  mount.** A `route` that wasn't a string crashed the command, and so did a
+  `server` class that couldn't load. A `middleware` entry that wasn't a string
+  passed as fine.
 
 ### Security
 
@@ -78,6 +100,11 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   public address of Azure's wire server. A site that downloads from one of
   these ranges on its own network now gets a refusal, and
   `uploads.source_allowlist` doesn't override it.
+- **A malformed `middleware` config no longer leaves the endpoint open.**
+  `'middleware' => [['throttle:60,1']]` failed after the route was registered,
+  so the endpoint stayed up without authentication: an anonymous caller could
+  initialize and list the tools. Tool calls still refused without a user. Any
+  entry that isn't a string now keeps the route unmounted.
 
 ## [1.0.0] - 2026-11-01
 

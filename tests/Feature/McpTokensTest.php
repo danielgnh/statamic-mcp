@@ -364,3 +364,14 @@ it('formats dates in the locale Carbon is set to, as the relative times beside t
         Carbon::setLocale('en');
     }
 });
+
+it('403s revoking a hand-edited token without an owner, instead of a 500 from the missing key', function () {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), "ownerless:\n  hash: x");
+
+    $this->actingAs(Fixtures::makeUser('access cp'))
+        ->deleteJson(cp_route('mcp.connections.tokens.destroy', 'ownerless'))
+        ->assertForbidden();
+
+    expect(app(TokenRepository::class)->all())->toHaveCount(1);
+});

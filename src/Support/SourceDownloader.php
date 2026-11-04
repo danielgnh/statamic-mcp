@@ -8,19 +8,12 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
+use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\HttpFoundation\IpUtils;
-use Throwable;
 
-/**
- * SSRF-guarded download of an agent-supplied source_url — the one
- * place this server makes outbound requests on model input. Fail-closed:
- * scheme, allowlist, and public-IP checks run per redirect hop, the
- * connection is pinned to the validated IP, and the byte cap is enforced
- * both mid-transfer and on the final body (Content-Length is advisory).
- */
 class SourceDownloader
 {
     private const int MAX_REDIRECTS = 3;
@@ -51,15 +44,19 @@ class SourceDownloader
     private const string NAT64_PREFIX = '64:ff9b::/96';
 
     /**
-     * @param  null|Closure(string): list<string>  $resolver  host => IPs; injectable so tests never hit real DNS
+     * @param  null|Closure(string): list<string>  $resolver
      */
     public function __construct(private readonly ?Closure $resolver = null) {}
 
     /**
-     * @return array{0: string, 1: string} [binary contents, basename derived from the final URL ('' when it has none)]
+     * @return array{0: string, 1: string}
      */
     public function download(string $url): array
     {
+        if (! function_exists('curl_exec')) {
+            throw new ToolException('source_url downloads need curl_exec, which this server has disabled — nothing was uploaded');
+        }
+
         $maxBytes = self::maxKilobytes() * 1024;
         $deadline = now()->addSeconds(self::TIMEOUT_SECONDS);
 
@@ -75,8 +72,6 @@ class SourceDownloader
                     throw new ToolException('source_url redirected without a Location header — nothing was uploaded');
                 }
 
-                // Relative Location headers resolve against the current URL;
-                // the next loop iteration re-runs every check on the result.
                 $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
 
                 continue;
@@ -96,18 +91,12 @@ class SourceDownloader
                 throw new ToolException('source_url returned an empty body — nothing was uploaded');
             }
 
-            // URL path segments are percent-encoded; decode so 'hero%20image.png'
-            // stages as 'hero image.png' before Statamic's filename sanitizer.
             return [$body, rawurldecode(basename((string) parse_url($url, PHP_URL_PATH)))];
         }
 
         throw new ToolException(sprintf('source_url redirected more than %d times — aborted', self::MAX_REDIRECTS));
     }
 
-    /**
-     * Scheme, allowlist, and DNS checks for one URL. Returns the IP the
-     * connection must be pinned to.
-     */
     private function validated(string $url): string
     {
         $parts = parse_url($url);
@@ -138,8 +127,6 @@ class SourceDownloader
             throw new ToolException(sprintf("could not resolve host '%s'", $host));
         }
 
-        // EVERY resolved address must be public — a single private A record
-        // on a multi-record host is an SSRF vector, not an edge case.
         foreach ($ips as $ip) {
             if (! $this->isPublicIp($ip)) {
                 throw new ToolException(sprintf(
@@ -155,7 +142,6 @@ class SourceDownloader
     /** @return list<string> */
     private function resolve(string $host): array
     {
-        // Literal IPs (including bracketed IPv6) skip DNS entirely.
         $literal = trim($host, '[]');
 
         if (filter_var($literal, FILTER_VALIDATE_IP) !== false) {
@@ -174,8 +160,6 @@ class SourceDownloader
 
     private function isPublicIp(string $ip): bool
     {
-        // NO_PRIV_RANGE: 10/8, 172.16/12, 192.168/16, fc00::/7.
-        // NO_RES_RANGE: 0/8, 127/8, 169.254/16, 240/4, ::1, ::, ::ffff:0:0/96, fe80::/10.
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
             return false;
         }
@@ -200,15 +184,10 @@ class SourceDownloader
 
         try {
             return Http::setHandler(new CurlHandler)->withOptions([
-                // Hops are revalidated by download()'s loop, never by curl.
                 'allow_redirects' => false,
                 'curl' => [CURLOPT_CONNECT_TO => [
                     sprintf('::%s:%d', str_contains($ip, ':') ? "[{$ip}]" : $ip, $port),
                 ]],
-                // Content-Length is advisory — abort mid-transfer at the cap.
-                // (Guzzle wraps callback throws; unwrapped in the catch below.
-                // Http::fake() never runs these — the body-length check in
-                // download() is the layer tests exercise.)
                 'on_headers' => function (ResponseInterface $response) use ($maxBytes): void {
                     if ((int) $response->getHeaderLine('Content-Length') > $maxBytes) {
                         throw $this->sizeLimitException();
@@ -220,12 +199,11 @@ class SourceDownloader
                     }
                 },
             ])->timeout($timeoutSeconds)->get($url);
-        } catch (Throwable $e) {
-            // Surface our own cap/guard exceptions from inside Guzzle wrappers.
-            for ($previous = $e; $previous instanceof Throwable; $previous = $previous->getPrevious()) {
-                if ($previous instanceof ToolException) {
-                    throw $previous;
-                }
+        } catch (HttpClientException $e) {
+            $onHeadersFailure = $e->getPrevious()?->getPrevious();
+
+            if ($onHeadersFailure instanceof ToolException) {
+                throw $onHeadersFailure;
             }
 
             $this->ensureTimeLeft($deadline);

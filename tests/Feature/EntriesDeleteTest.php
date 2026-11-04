@@ -6,8 +6,10 @@ use Danielgnh\StatamicMcp\Tools\EntriesDelete;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Laravel\Mcp\Request;
+use Statamic\Events\EntryDeleted;
 use Statamic\Events\EntryDeleting;
 use Statamic\Facades\Entry;
+use Statamic\Facades\Site;
 
 function makeDeletableBlogEntry(): Statamic\Contracts\Entries\Entry
 {
@@ -360,4 +362,59 @@ it("requires 'delete other authors blog entries' to delete someone else's entry,
 
     expect(Entry::find($theirs->id()))->not->toBeNull()
         ->and(Entry::find($mine->id()))->toBeNull();
+});
+
+it('names only the localizations still there when a cascade stops halfway, because the cached list still holds the deleted ones', function () {
+    Site::setSites([
+        'en' => ['name' => 'English', 'url' => '/', 'locale' => 'en_US'],
+        'at' => ['name' => 'Austrian', 'url' => '/at/', 'locale' => 'de_AT'],
+        'de' => ['name' => 'German', 'url' => '/de/', 'locale' => 'de_DE'],
+        'ch' => ['name' => 'Swiss', 'url' => '/ch/', 'locale' => 'de_CH'],
+    ]);
+    config(['statamic.system.multisite' => true, 'statamic.mcp.deletes' => true]);
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(
+        Entry::make()->collection('blog')->slug('doomed')->locale('en')->data(['title' => 'Doomed'])->published(true)
+    )->save();
+    $at = tap($origin->makeLocalization('at')->data(['title' => 'Dahin']))->save();
+    $de = tap($origin->makeLocalization('de')->data(['title' => 'Verloren']))->save();
+    $ch = tap($de->makeLocalization('ch')->data(['title' => 'Futsch']))->save();
+
+    Exceptions::fake();
+    Event::listen(EntryDeleting::class, fn (EntryDeleting $event) => $event->entry->locale() === 'ch' ? false : null);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesDelete::class, ['id' => $origin->id()])
+        ->assertHasErrors(["de => {$de->id()}", "ch => {$ch->id()}", '1 localization was already deleted'])
+        ->assertDontSee("at => {$at->id()}");
+
+    expect(Entry::find($at->id()))->toBeNull()
+        ->and(Entry::find($origin->id()))->not->toBeNull();
+});
+
+it('stops at an unknown failure when no localization survived it, instead of deleting the origin and claiming success', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    config(['statamic.mcp.deletes' => true, 'app.debug' => false]);
+
+    [$origin] = makeDeletableLocalizedPair();
+
+    Exceptions::fake();
+    Event::listen(EntryDeleted::class, function (EntryDeleted $event) {
+        if ($event->entry->locale() === 'de') {
+            throw new Exception('disk full');
+        }
+    });
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesDelete::class, ['id' => $origin->id()])
+        ->assertHasErrors(['An internal server error occurred.']);
+
+    expect(Entry::find($origin->id()))->not->toBeNull();
+
+    Exceptions::assertReported(fn (Exception $e) => $e->getMessage() === 'disk full');
 });

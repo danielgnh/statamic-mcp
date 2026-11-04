@@ -213,3 +213,15 @@ it('issues a token to a FILE user through the real authorize → consent → exc
     // chain never needed an Eloquent user.
     expect(Passport::token()->newQuery()->latest('created_at')->first()->user_id)->toBe($user->id());
 });
+
+it('rejects a token whose client was revoked, because revoking a connector must end its access', function () {
+    $user = tap(StatamicUser::make()->email('file-user@site.test')->makeSuper())->save();
+
+    $bearer = mintFileUserBearer($user->id(), ['mcp:use']);
+
+    Passport::clientModel()::query()->update(['revoked' => true]);
+
+    $this->withHeaders(['Authorization' => "Bearer {$bearer}"])
+        ->postJson('/mcp-oauth-probe')
+        ->assertStatus(401);
+});

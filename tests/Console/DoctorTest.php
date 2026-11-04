@@ -1,16 +1,20 @@
 <?php
 
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
+use Danielgnh\StatamicMcp\Tests\AutoloadsServerWithMissingParent;
 use Danielgnh\StatamicMcp\Tests\CachesRoutes;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\File;
 use Laravel\Passport\Passport;
+use Statamic\Facades\User;
+use Statamic\Yaml\ParseException;
 
-uses(CachesRoutes::class);
+uses(AutoloadsServerWithMissingParent::class, CachesRoutes::class);
 
 beforeEach(function () {
     // Other tests in the run may have issued tokens into the shared
@@ -111,6 +115,88 @@ it('fails without crashing when tokens.yaml parses to a scalar', function () {
         ->expectsOutputToContain('[FAIL] tokens.yaml is corrupt or unreadable')
         ->assertExitCode(1);
 });
+
+it('fails without crashing on a hand-edited token record', function (string $yaml) {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), $yaml);
+
+    $this->artisan('statamic:mcp:doctor')
+        ->expectsOutputToContain('[FAIL] tokens.yaml is corrupt or unreadable')
+        ->assertExitCode(1);
+})->with([
+    'an expiry that is not a date' => ["abc123:\n  user: someone\n  expires_at: not-a-date"],
+    'a record that is a string' => ['abc123: nope'],
+    'a record without a user' => ["abc123:\n  hash: x"],
+    'a user that is a list' => ["abc123:\n  user: [a, b]"],
+    'a file that is a number' => ['123'],
+]);
+
+it('never calls a hand-edited record corrupt when authentication can still read it, because the remedy is deleting the file', function (string $yaml, string $counted) {
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), $yaml);
+
+    Artisan::call('statamic:mcp:doctor');
+
+    expect(Artisan::output())
+        ->toContain($counted)
+        ->not->toContain('tokens.yaml is corrupt');
+})->with([
+    'a numeric user id' => ["abc123:\n  user: 7", '1 orphaned-user'],
+    'an expired record without a user' => ["abc123:\n  expires_at: '2020-01-01T00:00:00+00:00'", '1 expired'],
+]);
+
+it('blames the user store instead of tokens.yaml when it cannot look up the users, because re-issuing tokens would not help', function (Throwable $failure, string $cause) {
+    app(TokenRepository::class)->issue(Fixtures::makeUser());
+
+    User::shouldReceive('find')->andThrow($failure);
+
+    Artisan::call('statamic:mcp:doctor');
+
+    expect(Artisan::output())
+        ->toContain('[FAIL] Could not look up the users in tokens.yaml')
+        ->toContain($cause)
+        ->not->toContain('tokens.yaml is corrupt')
+        ->not->toContain('re-issue tokens');
+})->with([
+    'a database that is down' => fn () => [new QueryException('mysql', 'select * from users', [], new PDOException('Connection refused')), 'Connection refused'],
+    'a connection that is not configured' => fn () => [new InvalidArgumentException('Database connection [users] not configured.'), 'not configured'],
+    'a user file that does not parse' => fn () => [new ParseException('Malformed inline YAML'), 'Malformed inline YAML'],
+]);
+
+it('names a server class that cannot load instead of crashing on it', function () {
+    config(['statamic.mcp.server' => 'ServerWithMissingParent']);
+
+    expect(Artisan::call('statamic:mcp:doctor'))->toBe(1);
+
+    expect(Artisan::output())->toContain("[FAIL] Configured server 'ServerWithMissingParent' cannot load");
+});
+
+it('names a route config that cannot mount instead of crashing on it', function (mixed $route, string $given) {
+    config(['statamic.mcp.route' => $route]);
+
+    expect(Artisan::call('statamic:mcp:doctor'))->toBe(1);
+
+    expect(Artisan::output())->toContain("[FAIL] Configured route '{$given}' is not a path");
+})->with([
+    'null' => [null, 'null'],
+    'a list' => [['mcp'], 'array'],
+    'empty' => ['', ''],
+    'a number' => [123, 'int'],
+]);
+
+it('names middleware config that cannot mount instead of passing over it', function (mixed $entry, string $given) {
+    config(['statamic.mcp.middleware' => [$entry]]);
+
+    expect(Artisan::call('statamic:mcp:doctor'))->toBe(1);
+
+    expect(Artisan::output())
+        ->toContain("[FAIL] Configured middleware has an entry of type {$given}, not a name")
+        ->not->toContain('[ OK ] Configured middleware resolves.');
+})->with([
+    'a list' => [['throttle:60,1'], 'array'],
+    'a number' => [123, 'int'],
+    'null' => [null, 'null'],
+]);
 
 it('warns the locked door when every token is expired', function () {
     $this->travelTo(now()->subDays(10));

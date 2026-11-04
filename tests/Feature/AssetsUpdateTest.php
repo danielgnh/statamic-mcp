@@ -152,3 +152,12 @@ it('reports saved metadata as saved on an asset whose filename holds braces', fu
         ->assertSee('no-op — merged data equals current data; nothing saved')
         ->assertSee('"cp_edit_url":null');
 });
+
+it('does not mistake a null-clear of a falsy value for a no-op', function () {
+    Asset::find('images::hero.png')->data(['alt' => 0])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit images assets'))
+        ->tool(AssetsUpdate::class, ['container' => 'images', 'path' => 'hero.png', 'data' => ['alt' => null]])
+        ->assertOk()
+        ->assertSee('updated — live');
+});

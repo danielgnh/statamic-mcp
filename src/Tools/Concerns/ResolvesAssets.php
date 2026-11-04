@@ -9,14 +9,6 @@ use Statamic\Facades\AssetContainer;
 
 trait ResolvesAssets
 {
-    /**
-     * Exposure check + fetch in one step. Deliberately not delegating to
-     * ensureExposed() — its message singularizes 'asset_containers' to
-     * 'asset_container' (underscore), whereas the human-facing wording here
-     * is 'asset container' (space). Exists-but-unexposed and missing are
-     * still indistinguishable by design: the error lists only
-     * exposed handles either way.
-     */
     protected function resolveContainer(string $handle): AssetContainerContract
     {
         $available = $this->exposedHandles('asset_containers');
@@ -45,23 +37,11 @@ trait ResolvesAssets
         return $asset;
     }
 
-    /**
-     * Nullable lookup — the honest signature. The contract PHPDocs asset() as
-     * returning a non-nullable Asset, but the concrete implementation
-     * (Statamic\Assets\AssetContainer::asset(), v6 source) returns null when
-     * the path doesn't exist; this wrapper is the one place that lie is
-     * corrected, so callers get a type PHPStan can reason about.
-     */
     protected function findAsset(AssetContainerContract $container, string $path): ?AssetContract
     {
         return $container->asset(ltrim($path, '/'));
     }
 
-    /**
-     * Normalized folder path or null for the container root. Forward slashes
-     * only, no traversal; nested folders ('blog/2026') are fine — Statamic
-     * folders are implicit, created by writing into them.
-     */
     protected function normalizeFolder(?string $folder): ?string
     {
         if ($folder === null) {
@@ -82,9 +62,6 @@ trait ResolvesAssets
     }
 
     /**
-     * The summary row shared by assets_list, assets_get, and assets_upload
-     * responses — enough to pick or reference an image without another call.
-     *
      * @return array<string, mixed>
      */
     protected function assetSummary(AssetContract $asset): array

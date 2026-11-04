@@ -73,13 +73,9 @@ class TermsGet extends Tool
             throw new ToolException("term '{$id}' not found — use terms_list with taxonomy '{$taxonomyHandle}' to see available terms");
         }
 
-        // Terms only exist in the taxonomy's own configured sites; a term id is
-        // stable across localizations, so site is a separate axis, not a match check.
         $site = $this->resolveSite($request, $user, $term->taxonomy()->sites());
 
         $localized = $term->in($site);
-        // The term's origin locale is the taxonomy's FIRST configured site
-        // (Term::defaultLocale()), not necessarily the global default site.
         $originSite = $term->taxonomy()->sites()->first();
         $format = $validated['format'] ?? 'raw';
         $blueprint = $localized->blueprint();
@@ -97,16 +93,9 @@ class TermsGet extends Tool
         if ($format === 'augmented') {
             $data = $this->augmentedData(Arr::except($localized->toAugmentedArray(), ['entries', 'entries_count']), $user);
         } else {
-            // raw: the round-trippable write shape — this site's own data
-            // overrides only. updated_at/updated_by are Statamic-managed
-            // metadata, stripped so agents can't round-trip stale values.
             $data = $localized->data()->except(['updated_at', 'updated_by'])->all();
 
             if ($site !== $originSite) {
-                // A term's localizations are data overrides within one term (the
-                // globals rule, not the entries rule): everything not overridden
-                // locally comes from the origin site's data — the taxonomy's
-                // first configured site.
                 $inherited = array_diff_key(
                     $term->in($originSite)->data()->except(['updated_at', 'updated_by'])->all(),
                     $data,
@@ -139,9 +128,6 @@ class TermsGet extends Tool
             $response['note'] = "data = this site's local overrides (the round-trippable shape for terms_update with site '{$site}'); inherited = values coming from the origin site (the taxonomy's first configured site)";
         }
 
-        // value('updated_at') so the fallback chain matches title() — a
-        // localized view inherits the origin's timestamp
-        // (terms_list uses the same chain). Never fileLastModified().
         $response['updated_at'] = ($timestamp = $localized->value('updated_at'))
             ? Carbon::createFromTimestamp($timestamp, config('app.timezone'))->toIso8601String()
             : null;

@@ -82,9 +82,6 @@ class BlueprintsGet extends Tool
 
         $this->ensureExposed($this->configKey($type), $handle);
 
-        // A blueprint is the field schema for a resource — gate reading it on the
-        // same native permission the content read tools require, so an exposed
-        // handle the user can't view doesn't leak its shape through this tool.
         $this->ensureCanRead($this->user($request), $type, $handle);
 
         $blueprints = $this->blueprintsFor($type, $handle);
@@ -128,17 +125,12 @@ class BlueprintsGet extends Tool
         foreach ($blueprint->fields()->all() as $field) {
             $descriptor = $this->describe($field);
 
-            // Only a field marked localizable can differ between sites:
-            // entries_localize, and entries_update on a localization, take
-            // no other field.
             if ($reportLocalizable) {
                 $descriptor['localizable'] = $field->isLocalizable();
             }
 
             $fields[] = $descriptor;
 
-            // computed fields are omitted from write processing (Fields::values()
-            // rejects visibility=computed) — never offer them as writable
             if ($field->visibility() === 'computed') {
                 $notes[$field->handle()] = 'computed — not writable';
 
@@ -176,11 +168,6 @@ class BlueprintsGet extends Tool
         return $this->json($payload);
     }
 
-    /**
-     * Viewing a resource's content gates reading its schema. Statamic's form
-     * policies grant 'configure forms' everything, which the concern mirrors
-     * and a plain permission check would miss.
-     */
     private function ensureCanRead(UserContract $user, string $type, string $handle): void
     {
         if ($type === 'form') {
@@ -192,11 +179,6 @@ class BlueprintsGet extends Tool
         $this->ensurePermission($user, $this->viewPermission($type, $handle));
     }
 
-    /**
-     * The native permission that gates viewing this resource's content — and
-     * therefore its schema. Mirrors statamic_overview / globals_get: v6 has no
-     * 'view {handle} globals', so edit is the only per-set gate for globals.
-     */
     private function viewPermission(string $type, string $handle): string
     {
         return match ($type) {
@@ -209,9 +191,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Blueprint fields the write tools take outside data and reject inside
-     * it, mapped to where they go.
-     *
      * @return array<string, string>
      */
     private function fieldsOutsideData(string $type, string $handle): array
@@ -243,9 +222,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Blueprints of the resource, keyed by blueprint handle. ensureExposed()
-     * already guaranteed the handle exists, so the lookups never return null.
-     *
      * @return SupportCollection<string, Blueprint>
      */
     private function blueprintsFor(string $type, string $handle): SupportCollection
@@ -274,8 +250,6 @@ class BlueprintsGet extends Tool
             'handle' => $field->handle(),
             'type' => $field->type(),
             'required' => $field->isRequired(),
-            // closure/Rule-object rules are not JSON-serializable; writes still enforce them.
-            // v6's injected title field carries 'required' twice (config flag + validate rule) — dedupe.
             'rules' => array_values(array_unique(array_filter($field->rules()[$field->handle()] ?? [], is_string(...)))),
         ];
 
@@ -325,10 +299,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * The tabs whose own or whose sections' instructions say how their fields
-     * go together, with the handles of those fields. Sections without
-     * instructions stay out, so a blueprint without any sends nothing.
-     *
      * @return array<int, array<string, mixed>>
      */
     private function describeTabs(Blueprint $blueprint): array
@@ -355,9 +325,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * A set as its field lists it: enough to pick one. Its fields come with
-     * a lookup by handle, see setPayload().
-     *
      * @param  array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}  $set
      * @return array<string, mixed>
      */
@@ -373,10 +340,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * One set with its fields, described recursively, and an example row
-     * with notes keyed by their path in it. Sets nested in the fields are
-     * listed by handle again, so every response stays one level deep.
-     *
      * @return array<string, mixed>
      */
     private function setPayload(Blueprint $blueprint, string $set): array
@@ -398,12 +361,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * The set a handle or path names. A handle is looked up everywhere in
-     * the blueprint, inside other sets too, and may turn up more than once
-     * (a section that offers the page builder's sections again). That is
-     * one answer while every match has the same fields, and an error naming
-     * the paths when they differ.
-     *
      * @return array{0: array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}, 1: array<int, array<string, mixed>>}
      */
     private function findSet(Blueprint $blueprint, string $set): array
@@ -432,10 +389,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Every set in these fields, keyed by its path of field and set handles
-     * (page_builder.section_combined.sections.section_hero), including sets
-     * inside other sets, grids, and groups.
-     *
      * @return array<string, array{handle: string, display: ?string, group: ?string, instructions: ?string, hidden: bool, fields: Fields}>
      */
     private function setsIn(Fields $fields, string $prefix = ''): array
@@ -469,10 +422,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * An example in the stored shape, plus notes keyed by their path in the
-     * example. A grid gets one row and a group one object, each built from
-     * the examples of its own fields.
-     *
      * @return array{0: mixed, 1: array<string, string>}
      */
     private function exampleFor(Field $field, string $path): array
@@ -485,10 +434,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Bounded example generation: real examples for a fixed
-     * set of fieldtypes, obviously-fake placeholders for relation fields, and
-     * a null + note fallback for everything else (replicator, bard, link, …).
-     *
      * @return array{0: mixed, 1: array<string, string>}
      */
     private function leafExample(Field $field, string $path): array
@@ -509,7 +454,6 @@ class BlueprintsGet extends Tool
             'float' => [3.14, null],
             'toggle' => [true, null],
             'date' => $this->dateExample($field),
-            // multi-selects store arrays
             'select' => $this->firstOption($field, wrapInArray: (bool) ($field->config()['multiple'] ?? false)),
             'radio', 'button_group' => $this->firstOption($field),
             'checkboxes' => $this->firstOption($field, wrapInArray: true),
@@ -537,10 +481,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * The fields of a set, grid row, or group as one example object, with
-     * their notes keyed by path. Computed fields stay out, like at the top
-     * level.
-     *
      * @return array{0: array<string, mixed>, 1: array<string, string>}
      */
     private function exampleObject(Fields $fields, string $path): array
@@ -568,9 +508,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * A set's fields only come with a lookup, so the example leaves the
-     * rows out and the note says how to get one.
-     *
      * @return array{0: ?array{}, 1: ?string}
      */
     private function replicatorExample(Field $field): array
@@ -610,10 +547,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Bard keeps a null example, and the note says HTML works (preProcess()
-     * converts it). With sets, it also shows what a set node looks like,
-     * since HTML cannot hold one.
-     *
      * @return array{0: null, 1: string}
      */
     private function bardExample(Field $field): array
@@ -631,20 +564,12 @@ class BlueprintsGet extends Tool
         )];
     }
 
-    /**
-     * The first set the CP offers editors, skipping hidden ones.
-     */
     private function firstSet(Field $field): ?string
     {
         return data_get(collect(Sets::of($field))->reject(fn (array $set) => $set['hidden'])->first(), 'handle');
     }
 
     /**
-     * A date example in the shape Statamic stores and entries_get returns:
-     * the field's own save format, which the fieldtype's process() produces
-     * from an ISO instant the same way it does for the CP's date picker.
-     * mode:range stores a start/end pair.
-     *
      * @return array{0: mixed, 1: ?string}
      */
     private function dateExample(Field $field): array
@@ -660,10 +585,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * First option of a select/radio/button_group/checkboxes field. Options
-     * may be an associative map (value => label), a plain list of values, or
-     * the list of key/value pairs the CP saves.
-     *
      * @return array{0: mixed, 1: ?string}
      */
     private function firstOption(Field $field, bool $wrapInArray = false): array
@@ -701,9 +622,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Relationship fields store a single id when max_items is 1 and a list
-     * otherwise (vendor Fieldtypes\Relationship::process).
-     *
      * @return array{0: mixed, 1: null}
      */
     private function relationshipExample(Field $field, string $placeholder): array
@@ -712,11 +630,6 @@ class BlueprintsGet extends Tool
     }
 
     /**
-     * Assets fields store paths relative to the field's container root —
-     * a single string when max_files is 1, a list otherwise (vendor
-     * Fieldtypes\Assets::process). Point the agent at the assets tools
-     * instead of the generic null fallback.
-     *
      * @return array{0: mixed, 1: string}
      */
     private function assetsFieldExample(Field $field): array

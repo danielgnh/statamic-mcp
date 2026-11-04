@@ -12,10 +12,11 @@ runtime.
 ## What doctor checks
 
 - **Kill switch and mounting** — is MCP enabled, and is the route actually mounted?
-  "Enabled but not mounted" means boot failed: the addon never bricks the host site,
-  it logs `Statamic MCP failed to mount; run php please mcp:doctor`, and until the
-  underlying exception is fixed, requests to the endpoint reach Statamic's frontend
-  route: a 404, or a 419 for a POST.
+  "Enabled but not mounted" means the `route`, `server`, or `middleware` config has the
+  wrong shape: the addon keeps the host site up, reports
+  `Statamic MCP failed to mount; run php please mcp:doctor` with the cause, and until the
+  config is fixed, requests to the endpoint reach Statamic's frontend route: a 404, or a
+  419 for a POST.
 - **Middleware** — every configured middleware entry must resolve to a class, alias,
   or group; a typo'd entry mounts fine and then 500s every request.
 - **APP_URL** — warns on the Laravel default (`http://localhost`) and on plain

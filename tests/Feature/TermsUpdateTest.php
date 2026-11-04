@@ -483,3 +483,15 @@ it('gives a new set a fresh id when its id is 0 or sent twice', function () {
         ->and($ids[0])->toBe('text0001')
         ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
 });
+
+it('does not mistake a null-clear of an empty-string value for a no-op', function () {
+    Fixtures::site();
+    makeTopicsTaxonomy();
+
+    $term = tap(Term::make()->taxonomy('topics')->slug('php')->data(['title' => 'PHP', 'description' => '']))->save();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(TermsUpdate::class, ['id' => $term->id(), 'data' => ['description' => null]])
+        ->assertOk()
+        ->assertSee('updated — live');
+});

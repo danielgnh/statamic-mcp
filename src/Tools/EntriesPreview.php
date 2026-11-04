@@ -50,8 +50,6 @@ class EntriesPreview extends Tool
 
         $collectionHandle = $entry->collection()->handle();
 
-        // CP parity (PreviewController@edit, 6.x): live preview authorizes
-        // 'update', which is EntryPolicy's edit check with its author rule.
         $this->ensureEntryPermission($user, 'edit', $entry);
 
         if (blank($entry->route())) {
@@ -63,17 +61,9 @@ class EntriesPreview extends Tool
             ));
         }
 
-        // The working copy is what the CP's edit form and entries_publish both
-        // start from. Without revisions fromWorkingCopy() returns the instance
-        // it is called on, so call it on a clone: the supplement must never
-        // reach the Stache instance.
         $item = (clone $entry)->fromWorkingCopy();
         $item->setSupplement('live_preview', true);
 
-        // uri() is memoized per entry id with the live URI, but the frontend
-        // serves the preview under the item's own URI, which a staged slug
-        // change moves. Forget it on both sides so the live entry never
-        // reports the staged URI afterwards.
         Blink::store('entry-uris')->forget($item->id());
         $targets = $item->previewTargets();
         Blink::store('entry-uris')->forget($item->id());
@@ -96,10 +86,6 @@ class EntriesPreview extends Tool
         ]);
     }
 
-    /**
-     * The shape the CP's Live Preview builds (PreviewController::getPreviewUrl,
-     * 6.x), so a frontend that handles CP previews handles these too.
-     */
     private function previewUrl(string $url, string $token): string
     {
         $url = URL::makeAbsolute($url);

@@ -427,6 +427,13 @@ it('downloads in a host app that configures immutable dates', function () {
     expect($contents)->toBe('PNGBYTES');
 });
 
+it('lets a programming error through, because only a transport failure is the fault of the url', function () {
+    Http::fake(fn () => throw new TypeError('a bug, not a bad url'));
+
+    expect(fn () => downloaderWithPublicDns()->download('https://images.example.com/a.png'))
+        ->toThrow(TypeError::class, 'a bug, not a bad url');
+});
+
 it('reports non-2xx responses as tool errors', function () {
     Http::fake(['https://images.example.com/*' => Http::response('gone', 404)]);
 

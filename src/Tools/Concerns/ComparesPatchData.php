@@ -8,11 +8,6 @@ use Danielgnh\StatamicMcp\Tools\ToolException;
 
 trait ComparesPatchData
 {
-    /**
-     * Recursively sort associative keys (list order is content, key order is
-     * not) so no-op detection can compare strictly: loose == would juggle
-     * null == '' and '1' == 1 into false no-ops, silently dropping writes.
-     */
     protected function normalize(mixed $value): mixed
     {
         if (! is_array($value)) {
@@ -29,14 +24,7 @@ trait ComparesPatchData
     }
 
     /**
-     * The one raw-path artifact an agent can accidentally round-trip: the
-     * truncated {__preview, truncated, note} shape the get tools substitute
-     * for long Bard/markdown values.
-     *
      * @param  array<string, mixed>  $data
-     * @param  string  $getTool  the tool to point the agent back to, e.g. 'entries_get'
-     * @param  bool  $supportsFields  whether $getTool has a fields parameter — globals_get
-     *                                does not, and the remedy must never fabricate one
      */
     protected function rejectPreviewObjects(array $data, string $getTool, bool $supportsFields = true): void
     {

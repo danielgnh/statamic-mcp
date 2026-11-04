@@ -12,17 +12,6 @@ use Statamic\Facades\Site;
 trait ResolvesSites
 {
     /**
-     * The requested site (default: Site::default()), validated against the
-     * configured sites, with 'access {site} site' enforced on multisite
-     * installs. Pass $validSites to limit the
-     * check to a resource's own configured sites (taxonomies, global sets);
-     * when omitted, every configured site is valid (entries).
-     *
-     * Message semantics: "not found" is reserved for sites that do not exist
-     * globally — a site statamic_overview advertises but $validSites rejects
-     * is "not available for this resource", and when the DEFAULT site was
-     * filled in and rejected, the error says so and asks for an explicit site.
-     *
      * @param  Collection<int, string>|null  $validSites
      */
     protected function resolveSite(Request $request, UserContract $user, ?Collection $validSites = null): string
@@ -55,10 +44,6 @@ trait ResolvesSites
         return $site;
     }
 
-    /**
-     * resolveSite() only checks the site exists and is accessible — the
-     * collection itself may not be configured for it.
-     */
     protected function ensureCollectionInSite(CollectionContract $collection, string $site): void
     {
         if ($collection->sites()->contains($site)) {
@@ -73,10 +58,6 @@ trait ResolvesSites
         ));
     }
 
-    /**
-     * The 'access {site} site' permission only exists on multisite installs
-     * (verified facts §3) — never check it on single-site.
-     */
     protected function ensureSiteAccess(UserContract $user, string $site): void
     {
         if (! $this->canAccessSite($user, $site)) {
@@ -84,12 +65,6 @@ trait ResolvesSites
         }
     }
 
-    /**
-     * The single source of truth for site access — statamic_overview's
-     * advertised can_access flag and the enforcement above must never drift
-     * apart. CP parity (SitePolicy::view): every site is gated, the default
-     * site included.
-     */
     protected function canAccessSite(UserContract $user, string $site): bool
     {
         if (! Site::multiEnabled()) {

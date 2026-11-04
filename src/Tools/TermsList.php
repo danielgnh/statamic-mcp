@@ -57,14 +57,11 @@ class TermsList extends Tool
             throw new ToolException($this->notFoundMessage('taxonomy', $taxonomy, $this->exposedHandles('taxonomies')));
         }
 
-        // Terms only exist in the taxonomy's own configured sites.
         $site = $this->resolveSite($request, $user, $taxonomyResource->sites());
 
         $query = Term::query()
             ->where('taxonomy', $taxonomy)
             ->where('site', $site)
-            // Deterministic order — offset pagination without a stable order
-            // repeats/skips items between calls (entries_list, Task 10).
             ->orderBy('title')
             ->orderBy('id');
 
@@ -87,13 +84,9 @@ class TermsList extends Tool
             'next_page' => $paginated->hasMorePages() ? $paginated->currentPage() + 1 : null,
             'terms' => collect((array) $paginated->items())->map(fn ($term) => [
                 'id' => $term->id(),
-                'title' => $term->title(), // value('title') under the hood — recurses to the default locale
+                'title' => $term->title(),
                 'slug' => $term->slug(),
                 'url' => $term->url(),
-                // value('updated_at') so the fallback chain matches title()
-                // (a localized view inherits the origin's timestamp) — never
-                // fileLastModified(), which breaks on items that were never
-                // written to disk (tests). value() never touches the file.
                 'updated_at' => ($timestamp = $term->value('updated_at'))
                     ? Carbon::createFromTimestamp($timestamp, config('app.timezone'))->toIso8601String()
                     : null,

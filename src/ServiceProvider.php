@@ -16,12 +16,12 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
+use Error;
 use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
@@ -30,9 +30,9 @@ use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
 use League\OAuth2\Server\ResourceServer;
+use RuntimeException;
 use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
-use Throwable;
 
 class ServiceProvider extends AddonServiceProvider
 {
@@ -77,12 +77,8 @@ class ServiceProvider extends AddonServiceProvider
 
         try {
             $this->registerMcpRoutes();
-        } catch (Throwable $e) {
-            report($e); // misconfiguration must never brick the host site
-
-            Log::warning('Statamic MCP failed to mount; run `php please mcp:doctor`', [
-                'exception' => $e->getMessage(),
-            ]);
+        } catch (InvalidArgumentException $e) {
+            report(new RuntimeException('Statamic MCP failed to mount; run `php please mcp:doctor`', previous: $e));
         }
     }
 
@@ -102,40 +98,25 @@ class ServiceProvider extends AddonServiceProvider
         if ($oauth) {
             $this->registerOAuthGuard();
 
-            // Converts Passport's bigint user_id columns to string(36) so
-            // Statamic's UUID ids fit — loaded only in OAuth mode so the addon
-            // never touches Passport tables a host app uses for other things.
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
-        // Build the full middleware stack BEFORE Mcp::web() registers anything,
-        // so a config-shape error throws while zero routes exist — a throw after
-        // registration would leave an unauthenticated route behind (fail closed).
         $middleware = [
             EnsureMcpEnabled::forCurrentAuth(),
-            ...Arr::wrap(config('statamic.mcp.middleware', [])),
+            ...$this->configuredMiddleware(),
             ...($oauth
-                // Wrapper runs the oauth preflight then delegates to the api
-                // guard — deliberately NOT 'auth:api' directly, which Laravel's
-                // middleware priority would hoist above the preflight; must not
-                // implement AuthenticatesRequests.
                 ? [AuthenticateOAuth::class]
                 : [AuthenticateMcpToken::class]),
-            EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes
+            EnsureMcpPermission::class,
         ];
 
-        Mcp::web(config('statamic.mcp.route'), $this->serverClass())->middleware($middleware);
+        Mcp::web($this->routePath(), $this->serverClass())->middleware($middleware);
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
 
-            Route::middleware([EnsureMcpEnabled::class.':oauth', 'throttle:60,1'])->group(fn () => Mcp::oauthRoutes()); // hard-requires Passport — guarded so bootAddon never throws
+            Route::middleware([EnsureMcpEnabled::class.':oauth', 'throttle:60,1'])->group(fn () => Mcp::oauthRoutes());
 
-            // Passport 12+ ships no default consent view and never binds
-            // AuthorizationViewResponse — /oauth/authorize 500s with
-            // "Target [...AuthorizationViewResponse] is not instantiable"
-            // unless someone calls authorizationView(). Guarded on `! bound` so a host
-            // app's own Passport::authorizationView() wins whichever boots first.
             if (! app()->bound(AuthorizationViewResponse::class)) {
                 Passport::authorizationView(fn (array $parameters) => $this->consentView($parameters));
             }
@@ -156,31 +137,57 @@ class ServiceProvider extends AddonServiceProvider
         return response()->view('statamic-mcp::oauth.authorize', $parameters);
     }
 
+    /** @return array<array-key, mixed> */
+    protected function configuredMiddleware(): array
+    {
+        $middleware = Arr::wrap(config('statamic.mcp.middleware', []));
+
+        foreach ($middleware as $entry) {
+            if (! is_string($entry)) {
+                throw new InvalidArgumentException(sprintf(
+                    "statamic.mcp.middleware must list names, got '%s'.",
+                    get_debug_type($entry),
+                ));
+            }
+        }
+
+        return $middleware;
+    }
+
+    protected function routePath(): string
+    {
+        $route = config('statamic.mcp.route');
+
+        if (! is_string($route) || blank($route)) {
+            throw new InvalidArgumentException(sprintf(
+                "statamic.mcp.route must be a path, got '%s'.",
+                is_string($route) ? $route : get_debug_type($route),
+            ));
+        }
+
+        return $route;
+    }
+
     /** @return class-string<McpServer> */
     protected function serverClass(): string
     {
         $server = config('statamic.mcp.server', Server::class);
 
-        if (! is_string($server) || ! is_subclass_of($server, McpServer::class)) {
-            throw new InvalidArgumentException(sprintf(
-                "statamic.mcp.server must name a subclass of %s, got '%s'.",
-                McpServer::class,
-                is_string($server) ? $server : get_debug_type($server),
-            ));
+        try {
+            if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+                return $server;
+            }
+        } catch (Error $e) {
+            throw new InvalidArgumentException("statamic.mcp.server names a class that cannot load: {$e->getMessage()}", $e->getCode(), $e);
         }
 
-        return $server;
+        throw new InvalidArgumentException(sprintf(
+            "statamic.mcp.server must name a subclass of %s, got '%s'.",
+            McpServer::class,
+            is_string($server) ? $server : get_debug_type($server),
+        ));
     }
 
-    /**
-     * The runtime seam of database-managed keys. Passport reads
-     * config('passport.*_key') lazily while building its two server
-     * singletons (see PassportServiceProvider::makeCryptKey), and the
-     * container fires beforeResolving callbacks on every make() — so the
-     * stored pair is injected just in time, wherever the servers are resolved
-     * from (the addon's guard, /oauth/authorize, /oauth/token). PassportKeys
-     * skips out when the environment already configures keys.
-     */
     protected function manageDatabaseKeys(): void
     {
         $inject = fn () => $this->app->make(PassportKeys::class)->inject();
@@ -189,14 +196,6 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->beforeResolving(ResourceServer::class, $inject);
     }
 
-    /**
-     * OAuth mode brings its own guard, defined here in config so the host app
-     * never edits config/auth.php: the driver validates the bearer via
-     * Passport's ResourceServer but resolves the user through the Statamic
-     * repository — file users and Eloquent users alike. The definition is
-     * addon-namespaced and only exists in OAuth mode, so a host app's own
-     * guards are untouched.
-     */
     protected function registerOAuthGuard(): void
     {
         Auth::viaRequest(PassportBearerGuard::DRIVER, new PassportBearerGuard);

@@ -98,9 +98,6 @@ class EntriesCreate extends Tool
             ? null
             : $this->resolveParent($validated['parent'], $tree ?? throw $this->cannotNest($collection));
 
-        // Reject the ambiguous slug/date-in-data spelling BEFORE blueprint
-        // validation so our targeted error beats the validator's raw
-        // "The Date field is required."
         $this->rejectAmbiguousDataKeys($data, $collection->dated());
 
         $date = $this->resolveDate($validated['date'] ?? null, $collection);
@@ -117,12 +114,6 @@ class EntriesCreate extends Tool
             ? $this->resolveSlug($validated['slug'] ?? null, $data, $site)
             : null;
 
-        // The injected date field is required — satisfy it with the resolved
-        // Carbon, which preProcess() turns into the date picker's shape. Slug
-        // likewise: the CP form always submits it into validation, so a
-        // blueprint that marks slug required must see the resolved value —
-        // without it that field is unsatisfiable (slug is barred from data).
-        // The replacements mirror the CP's store path (no id yet on create).
         $values = [...$data, 'slug' => $slug];
 
         if ($date) {
@@ -152,26 +143,17 @@ class EntriesCreate extends Tool
         $unplaced = null;
 
         if ($tree) {
-            // The tree as it reads may already list this entry at the top level.
             $entry->afterSave(function ($entry) use ($collection, $site, $parent, &$unplaced) {
                 $unplaced = $this->placeInTree($collection, $site, $entry, $parent?->id());
             });
         }
 
-        // CP parity: created entries carry updated_by/updated_at. save()
-        // returns false when an EntryCreating/EntrySaving listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $entry->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — nothing was created');
         }
 
         $notStored = [];
 
-        // CP-parity create path (EntriesController@store, 6.x): the draft
-        // gets an attributed initial revision. This inlines Revisable::
-        // store() — published(false) + save + makeRevision — because
-        // store()'s return is the revision save, which would mask a
-        // listener-cancelled entry save behind a false success.
         if ($revisions && ! $entry->makeRevision()->user($user)->message('Created via MCP (entries_create)')->save()) {
             $notStored[] = 'initial revision — cancelled by a listener on this site; the draft is saved without one';
         }
@@ -225,7 +207,7 @@ class EntriesCreate extends Tool
             return null;
         }
 
-        return $this->parseEntryDate($date);
+        return $this->parseDate($date);
     }
 
     /**
@@ -243,10 +225,6 @@ class EntriesCreate extends Tool
             $slug = $title;
         }
 
-        // Entry::save() re-normalizes through Routable::slug() with the site's
-        // language — run the exact same call here so the blueprint's rules and
-        // the URL check see what will actually be persisted (and Über → ueber
-        // under de, CP parity).
         $slug = Str::slug($slug, '-', Site::get($site)->lang());
 
         if ($slug === '') {
