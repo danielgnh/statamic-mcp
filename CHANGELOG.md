@@ -10,9 +10,58 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ### Fixed
 
+- **The docs now say what the code does.**
+  - `enabled: false` doesn't remove Passport's own routes, such as
+    `/oauth/authorize` and `/oauth/token`, though the README, UPGRADE, and the
+    `mcp:doctor` warning said all OAuth routes went off.
+    [docs/oauth.md](docs/oauth.md#turning-mcp-off) now covers what they do with
+    MCP off and how to remove them.
+  - A missing or invalid tool argument answers HTTP 200 with `isError: true`,
+    not the 400 `docs/troubleshooting.md` gave.
+  - `resources` doesn't hide stored values everywhere, as UPGRADE said. A raw
+    read returns an entry id, term slug, or asset path outside the exposure,
+    `navigations_get` returns a linked entry's id and any title set on the
+    branch, and `entries`, `terms`, and `link` fields can store a value outside
+    the exposure.
+  - `uploads.max_size` doesn't always stop a download early. A body without a
+    `Content-Length` is refused when the transfer ends, which can take the full
+    15 seconds.
+  - The edit chart added up to 1,868 tokens because it left out the 100-token
+    result of `entries_update`. The 1,968 total was right, and the chart and
+    README now show the 100.
 - **Code snippets on the Connections page follow the Control Panel's theme.**
   The Claude Code and Cursor snippets, in How to connect and on a newly created
   token, stayed dark in light mode.
+
+### Security
+
+- **`assets_upload` connects to the address the guard checked.** The guard read
+  the host with `parse_url` and pinned it with `CURLOPT_RESOLVE`, which applies
+  only when curl reads the same host. It doesn't always:
+  `http://x{a}.example.com/` expands to `x.example.com`, and a leading `-` turns
+  the pin into a removal. A caller with upload permission and a DNS name they
+  control could reach loopback, private, and cloud metadata addresses and store
+  the answer as an asset. Numeric hosts such as `2130706433` and `127.1` did the
+  same where the site's resolver answers for them. The connection now uses
+  `CURLOPT_CONNECT_TO`, which applies to whatever host curl reads, and always
+  runs on curl. Guzzle's stream handler ignored the pin, for example where
+  `curl_exec` and `curl_multi_exec` are disabled, so such a server now refuses URL
+  uploads. Through an HTTP proxy, a download now sends `CONNECT` to the validated
+  IP instead of the hostname, so a proxy that filters `CONNECT` by hostname or
+  port can refuse it.
+- **`assets_upload` refuses the address ranges its docs said it did.** The
+  `source_url` guard relied on PHP's IP filter flags, and those pass
+  `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`, `198.18.0.0/15`,
+  `198.51.100.0/24`, `203.0.113.0/24`, and `224.0.0.0/4`, plus IPv6 ranges such
+  as `100::/64`, `2001:2::/48`, `2001:db8::/32`, `3fff::/20`, `5f00::/16`,
+  `fec0::/10`, and `ff00::/8`. A caller with upload permission could make the
+  server request those addresses and store the answer as an asset. The guard
+  now refuses them, whether they come as a literal address, a DNS result, or a
+  redirect. For IPv6 it accepts only global unicast (`2000::/3`) and the NAT64
+  form of an address it would accept. It also refuses `168.63.129.16`, the
+  public address of Azure's wire server. A site that downloads from one of
+  these ranges on its own network now gets a refusal, and
+  `uploads.source_allowlist` doesn't override it.
 
 ## [1.0.0] - 2026-11-01
 
