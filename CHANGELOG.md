@@ -8,6 +8,12 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Code snippets on the Connections page follow the Control Panel's theme.**
+  The Claude Code and Cursor snippets, in How to connect and on a newly created
+  token, stayed dark in light mode.
+
 ## [1.0.0] - 2026-11-01
 
 ### Changed
