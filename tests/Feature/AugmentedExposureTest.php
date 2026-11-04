@@ -61,6 +61,32 @@ it('leaves related entries of an unexposed collection out of augmented entries_g
     expect(collect(data_get($data, 'data.related'))->pluck('title', 'id')->all())->toBe([$other => 'Other post']);
 });
 
+it('keeps the stored id of an unexposed entry in raw entries_get, without its title, and answers not found for that id', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    $offer = Fixtures::page('spring-offer', 'Spring offer');
+    $post = blogPostWithRelations(['related' => [$offer]]);
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog']]]);
+
+    startNewRequest();
+
+    $user = Fixtures::makeUser('view blog entries', 'view pages entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $post])
+        ->assertOk()
+        ->assertSee($offer)
+        ->assertDontSee('Spring offer');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $offer])
+        ->assertHasErrors(["entry '{$offer}' not found"]);
+});
+
 it('keeps exposed related entries the caller cannot view, as the Control Panel listing shows their titles', function () {
     Fixtures::site();
     Fixtures::tags();

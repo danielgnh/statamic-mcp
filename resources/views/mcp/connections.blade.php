@@ -38,16 +38,16 @@
                     <ui-description text="{{ __('Add a custom connector, paste the endpoint, and approve access when the sign-in window opens.') }}"></ui-description>
 
                     <ui-subheading text="Claude Code"></ui-subheading>
-                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">claude mcp add --transport http statamic {{ $endpoint }}</pre>
+                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }}</pre>
                     <ui-description text="{{ __('Then run /mcp and choose Authenticate.') }}"></ui-description>
                 @else
                     <ui-description text="{{ __('Works with Claude Code, Cursor, and any MCP client that can send a static Authorization header. Individual claude.ai and Claude Desktop connectors need OAuth mode instead. See the section on connecting a client in the README.') }}"></ui-description>
 
                     <ui-subheading text="Claude Code"></ui-subheading>
-                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
+                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer &lt;token&gt;"</pre>
 
                     <ui-subheading text="Cursor (.cursor/mcp.json)"></ui-subheading>
-                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                    <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer <token>']]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                 @endif
             </ui-modal>
 
@@ -166,12 +166,12 @@
 
                     <div class="space-y-2">
                         <ui-subheading text="Claude Code"></ui-subheading>
-                        <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer {{ $plainToken['token'] }}"</pre>
+                        <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">claude mcp add --transport http statamic {{ $endpoint }} --header "Authorization: Bearer {{ $plainToken['token'] }}"</pre>
                     </div>
 
                     <div class="space-y-2">
                         <ui-subheading text="Cursor (.cursor/mcp.json)"></ui-subheading>
-                        <pre v-pre class="overflow-x-auto rounded-lg bg-gray-900 p-3 text-xs text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer '.$plainToken['token']]]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                        <pre v-pre class="overflow-x-auto rounded-lg bg-gray-150 p-3 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-300">{{ json_encode(['mcpServers' => ['statamic' => ['url' => $endpoint, 'headers' => ['Authorization' => 'Bearer '.$plainToken['token']]]]], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
                     </div>
                 </ui-card>
             </ui-panel>
