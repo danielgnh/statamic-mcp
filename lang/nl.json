@@ -36,6 +36,7 @@
     "Last refreshed": "Laatst vernieuwd",
     "Leftover tokens": "Overgebleven tokens",
     "MCP endpoint": "MCP-endpoint",
+    "MCP is not mounted because statamic.mcp.route is not a path. Fix it, then run php please mcp:doctor.": "MCP is niet gekoppeld omdat statamic.mcp.route geen pad is. Corrigeer dit en voer daarna php please mcp:doctor uit.",
     "Name (optional)": "Naam (optioneel)",
     "No connections yet": "Nog geen verbindingen",
     "No tokens yet": "Nog geen tokens",

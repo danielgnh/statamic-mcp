@@ -36,6 +36,7 @@
     "Last refreshed": "Последнее обновление",
     "Leftover tokens": "Оставшиеся токены",
     "MCP endpoint": "Адрес MCP",
+    "MCP is not mounted because statamic.mcp.route is not a path. Fix it, then run php please mcp:doctor.": "MCP не подключён, потому что statamic.mcp.route не является путём. Исправьте значение и выполните php please mcp:doctor.",
     "Name (optional)": "Название (необязательно)",
     "No connections yet": "Подключений пока нет",
     "No tokens yet": "Токенов пока нет",
