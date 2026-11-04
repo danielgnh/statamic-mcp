@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Support;
 use Carbon\CarbonInterface;
 use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\Response;
@@ -28,7 +29,24 @@ class SourceDownloader
 
     private const float MIN_HOP_TIMEOUT_SECONDS = 0.1;
 
-    private const array NON_PUBLIC_RANGES_PHP_FLAGS_MISS = ['100.64.0.0/10', '64:ff9b:1::/48', '2002::/16', '2001::/32'];
+    private const array NON_PUBLIC_RANGES_PHP_FLAGS_MISS = [
+        '100.64.0.0/10',
+        '192.0.0.0/24',
+        '192.0.2.0/24',
+        '192.88.99.0/24',
+        '198.18.0.0/15',
+        '198.51.100.0/24',
+        '203.0.113.0/24',
+        '224.0.0.0/4',
+        '2001::/23',
+        '2001:db8::/32',
+        '2002::/16',
+        '3fff::/20',
+    ];
+
+    private const string AZURE_WIRE_SERVER = '168.63.129.16';
+
+    private const string IPV6_GLOBAL_UNICAST = '2000::/3';
 
     private const string NAT64_PREFIX = '64:ff9b::/96';
 
@@ -162,7 +180,7 @@ class SourceDownloader
             return false;
         }
 
-        if (IpUtils::checkIp($ip, self::NON_PUBLIC_RANGES_PHP_FLAGS_MISS)) {
+        if (IpUtils::checkIp($ip, [...self::NON_PUBLIC_RANGES_PHP_FLAGS_MISS, self::AZURE_WIRE_SERVER])) {
             return false;
         }
 
@@ -170,31 +188,22 @@ class SourceDownloader
             return $this->isPublicIp((string) inet_ntop(substr((string) inet_pton($ip), -4)));
         }
 
-        return true;
+        return ! str_contains($ip, ':') || IpUtils::checkIp($ip, self::IPV6_GLOBAL_UNICAST);
     }
 
     private function fetch(string $url, string $ip, int $maxBytes, CarbonInterface $deadline): Response
     {
         $timeoutSeconds = $this->ensureTimeLeft($deadline);
 
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
         $port = parse_url($url, PHP_URL_PORT)
             ?? (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80);
 
-        // Pinning is only meaningful (and only needed) when the host came
-        // from DNS: literal-IP hosts were validated directly and curl will
-        // connect to exactly that address anyway.
-        $literalHost = filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false;
-
         try {
-            return Http::withOptions([
+            return Http::setHandler(new CurlHandler)->withOptions([
                 // Hops are revalidated by download()'s loop, never by curl.
                 'allow_redirects' => false,
-                // Pin the connection to the validated IP — closes the DNS
-                // rebinding window between check and use, for
-                // IPv6-only hosts too (address bracketed per libcurl syntax).
-                'curl' => $literalHost ? [] : [CURLOPT_RESOLVE => [
-                    sprintf('%s:%d:%s', $host, $port, str_contains($ip, ':') ? "[{$ip}]" : $ip),
+                'curl' => [CURLOPT_CONNECT_TO => [
+                    sprintf('::%s:%d', str_contains($ip, ':') ? "[{$ip}]" : $ip, $port),
                 ]],
                 // Content-Length is advisory — abort mid-transfer at the cap.
                 // (Guzzle wraps callback throws; unwrapped in the catch below.
