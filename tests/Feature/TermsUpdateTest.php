@@ -483,3 +483,52 @@ it('gives a new set a fresh id when its id is 0 or sent twice', function () {
         ->and($ids[0])->toBe('text0001')
         ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
 });
+
+it('refuses a localized slug another term has in that site, as the Control Panel does', function () {
+    Fixtures::multisite();
+
+    Taxonomy::make('topics')->title('Topics')->sites(['en', 'de'])->save();
+    Blueprint::makeFromFields(['title' => ['type' => 'text']])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+    Term::make()->taxonomy('topics')->slug('beta')->data(['title' => 'Beta'])->save();
+
+    $user = Fixtures::makeUser('edit topics terms', 'access de site', 'access en site');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'alpha', 'data' => []])
+        ->assertHasErrors(["term 'alpha' already exists in taxonomy 'topics'"]);
+
+    expect(Term::find('topics::beta')->in('de')->slug())->toBe('beta');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'beta-de', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"beta-de"');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'beta', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"beta"');
+});
+
+it('allows a localized slug another term only has in another site, as the Control Panel does', function () {
+    Fixtures::multisite();
+
+    Taxonomy::make('topics')->title('Topics')->sites(['en', 'de'])->save();
+    Blueprint::makeFromFields(['title' => ['type' => 'text']])->setHandle('topic')->setNamespace('taxonomies.topics')->save();
+
+    Term::make()->taxonomy('topics')->slug('alpha')->data(['title' => 'Alpha'])->save();
+    Term::make()->taxonomy('topics')->slug('beta')->data(['title' => 'Beta'])->save();
+
+    $user = Fixtures::makeUser('edit topics terms', 'access de site', 'access en site');
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::alpha', 'site' => 'de', 'slug' => 'alpha-de', 'data' => []])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(TermsUpdate::class, ['id' => 'topics::beta', 'site' => 'de', 'slug' => 'alpha', 'data' => []])
+        ->assertOk()
+        ->assertSee('"slug":"alpha"');
+});
