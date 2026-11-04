@@ -21,14 +21,11 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class McpController extends CpController
 {
-    /**
-     * The nav item's target: the first page this user may open. The sidebar
-     * links through Inertia, and Inertia::location() sends it straight to the
-     * Blade page instead of rendering that page twice.
-     */
-    public function index(): Response
+    public function index(): View|Response
     {
-        return Inertia::location(cp_route(User::current()?->isSuper() ? 'mcp.guidelines.edit' : 'mcp.connections.index'));
+        return User::current()?->isSuper()
+            ? view('statamic-mcp::mcp.index')
+            : Inertia::location(cp_route('mcp.connections.index'));
     }
 
     public function connections(): View

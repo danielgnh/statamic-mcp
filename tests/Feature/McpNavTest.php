@@ -28,10 +28,10 @@ function mcpNavChildren(): ?array
     return $item?->children()->map->display()->values()->all();
 }
 
-it('lists guidelines and connections under tools → mcp for super admins', function () {
+it('lists connections and guidelines under tools → mcp for super admins, in the order of the landing page', function () {
     $this->actingAs(Fixtures::makeSuper());
 
-    expect(mcpNavChildren())->toBe(['Guidelines', 'Connections']);
+    expect(mcpNavChildren())->toBe(['Connections', 'Guidelines']);
 });
 
 it('lists only connections for users with access mcp', function () {

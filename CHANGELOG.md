@@ -8,6 +8,12 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Tools → MCP opens on a page for choosing Connections or Guidelines.** Super
+  admins used to land on Guidelines. Users who can only open Connections still
+  go straight to it. Connections now comes first in the sidebar too.
+
 ### Fixed
 
 - **The docs now say what the code does.**
