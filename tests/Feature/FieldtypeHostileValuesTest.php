@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use Illuminate\Support\Facades\Exceptions;
 use Statamic\Exceptions\AssetNotFoundException;
+use Statamic\Facades\Blueprint;
 use Statamic\Facades\Taxonomy;
 use Statamic\Fields\Field;
 use Statamic\Fields\FieldtypeRepository;
@@ -24,6 +25,13 @@ function fieldtypeRunner(): object
         public function run(Field $field, callable $process): mixed
         {
             return $this->orUnprocessable($field, $process);
+        }
+
+        public function process(array $fields, array $values, array $only): array
+        {
+            $blueprint = Blueprint::make('hostile')->setContents(['fields' => $fields]);
+
+            return $this->processAgainstBlueprint($blueprint, $values, $only);
         }
     };
 }
@@ -71,10 +79,7 @@ it('answers a hostile value with a tool error naming the field, whichever way a 
     foreach ($configs as $config) {
         foreach ($values as $value) {
             try {
-                $field = (new Field('field', $config))->setValue($value);
-
-                $runner->run($field, fn () => (clone $field)->preProcess());
-                $runner->run($field, fn () => (clone $field)->process());
+                $runner->process([['handle' => 'field', 'field' => $config]], ['field' => $value], ['field']);
             } catch (ToolException) {
                 continue;
             } catch (Throwable $e) {
@@ -115,3 +120,34 @@ it('does not report a value the fieldtype refuses, because that one is for the a
     'a bad argument' => fn () => new InvalidArgumentException('not a date'),
     'a missing asset' => fn () => new AssetNotFoundException('missing.png'),
 ]);
+
+it('names the field when a validation rule chokes on its value, so an agent can correct it', function () {
+    $fields = [
+        ['handle' => 'title', 'field' => ['type' => 'text']],
+        ['handle' => 'opens_at', 'field' => ['type' => 'time']],
+    ];
+
+    expect(fn () => fieldtypeRunner()->process($fields, ['title' => 'Fine', 'opens_at' => ['not', 'a', 'time']], ['title', 'opens_at']))
+        ->toThrow(ToolException::class, 'field opens_at has a value its fieldtype (time)');
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(TypeError::class);
+});
+
+it('blames no field it was sent when a stored value breaks validation, because the agent cannot fix that', function () {
+    $fields = [
+        ['handle' => 'title', 'field' => ['type' => 'text']],
+        ['handle' => 'opens_at', 'field' => ['type' => 'time']],
+    ];
+
+    expect(fn () => fieldtypeRunner()->process($fields, ['title' => 'Fine', 'opens_at' => ['stored', 'badly']], ['title']))
+        ->toThrow(TypeError::class);
+});
+
+it('names the field and reports it when a rule throws, because the rule can be the site\'s own bug', function () {
+    expect(fn () => fieldtypeRunner()->process([['handle' => 'code', 'field' => ['type' => 'text', 'validate' => ['min']]]], ['code' => 'anything'], ['code']))
+        ->toThrow(ToolException::class, 'field code has a value its fieldtype (text)');
+
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(InvalidArgumentException::class);
+});
