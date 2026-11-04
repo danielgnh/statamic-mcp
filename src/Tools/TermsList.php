@@ -69,7 +69,7 @@ class TermsList extends Tool
             ->orderBy('id');
 
         if ($search = $validated['search'] ?? null) {
-            $query->where('title', 'like', '%'.$search.'%');
+            $query->where('title', 'like', $this->containsPattern($query, $search));
         }
 
         $perPage = min((int) ($validated['limit'] ?? config('statamic.mcp.per_page', 25)), 100);

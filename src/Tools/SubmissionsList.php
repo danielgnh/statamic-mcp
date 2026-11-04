@@ -100,12 +100,14 @@ class SubmissionsList extends Tool
      */
     private function applySearch(SubmissionQueryBuilder $query, FormContract $form, string $search): void
     {
-        $query->where(function ($query) use ($form, $search) {
-            $query->where('date', 'like', '%'.$search.'%');
+        $like = $this->containsPattern($query, $search);
+
+        $query->where(function ($query) use ($form, $like) {
+            $query->where('date', 'like', $like);
 
             $form->blueprint()->fields()->all()
                 ->filter(fn (Field $field) => in_array($field->type(), ['text', 'textarea', 'integer'], true))
-                ->each(fn (Field $field) => $query->orWhere($field->handle(), 'like', '%'.$search.'%'));
+                ->each(fn (Field $field) => $query->orWhere($field->handle(), 'like', $like));
         });
     }
 
