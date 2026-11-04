@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\HttpFoundation\IpUtils;
 use Throwable;
@@ -59,7 +60,11 @@ class SourceDownloader
 
                 // Relative Location headers resolve against the current URL;
                 // the next loop iteration re-runs every check on the result.
-                $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                try {
+                    $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                } catch (InvalidArgumentException $e) {
+                    throw new ToolException('source_url redirected to an invalid URL — nothing was uploaded', $e->getCode(), $e);
+                }
 
                 continue;
             }

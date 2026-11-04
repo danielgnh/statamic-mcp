@@ -78,6 +78,14 @@ trait ResolvesAssets
             throw new ToolException("folder may not contain '..' or backslashes — pass a path like 'blog/2026'");
         }
 
+        if (preg_match('/\p{C}/u', $folder) === 1) {
+            throw new ToolException("folder may not contain control characters — pass a path like 'blog/2026'");
+        }
+
+        if (in_array('.meta', explode('/', strtolower($folder)), true)) {
+            throw new ToolException("folder may not be Statamic's .meta directory — pass a path like 'blog/2026'");
+        }
+
         return $folder;
     }
 

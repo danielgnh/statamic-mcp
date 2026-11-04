@@ -252,3 +252,10 @@ it('rejects empty bodies', function () {
 
     downloaderWithPublicDns()->download('https://images.example.com/empty.png');
 })->throws(ToolException::class, 'empty body');
+
+it('turns a redirect to an unparseable location into a tool error', function () {
+    Http::fake(['https://images.example.com/*' => Http::response('', 302, ['Location' => 'http://'])]);
+
+    expect(fn () => downloaderWithPublicDns()->download('https://images.example.com/a.png'))
+        ->toThrow(ToolException::class, 'redirected to an invalid URL');
+});
