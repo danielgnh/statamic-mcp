@@ -7,11 +7,11 @@ use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
+use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\HttpFoundation\IpUtils;
-use Throwable;
 
 class SourceDownloader
 {
@@ -180,11 +180,11 @@ class SourceDownloader
                     }
                 },
             ])->timeout($timeoutSeconds)->get($url);
-        } catch (Throwable $e) {
-            for ($previous = $e; $previous instanceof Throwable; $previous = $previous->getPrevious()) {
-                if ($previous instanceof ToolException) {
-                    throw $previous;
-                }
+        } catch (HttpClientException $e) {
+            $onHeadersFailure = $e->getPrevious()?->getPrevious();
+
+            if ($onHeadersFailure instanceof ToolException) {
+                throw $onHeadersFailure;
             }
 
             $this->ensureTimeLeft($deadline);
