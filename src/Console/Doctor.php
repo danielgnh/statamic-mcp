@@ -77,7 +77,7 @@ class Doctor extends Command
     protected function checkEnabled(): void
     {
         if (! config('statamic.mcp.enabled')) {
-            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint, the OAuth routes and the Tools → MCP pages are off. Set STATAMIC_MCP_ENABLED=true to serve requests.");
+            $this->warn("[WARN] MCP is disabled ('enabled' => false) — the endpoint, OAuth discovery and client registration, and the Tools → MCP pages are off. If Passport is installed, its own /oauth routes stay. Set STATAMIC_MCP_ENABLED=true to serve requests.");
 
             return;
         }
