@@ -299,3 +299,12 @@ it('shows an empty state when oauth is ready but nothing has connected', functio
         ->assertOk()
         ->assertSee('No connections yet', false);
 });
+
+it('still opens the connections page when the route config is not a path, and says what is wrong', function () {
+    config(['statamic.mcp.route' => null]);
+
+    $this->actingAs(Fixtures::makeUser('access cp'))
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('statamic.mcp.route is not a path');
+});

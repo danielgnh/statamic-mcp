@@ -3,6 +3,7 @@
 namespace Danielgnh\StatamicMcp\Http\Controllers;
 
 use Danielgnh\StatamicMcp\OAuth\ConnectionRepository;
+use Danielgnh\StatamicMcp\Support\McpRoute;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -22,7 +23,8 @@ class McpConnectionsController extends CpController
         abort_if($user === null, 401);
 
         $isSuper = $user->isSuper();
-        $endpoint = url(config()->string('statamic.mcp.route'));
+        $path = McpRoute::path();
+        $endpoint = $path === null ? null : url($path);
         $oauthMode = config('statamic.mcp.auth') === 'oauth';
 
         return view('statamic-mcp::mcp.connections', [
@@ -36,7 +38,7 @@ class McpConnectionsController extends CpController
             'oauthReady' => $oauthMode && $connections->ready(),
             'isSuper' => $isSuper,
             'oauthMode' => $oauthMode,
-            'insecureUrl' => ! Str::startsWith($endpoint, 'https://'),
+            'insecureUrl' => $endpoint !== null && ! Str::startsWith($endpoint, 'https://'),
             'endpoint' => $endpoint,
             'plainToken' => session('statamic-mcp.plain_token'),
         ]);

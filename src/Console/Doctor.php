@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Console;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Server;
+use Danielgnh\StatamicMcp\Support\McpRoute;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Error;
@@ -42,11 +43,11 @@ class Doctor extends Command
         $this->prereqs = $prereqs;
 
         $mode = config('statamic.mcp.auth', 'token');
-        $route = config('statamic.mcp.route', 'mcp/statamic');
+        $path = McpRoute::path();
 
         $this->line('Statamic MCP doctor');
         $this->line('');
-        $this->line('  Endpoint:  '.(is_string($route) ? url($route) : 'none'));
+        $this->line('  Endpoint:  '.($path === null ? 'none' : url($path)));
         $this->line('  Auth mode: '.$mode);
         $this->line('');
 
@@ -102,13 +103,7 @@ class Doctor extends Command
 
     protected function mountedRoute(): ?RoutingRoute
     {
-        $path = config('statamic.mcp.route', 'mcp/statamic');
-
-        if (! is_string($path)) {
-            return null;
-        }
-
-        $uri = trim($path, '/');
+        $uri = trim((string) McpRoute::path(), '/');
 
         foreach (Route::getRoutes()->getRoutes() as $route) {
             if ($route->uri() === $uri && in_array('POST', $route->methods(), true)) {
@@ -121,12 +116,11 @@ class Doctor extends Command
 
     protected function checkRoute(): void
     {
-        $route = config('statamic.mcp.route', 'mcp/statamic');
-
-        if (is_string($route) && filled($route)) {
+        if (McpRoute::path() !== null) {
             return;
         }
 
+        $route = config('statamic.mcp.route');
         $given = is_string($route) ? $route : get_debug_type($route);
 
         $this->problem("Configured route '{$given}' is not a path — the MCP route cannot mount. Set 'route' in config/statamic/mcp.php, for example to 'mcp/statamic'.");

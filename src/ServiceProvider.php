@@ -16,6 +16,7 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
+use Danielgnh\StatamicMcp\Support\McpRoute;
 use Error;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -138,14 +139,10 @@ class ServiceProvider extends AddonServiceProvider
     {
         $route = config('statamic.mcp.route');
 
-        if (! is_string($route) || blank($route)) {
-            throw new InvalidArgumentException(sprintf(
-                "statamic.mcp.route must be a path, got '%s'.",
-                is_string($route) ? $route : get_debug_type($route),
-            ));
-        }
-
-        return $route;
+        return McpRoute::path() ?? throw new InvalidArgumentException(sprintf(
+            "statamic.mcp.route must be a path, got '%s'.",
+            is_string($route) ? $route : get_debug_type($route),
+        ));
     }
 
     /** @return class-string<McpServer> */

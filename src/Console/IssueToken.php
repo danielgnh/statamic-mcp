@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Console;
 
+use Danielgnh\StatamicMcp\Support\McpRoute;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Console\Command;
 use Statamic\Console\RunsInPlease;
@@ -43,9 +44,17 @@ class IssueToken extends Command
         /** @var string|null $name */
         $name = $this->option('name');
 
+        $path = McpRoute::path();
+
+        if ($path === null) {
+            $this->error('statamic.mcp.route is not a path, so MCP is not mounted and no client could use a token. Fix it first: php please mcp:doctor names the problem.');
+
+            return self::FAILURE;
+        }
+
         $plain = $tokens->issue($user, $name, $days === null ? null : (int) $days);
 
-        $url = url(config()->string('statamic.mcp.route'));
+        $url = url($path);
 
         $this->line('');
         $this->info('Token created. This is the ONLY time it will be displayed — copy it now:');
