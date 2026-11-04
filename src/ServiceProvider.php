@@ -16,10 +16,10 @@ use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
+use Error;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
@@ -28,9 +28,9 @@ use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
 use League\OAuth2\Server\ResourceServer;
+use RuntimeException;
 use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
-use Throwable;
 
 class ServiceProvider extends AddonServiceProvider
 {
@@ -71,12 +71,8 @@ class ServiceProvider extends AddonServiceProvider
 
         try {
             $this->registerMcpRoutes();
-        } catch (Throwable $e) {
-            report($e);
-
-            Log::warning('Statamic MCP failed to mount; run `php please mcp:doctor`', [
-                'exception' => $e->getMessage(),
-            ]);
+        } catch (InvalidArgumentException $e) {
+            report(new RuntimeException('Statamic MCP failed to mount; run `php please mcp:doctor`', previous: $e));
         }
     }
 
@@ -101,14 +97,14 @@ class ServiceProvider extends AddonServiceProvider
 
         $middleware = [
             EnsureMcpEnabled::forCurrentAuth(),
-            ...Arr::wrap(config('statamic.mcp.middleware', [])),
+            ...$this->configuredMiddleware(),
             ...($oauth
                 ? [AuthenticateOAuth::class]
                 : [AuthenticateMcpToken::class]),
             EnsureMcpPermission::class,
         ];
 
-        Mcp::web(config('statamic.mcp.route'), $this->serverClass())->middleware($middleware);
+        Mcp::web($this->routePath(), $this->serverClass())->middleware($middleware);
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
@@ -121,20 +117,55 @@ class ServiceProvider extends AddonServiceProvider
         }
     }
 
+    /** @return array<array-key, mixed> */
+    protected function configuredMiddleware(): array
+    {
+        $middleware = Arr::wrap(config('statamic.mcp.middleware', []));
+
+        foreach ($middleware as $entry) {
+            if (! is_string($entry)) {
+                throw new InvalidArgumentException(sprintf(
+                    "statamic.mcp.middleware must list names, got '%s'.",
+                    get_debug_type($entry),
+                ));
+            }
+        }
+
+        return $middleware;
+    }
+
+    protected function routePath(): string
+    {
+        $route = config('statamic.mcp.route');
+
+        if (! is_string($route) || blank($route)) {
+            throw new InvalidArgumentException(sprintf(
+                "statamic.mcp.route must be a path, got '%s'.",
+                is_string($route) ? $route : get_debug_type($route),
+            ));
+        }
+
+        return $route;
+    }
+
     /** @return class-string<McpServer> */
     protected function serverClass(): string
     {
         $server = config('statamic.mcp.server', Server::class);
 
-        if (! is_string($server) || ! is_subclass_of($server, McpServer::class)) {
-            throw new InvalidArgumentException(sprintf(
-                "statamic.mcp.server must name a subclass of %s, got '%s'.",
-                McpServer::class,
-                is_string($server) ? $server : get_debug_type($server),
-            ));
+        try {
+            if (is_string($server) && is_subclass_of($server, McpServer::class)) {
+                return $server;
+            }
+        } catch (Error $e) {
+            throw new InvalidArgumentException("statamic.mcp.server names a class that cannot load: {$e->getMessage()}", $e->getCode(), $e);
         }
 
-        return $server;
+        throw new InvalidArgumentException(sprintf(
+            "statamic.mcp.server must name a subclass of %s, got '%s'.",
+            McpServer::class,
+            is_string($server) ? $server : get_debug_type($server),
+        ));
     }
 
     protected function manageDatabaseKeys(): void
