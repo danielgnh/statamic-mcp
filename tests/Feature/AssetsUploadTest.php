@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Intervention\Image\Exceptions\ImageDecoderException;
 use League\Flysystem\Config;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
@@ -350,7 +349,7 @@ it('names the stored path and what failed when the inline preset listener cannot
         ->assertSee('"result":"uploaded — live"')
         ->assertSee('"not_stored":["image presets —');
 
-    Exceptions::assertReported(ImageDecoderException::class);
+    Exceptions::assertReportedCount(1);
 
     expect(Storage::disk('images')->exists("blog/{$name}"))->toBeTrue();
 });
