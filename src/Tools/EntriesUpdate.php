@@ -373,7 +373,7 @@ class EntriesUpdate extends Tool
             ));
         }
 
-        return $this->parseEntryDate($date);
+        return $this->parseDate($date);
     }
 
     private function resolveSlug(?string $slug, EntryContract $entry): ?string

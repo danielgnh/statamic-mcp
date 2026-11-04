@@ -2,10 +2,9 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
+use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesForms;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -21,6 +20,7 @@ use Statamic\Fields\Field;
 #[IsReadOnly]
 class SubmissionsList extends Tool
 {
+    use NormalizesEntryInput;
     use ResolvesForms;
 
     #[\Override]
@@ -101,14 +101,5 @@ class SubmissionsList extends Tool
                 ->filter(fn (Field $field) => in_array($field->type(), ['text', 'textarea', 'integer'], true))
                 ->each(fn (Field $field) => $query->orWhere($field->handle(), 'like', '%'.$search.'%'));
         });
-    }
-
-    private function parseDate(string $date, string $parameter): Carbon
-    {
-        try {
-            return Carbon::parse($date, config('app.timezone'));
-        } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse %s '%s' — use e.g. 2026-09-20 or 2026-09-20T09:00:00+02:00", $parameter, $date));
-        }
     }
 }

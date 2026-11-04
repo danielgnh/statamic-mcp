@@ -13,12 +13,12 @@ use Statamic\Fields\Blueprint;
 
 trait NormalizesEntryInput
 {
-    protected function parseEntryDate(string $date): Carbon
+    protected function parseDate(string $date, string $parameter = 'date'): Carbon
     {
         try {
             return Carbon::parse($date, config('app.timezone'));
         } catch (InvalidArgumentException) {
-            throw new ToolException(sprintf("could not parse date '%s' — use e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00", $date));
+            throw new ToolException(sprintf("could not parse %s '%s' — use e.g. 2026-09-20 or 2026-09-20T09:00:00+02:00", $parameter, $date));
         }
     }
 

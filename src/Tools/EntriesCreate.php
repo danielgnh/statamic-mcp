@@ -207,7 +207,7 @@ class EntriesCreate extends Tool
             return null;
         }
 
-        return $this->parseEntryDate($date);
+        return $this->parseDate($date);
     }
 
     /**
