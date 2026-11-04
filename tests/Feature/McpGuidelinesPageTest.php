@@ -2,6 +2,7 @@
 
 use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Illuminate\Support\Facades\File;
 
 beforeEach(function () {
     config(['statamic.editions.pro' => true]);
@@ -102,3 +103,17 @@ it('shows no notice without a 0.6.0 global set', function () {
         ->assertOk()
         ->assertDontSee('0.6.0', false);
 });
+
+it('opens the page when a hand-edited file has malformed rows, so a super admin can save good ones over them', function (string $yaml) {
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), $yaml);
+
+    $this->actingAs(Fixtures::makeSuper())
+        ->get(cp_route('mcp.guidelines.edit'))
+        ->assertOk()
+        ->assertSee('<ui-publish-form', false);
+})->with([
+    'rows that are a string' => ["guidelines:\n  resources: nope"],
+    'a row that is a string' => ["guidelines:\n  resources:\n    - nope"],
+    'a row without a type' => ["guidelines:\n  resources:\n    -\n      collections: [blog]\n      guidelines: 'Keep it short.'"],
+]);

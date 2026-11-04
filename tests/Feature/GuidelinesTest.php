@@ -7,6 +7,7 @@ use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\BlueprintsGet;
 use Danielgnh\StatamicMcp\Tools\StatamicOverview;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -161,4 +162,88 @@ it('serves the guidelines of a 0.6.0 global set until they are moved', function 
         ->assertOk()
         ->assertSee('"guidelines":"Written on the new page."')
         ->assertDontSee('never salesy');
+});
+
+it('answers blueprints_get without guidelines when a hand-edited file has malformed rows, and reports it', function (string $yaml) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Exceptions::fake();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), $yaml);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk()
+        ->assertDontSee('"guidelines"');
+
+    Exceptions::assertReported(UnexpectedValueException::class);
+})->with([
+    'rows that are a string' => ["guidelines:\n  resources: nope"],
+    'a row that is a string' => ["guidelines:\n  resources:\n    - nope"],
+]);
+
+it('treats empty rows as no guidelines without reporting anything, because a Save with nothing in it stores that', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Exceptions::fake();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  resources: null");
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk();
+
+    Exceptions::assertNothingReported();
+});
+
+it('keeps the site text when only the rows are malformed', function () {
+    Exceptions::fake();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  site: 'Be brief.'\n  resources: nope");
+
+    expect(app(AgentGuidelines::class)->site())->toBe('Be brief.');
+});
+
+it('ignores malformed rows in the 0.6.0 global set too, because agents still read it until mcp:guidelines moves it', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Be brief.', 'resources' => 'nope']]);
+
+    Exceptions::fake();
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(BlueprintsGet::class, ['type' => 'collection', 'handle' => 'blog'])
+        ->assertOk();
+
+    Exceptions::assertReported(UnexpectedValueException::class);
+});
+
+it('drops only the malformed rows, so one typo does not cost the rest', function () {
+    Exceptions::fake();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  resources:\n    - nope\n    -\n      type: resource\n      enabled: true\n      collections: [blog]\n      guidelines: 'Keep it short.'");
+
+    expect(app(AgentGuidelines::class)->for('collections', 'blog'))->toBe('Keep it short.');
+
+    Exceptions::assertReported(UnexpectedValueException::class);
+});
+
+it('reads a hand-written row without a type, as agents always have', function () {
+    Exceptions::fake();
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  resources:\n    -\n      collections: [blog]\n      guidelines: 'Keep it short.'");
+
+    expect(app(AgentGuidelines::class)->for('collections', 'blog'))->toBe('Keep it short.');
+
+    Exceptions::assertNothingReported();
 });

@@ -9,6 +9,7 @@ use Statamic\Facades\Blueprint;
 use Statamic\Facades\GlobalSet;
 use Statamic\Fields\Blueprint as BlueprintInstance;
 use Statamic\Globals\GlobalSet as GlobalSetInstance;
+use UnexpectedValueException;
 
 class AgentGuidelines
 {
@@ -40,6 +41,14 @@ class AgentGuidelines
     public function values(): array
     {
         return (array) data_get($this->settings()->raw(), 'guidelines', []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function wellFormedValues(): array
+    {
+        return $this->withWellFormedRows($this->values());
     }
 
     /**
@@ -83,6 +92,25 @@ class AgentGuidelines
         return $set?->in((string) $set->sites()->first())?->data()->only(['site', 'resources'])->all() ?? [];
     }
 
+    /**
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private function withWellFormedRows(array $values): array
+    {
+        if (! isset($values['resources'])) {
+            return $values;
+        }
+
+        $rows = array_filter((array) $values['resources'], is_array(...));
+
+        if ($rows !== $values['resources']) {
+            report(new UnexpectedValueException("The resources in the MCP guidelines must be a list of rows. Anything else is ignored until it's fixed under Tools → MCP → Guidelines or in the addon's settings file."));
+        }
+
+        return [...$values, 'resources' => array_values(array_map(fn (array $row) => $row + ['type' => 'resource'], $rows))];
+    }
+
     private function settings(): Settings
     {
         return Addon::get('danielgnh/statamic-mcp')->settings();
@@ -96,7 +124,7 @@ class AgentGuidelines
         return rescue(function () {
             $values = $this->values();
 
-            return $this->isBlank($values) ? $this->leftoverValues() : $values;
+            return $this->withWellFormedRows($this->isBlank($values) ? $this->leftoverValues() : $values);
         }, []);
     }
 
