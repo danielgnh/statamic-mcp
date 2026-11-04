@@ -3,7 +3,10 @@
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
 use Danielgnh\StatamicMcp\Support\OAuthPrerequisites;
 use Danielgnh\StatamicMcp\Tests\Support\OAuthFixtures;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Passport\Passport;
 
@@ -174,4 +177,32 @@ it('reports the authorization view as bound once a view is registered', function
     Passport::authorizationView('statamic-mcp::oauth.authorize');
 
     expect($prereqs->authorizationViewBound())->toBeTrue();
+});
+
+it('finds nothing wrong with a database it can reach', function () {
+    expect(app(OAuthPrerequisites::class)->databaseFailure())->toBeNull();
+});
+
+it('hands back what stops the database being reached', function (array $config) {
+    config($config);
+    DB::purge();
+
+    expect(app(OAuthPrerequisites::class)->databaseFailure())->toBeInstanceOf(Throwable::class);
+})->with([
+    'a connection that is not configured' => [['database.default' => 'unconfigured']],
+    'an unsupported driver' => [['database.default' => 'probe', 'database.connections.probe' => ['driver' => 'nope', 'database' => 'x']]],
+    'a refused connection' => [['database.default' => 'probe', 'database.connections.probe' => ['driver' => 'mysql', 'host' => '127.0.0.1', 'port' => 1, 'database' => 'x', 'username' => 'x', 'password' => 'x', 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '']]],
+]);
+
+it('counts queries failing on a connection that opens, because a replica or a proxy can fail that way', function () {
+    Schema::shouldReceive('hasTable')->andThrow(new QueryException('mysql', 'select 1', [], new PDOException('server has gone away')));
+
+    expect(app(OAuthPrerequisites::class)->databaseFailure())->toBeInstanceOf(QueryException::class);
+});
+
+it('does not count a sqlite file that does not exist yet, because nothing can be stored in it and migrate is the remedy', function () {
+    config(['database.default' => 'probe', 'database.connections.probe' => ['driver' => 'sqlite', 'database' => '/nonexistent/none.sqlite', 'prefix' => '']]);
+    DB::purge();
+
+    expect(app(OAuthPrerequisites::class)->databaseFailure())->toBeNull();
 });

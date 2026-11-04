@@ -47,6 +47,15 @@ class AuthenticateOAuth
         }
 
         if (! $prereqs->passportKeysExist()) {
+            if ($failure = $prereqs->databaseFailure()) {
+                report($failure);
+
+                return $this->unavailable(
+                    'Fix the database connection. Keys generated now would override any pair stored there.',
+                    "MCP can't reach its database.",
+                );
+            }
+
             if ($prereqs->passportKeysUndecryptable()) {
                 return $this->unavailable(
                     "Passport's stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the stored key row to let a fresh pair provision (every connected client must then reconnect)."
@@ -68,10 +77,10 @@ class AuthenticateOAuth
         return array_intersect([self::MCP_SCOPE, '*'], $scopes) !== [];
     }
 
-    protected function unavailable(string $remedy): Response
+    protected function unavailable(string $remedy, string $error = 'MCP OAuth mode is misconfigured.'): Response
     {
         return response()->json([
-            'error' => 'MCP OAuth mode is misconfigured.',
+            'error' => $error,
             'remedy' => $remedy,
             'doctor' => "Run 'php please mcp:doctor' to check every OAuth prerequisite at once.",
         ], 503, ['Retry-After' => '60']);

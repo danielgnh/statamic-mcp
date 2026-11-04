@@ -32,7 +32,7 @@ class Keys extends Command
             return self::FAILURE;
         }
 
-        if (! $pair = $this->resolvePair($keys, $store)) {
+        if (! $pair = $this->resolvePair($keys, $store, $prereqs)) {
             return self::FAILURE;
         }
 
@@ -59,7 +59,7 @@ class Keys extends Command
     /**
      * @return array{string, string, string}|null
      */
-    protected function resolvePair(PassportKeys $keys, KeyStore $store): ?array
+    protected function resolvePair(PassportKeys $keys, KeyStore $store, OAuthPrerequisites $prereqs): ?array
     {
         if (filled(config('passport.private_key')) || filled(config('passport.public_key'))) {
             return $this->configuredPair();
@@ -72,6 +72,18 @@ class Keys extends Command
         }
 
         if ($pair = $keys->resolve()) {
+            if ($pair['source'] === 'files' && $failure = $prereqs->databaseFailure()) {
+                $warning = "Can't reach the database ({$failure->getMessage()}), so these key files may not be the pair in use.";
+
+                if ($this->option('write')) {
+                    $this->messages()->error($warning.' Writing them to .env would override a stored pair for every connected client. Fix the connection and run this again, or run this without --write to print them.');
+
+                    return null;
+                }
+
+                $this->messages()->warn($warning.' Check before pasting them: they would override a stored pair for every connected client.');
+            }
+
             match ($pair['source']) {
                 'generated' => $this->messages()->info('No keys found — generated a fresh pair into the database (shared across every server, nothing to paste anywhere).'),
                 'files' => $store->has()
@@ -81,6 +93,12 @@ class Keys extends Command
             };
 
             return [$pair['private'], $pair['public'], $pair['source']];
+        }
+
+        if ($failure = $prereqs->databaseFailure()) {
+            $this->messages()->error("Can't reach the database ({$failure->getMessage()}), so a stored signing key can't be read. Fix the connection and run this again: a pair generated now would override a stored one for every connected client. On a site with no database, run php artisan passport:keys first.");
+
+            return null;
         }
 
         return $this->generateFiles();

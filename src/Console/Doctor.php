@@ -293,6 +293,12 @@ class Doctor extends Command
             return;
         }
 
+        if ($failure = $this->prereqs->databaseFailure()) {
+            $this->problem("Can't reach the database ({$failure->getMessage()}) — OAuth mode keeps its keys and tokens there, so the other OAuth checks can't run. Fix the connection and run this again. Keys generated now would override any pair stored there.");
+
+            return;
+        }
+
         $this->checkPassportKeys();
         $this->checkOAuthTables();
         $this->checkAuthorizationView();

@@ -15,7 +15,12 @@ class KeyStore
 
     public function available(): bool
     {
-        return rescue(fn () => Schema::hasTable(self::TABLE), false, report: false);
+        return rescue(fn () => $this->tableExists(), false, report: false);
+    }
+
+    public function tableExists(): bool
+    {
+        return Schema::hasTable(self::TABLE);
     }
 
     public function has(): bool
