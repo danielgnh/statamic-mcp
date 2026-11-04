@@ -110,6 +110,12 @@ class SourceDownloader
             throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url));
         }
 
+        try {
+            new Uri($url);
+        } catch (InvalidArgumentException $e) {
+            throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url), $e->getCode(), $e);
+        }
+
         if (! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) {
             throw new ToolException('source_url must use http or https');
         }

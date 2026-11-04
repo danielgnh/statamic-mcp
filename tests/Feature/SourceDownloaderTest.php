@@ -43,6 +43,16 @@ it('rejects unparseable urls', function () {
     downloaderWithPublicDns()->download('not a url');
 })->throws(ToolException::class, 'not a valid absolute URL');
 
+it('rejects a url parse_url accepts but the HTTP client cannot build, instead of an internal error', function (string $url) {
+    Http::fake();
+
+    downloaderWithPublicDns()->download($url);
+})->throws(ToolException::class, 'source_url is not a valid absolute URL')->with([
+    'unclosed bracket' => 'http://[x.example.com/a.png',
+    'space in the host' => 'http://x y.example.com/a.png',
+    'backslash in the host' => 'http://x\\y.example.com/a.png',
+]);
+
 it('rejects literal private, loopback, link-local, CGN and IPv6-internal addresses', function (string $url) {
     Http::fake();
 
