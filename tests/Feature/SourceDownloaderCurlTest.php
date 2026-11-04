@@ -17,7 +17,7 @@ function fetchOverRealCurl(string $path): Response
     $port = (int) parse_url('tcp://'.stream_socket_get_name($listener, false), PHP_URL_PORT);
     fclose($listener);
 
-    $server = new Process([PHP_BINARY, '-S', "127.0.0.1:{$port}", dirname(__DIR__).'/__fixtures__/source-server.php']);
+    $server = new Process([PHP_BINARY, '-S', "127.0.0.1:{$port}", __DIR__.'/../__fixtures__/source-server.php']);
     $server->start();
 
     try {
