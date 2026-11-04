@@ -70,3 +70,17 @@ it('keeps answering with routes cached while nothing changed', function () {
 
     initializeWithStaticToken($token)->assertOk();
 });
+
+it('answers every verb with 404 once the kill switch is off, before laravel/mcp checks any header', function () {
+    $this->cacheRoutes();
+
+    config(['statamic.mcp.enabled' => false]);
+
+    $this->get('/mcp/statamic')->assertNotFound();
+    $this->delete('/mcp/statamic')->assertNotFound();
+
+    $this->withHeaders([
+        'Accept' => 'application/json, text/event-stream',
+        'MCP-Protocol-Version' => '1999-01-01',
+    ])->postJson('/mcp/statamic', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list', 'params' => (object) []])->assertNotFound();
+});

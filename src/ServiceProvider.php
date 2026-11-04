@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server as McpServer;
+use Laravel\Mcp\Server\Middleware\ReorderJsonAccept;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
@@ -105,20 +106,23 @@ class ServiceProvider extends AddonServiceProvider
         // Build the full middleware stack BEFORE Mcp::web() registers anything,
         // so a config-shape error throws while zero routes exist — a throw after
         // registration would leave an unauthenticated route behind (fail closed).
-        $middleware = [
+        $route = config()->string('statamic.mcp.route');
+        $server = $this->serverClass();
+        $beforeHeaderChecks = [
+            ReorderJsonAccept::class,
             EnsureMcpEnabled::forCurrentAuth(),
             ...Arr::wrap(config('statamic.mcp.middleware', [])),
-            ...($oauth
-                // Wrapper runs the oauth preflight then delegates to the api
-                // guard — deliberately NOT 'auth:api' directly, which Laravel's
-                // middleware priority would hoist above the preflight; must not
-                // implement AuthenticatesRequests.
-                ? [AuthenticateOAuth::class]
-                : [AuthenticateMcpToken::class]),
+        ];
+        $afterHeaderChecks = [
+            // Wrapper runs the oauth preflight then delegates to the api
+            // guard — deliberately NOT 'auth:api' directly, which Laravel's
+            // middleware priority would hoist above the preflight; must not
+            // implement AuthenticatesRequests.
+            $oauth ? AuthenticateOAuth::class : AuthenticateMcpToken::class,
             EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes
         ];
 
-        Mcp::web(config('statamic.mcp.route'), $this->serverClass())->middleware($middleware);
+        Route::group(['middleware' => $beforeHeaderChecks], fn () => Mcp::web($route, $server)->middleware($afterHeaderChecks));
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
