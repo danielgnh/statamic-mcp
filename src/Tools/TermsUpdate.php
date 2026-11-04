@@ -7,11 +7,13 @@ use Danielgnh\StatamicMcp\Tools\Concerns\MergesSets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Support\Facades\Validator;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Statamic\Facades\Term;
+use Statamic\Rules\UniqueTermValue;
 use Statamic\Support\Str;
 
 #[Name('terms_update')]
@@ -104,7 +106,7 @@ class TermsUpdate extends Tool
         $newSlug = $this->resolveSlug($validated['slug'] ?? null);
         $slugChanged = $newSlug !== null && $newSlug !== $localized->slug();
 
-        if ($slugChanged && $site === $defaultSite && Term::find("{$taxonomyHandle}::{$newSlug}")) {
+        if ($slugChanged && Validator::make(['slug' => $newSlug], ['slug' => [new UniqueTermValue($taxonomyHandle, $term->id(), $site)]])->fails()) {
             throw new ToolException("term '{$newSlug}' already exists in taxonomy '{$taxonomyHandle}' — pick another slug");
         }
 

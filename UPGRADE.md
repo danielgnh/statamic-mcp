@@ -1,5 +1,14 @@
 # Upgrading
 
+## From 1.0 to 1.1
+
+1.1.0 adds no config keys or migrations. If the site caches routes and your
+deploy doesn't rebuild that cache, run `php artisan route:cache` after updating.
+A route cache built before the update points the Connections page at a
+controller method that moved, so that page answers 500. It also keeps the MCP
+route's old middleware order, so GET and DELETE skip the kill switch and the
+throttle.
+
 ## From 0.9 to 1.0
 
 1.0.0 adds no config keys or migrations. Two things change around it: the
@@ -46,9 +55,11 @@ list what changed.
 
 ### Rebuild a cached route list
 
-The MCP and OAuth routes now check `enabled` and `auth` on every request,
-and client registration is throttled. A route cache built before the update
-keeps serving the old routes. If the site caches routes and your deploy
+The MCP route and the OAuth discovery and client registration routes now
+check `enabled` and `auth` on every request, and client registration is
+throttled. Passport's own routes, such as `/oauth/authorize` and
+`/oauth/token`, don't check either setting. A route cache built before the
+update keeps serving the old routes. If the site caches routes and your deploy
 doesn't rebuild that cache, run `php artisan route:cache` after updating.
 
 ### A published consent view
@@ -73,9 +84,16 @@ page fails or overflows on phones: the `$redirect…` lines at the end of the
   `email` only for a caller who has `view users`. Augmented `terms_get` no
   longer has `entries` or `entries_count`. Raw reads, the default, are
   unchanged.
-- When `resources` limits what MCP exposes, agents no longer see the rest
-  anywhere: not in navigation menus, related items, blueprint field options,
-  or asset paths. A new link to something outside the exposure is refused.
+- When `resources` limits what MCP exposes, agents no longer get the title,
+  URL, or status of the rest in navigation menus, augmented reads, or blueprint
+  field options. Stored values stay. A raw read returns the id of a related
+  entry, the slug of a term, or the path of an asset outside the exposure as
+  stored, and `navigations_get` returns a linked entry's id and any title set on
+  the branch itself. Opening that id answers not found. `navigations_update`
+  refuses a new link to an entry outside the exposure, and writes refuse a new
+  file from a hidden container. `entries`, `terms`, and `link` fields don't
+  check the exposure, so `entries_create` and `entries_update` can store a value
+  outside it.
 - Coming from `laravel/mcp` 0.x, a JSON-RPC error no longer comes back with
   HTTP 200: an unknown method gets 404, an internal error 500, and any other
   error, an unknown tool included, 400, each with the JSON-RPC error in the

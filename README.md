@@ -106,7 +106,7 @@ Terms, globals, assets, and navigations have no draft state. Writes to them go l
 
 Page builders don't cost the whole page per edit. When a Replicator field is large, `entries_get` returns an index of its sets, each with the id Statamic stores on it, its type, and a short preview. The agent then fetches the one set it needs with `fields: ["page_builder.<id>"]` and sends back only the changed field, as `{"page_builder": {"<id>": {"variant": "centered"}}}`. `entries_update` merges that into the set and saves the page the way the Control Panel does, so the other blocks keep their content, including changes someone made in the Control Panel in the meantime. Adding, removing, or reordering blocks works the same way: the agent sends the list of ids in their new order with the new block where it goes, `[{"id": "<id>"}, {"type": "faq", ...}]`, never the whole page. A typo in a long article is fixed with `{"article": {"find": "…", "replace": "…"}}`, not by sending the article back.
 
-![How an agent edits one block of a 16-block page: an index of the blocks, 1,241 tokens; that one block, 584 tokens; the changed field, 43 tokens written. 1,968 tokens in total, against 14,050 for the whole page builder in and out](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-an-edit-works.svg)
+![How an agent edits one block of a 16-block page: an index of the blocks, 1,241 tokens; that one block, 584 tokens; the changed field, 43 tokens written and 100 read back. 1,968 tokens in total, against 14,050 for the whole page builder in and out](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-an-edit-works.svg)
 
 Any other large value, such as a synced `array` field, comes back as a short preview until the agent asks for it with `fields`, and write results carry no copy of what was just written.
 
@@ -144,6 +144,10 @@ php please mcp:guidelines
 ```
 
 The command lists the blocks that still have no instructions. On a site coming from 0.6.0, it first moves the guidelines out of the old global set. [docs/guidelines.md](docs/guidelines.md) covers the details.
+
+## Languages
+
+The Tools → MCP pages, the OAuth consent page, and the Access MCP permission follow each user's Control Panel language. Translations ship for German (`de`, `de_CH`), Spanish, French, Italian, Dutch, Norwegian, Portuguese (Brazil), and Russian. Any other language shows English. To change a wording or add a language, put the English text and its translation in your app's `lang/<locale>.json`, which takes precedence over the addon's. Console output stays English.
 
 ## Adding your own tools
 
@@ -189,17 +193,17 @@ This creates `config/statamic/mcp.php`.
 
 | Key | Default | What it does |
 |---|---|---|
-| `enabled` | `true` | Kill switch. When `false`, the endpoint, the OAuth routes, and the Tools → MCP pages are off, even when routes are cached. Set with `STATAMIC_MCP_ENABLED`. |
+| `enabled` | `true` | Kill switch. When `false`, the endpoint, OAuth discovery and client registration, and the Tools → MCP pages are off, even when routes are cached. If Passport is installed, its own routes, such as `/oauth/authorize` and `/oauth/token`, stay. See [docs/oauth.md](docs/oauth.md#turning-mcp-off). Set with `STATAMIC_MCP_ENABLED`. |
 | `route` | `mcp/statamic` | The endpoint path. |
 | `auth` | `token` | `token` or `oauth`. Set with `STATAMIC_MCP_AUTH`. |
 | `server` | `Danielgnh\StatamicMcp\Server` | The server class to mount. |
 | `middleware` | `['throttle:60,1']` | Runs before authentication on the MCP route. OAuth client registration and discovery keep their own `throttle:60,1` per address, whatever this says. |
-| `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. |
+| `read_only` | `false` | Hides every write and delete tool. Set with `STATAMIC_MCP_READ_ONLY`. Reading an asset can still write Statamic's own `.meta` cache file for it, as viewing it in the Control Panel does. |
 | `deletes` | `false` | Registers the delete tools. Set with `STATAMIC_MCP_DELETES`. |
 | `resources` | `true` for each type | One key each for `collections`, `taxonomies`, `globals`, `asset_containers`, `navigations`, and `forms`. `true` exposes every handle. A list like `['blog', 'pages']` exposes only those. A type missing from a published config exposes nothing. |
 | `per_page` | `25` | Default page size for list tools, capped at 100. |
 | `uploads.max_size` | `10240` | Upload size limit in KB. |
-| `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private addresses are always blocked. |
+| `uploads.source_allowlist` | `null` | Hosts `assets_upload` may download from. `null` allows any public host. Private and reserved addresses are always blocked, even for a listed host. |
 
 The endpoint checks `enabled` and `auth` on every request, so a cached route list cannot keep serving the old value of either. On a site that caches routes, run `php artisan optimize` after changing them: the routes for the new value exist only after that, and until then MCP stays off. `mcp:doctor` names a stale route cache.
 

@@ -19,6 +19,7 @@ use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
 use Statamic\Facades\Taxonomy;
 use Statamic\Globals\Variables;
+use Statamic\Stache\Query\Builder as StacheQueryBuilder;
 use Statamic\Taxonomies\LocalizedTerm;
 
 abstract class Tool extends BaseTool
@@ -120,6 +121,11 @@ abstract class Tool extends BaseTool
         $configured = config("statamic.mcp.resources.{$type}", false);
 
         return $configured === true || (is_array($configured) && in_array($handle, $configured, true));
+    }
+
+    protected function containsPattern(object $query, string $text): string
+    {
+        return '%'.($query instanceof StacheQueryBuilder ? str_replace(['%', '_'], ['\%', '\_'], $text) : $text).'%';
     }
 
     protected function can(UserContract $user, string $permission): bool

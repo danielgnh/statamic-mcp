@@ -179,3 +179,17 @@ it('treats an unexposed taxonomy as missing, listing only exposed handles', func
         ->tool(TermsList::class, ['taxonomy' => 'secrets'])
         ->assertHasErrors(["taxonomy 'secrets' not found — available: tags"]);
 });
+
+it('matches search as plain text, so % and _ are never wildcards', function () {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Term::make()->taxonomy('tags')->slug('percent')->data(['title' => '50% off'])->save();
+    Term::make()->taxonomy('tags')->slug('plain')->data(['title' => '500 off'])->save();
+
+    Server::actingAs(Fixtures::makeUser('view tags terms'))
+        ->tool(TermsList::class, ['taxonomy' => 'tags', 'search' => '50%'])
+        ->assertOk()
+        ->assertSee('50% off')
+        ->assertDontSee('500 off');
+});

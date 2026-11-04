@@ -2,10 +2,22 @@
 
 use Danielgnh\StatamicMcp\Server;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
+use Danielgnh\StatamicMcp\Tools\AssetsList;
 use Danielgnh\StatamicMcp\Tools\AssetsUpload;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use League\Flysystem\Config;
+use League\Flysystem\Filesystem;
+use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToWriteFile;
 use Statamic\Events\AssetCreating;
+use Statamic\Events\AssetDeleted;
+use Statamic\Events\AssetUploaded;
 use Statamic\Facades\AssetContainer;
 
 it('uploads base64 content into the container root and reports liveness', function () {
@@ -224,4 +236,259 @@ it('reports an upload whose filename holds braces as uploaded', function () {
         ->assertSee('"cp_edit_url":null');
 
     expect(Storage::disk('images')->exists('blog/wei{rd}.png'))->toBeTrue();
+});
+
+function imagesDiskThatRefusesWrites(): void
+{
+    $root = Storage::disk('images')->path('');
+
+    $adapter = new class($root) extends LocalFilesystemAdapter
+    {
+        public function write(string $path, string $contents, Config $config): void
+        {
+            throw UnableToWriteFile::atLocation($path, 'read-only');
+        }
+
+        public function writeStream(string $path, $contents, Config $config): void
+        {
+            throw UnableToWriteFile::atLocation($path, 'read-only');
+        }
+    };
+
+    Storage::set('images', new FilesystemAdapter(new Filesystem($adapter), $adapter, ['root' => $root]));
+}
+
+it('never reports an upload as live when the disk refused the write', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    imagesDiskThatRefusesWrites();
+
+    $user = Fixtures::makeUser('upload images assets', 'view images assets');
+
+    Server::actingAs($user)
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store'])
+        ->assertDontSee('uploaded — live');
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+
+    Server::actingAs($user)
+        ->tool(AssetsList::class, ['container' => 'images'])
+        ->assertOk()
+        ->assertSee('"total":0');
+});
+
+it('tells the caller nothing was stored when a listener fails after the disk refused the write', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+    imagesDiskThatRefusesWrites();
+
+    Event::listen(AssetUploaded::class, fn () => throw UnableToReadFile::fromLocation('hero.png'));
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store']);
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+});
+
+it('refuses a filename too long for its .yaml sidecar to fit the 255 bytes filesystems allow', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+
+    $upload = fn (string $name) => Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => $name,
+        ]);
+
+    $upload(str_repeat('a', 247).'.png')
+        ->assertHasErrors(['filename is longer than 250 bytes']);
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+
+    $upload(str_repeat('a', 246).'.png')
+        ->assertOk();
+
+    expect(Storage::disk('images')->exists(str_repeat('a', 246).'.png'))->toBeTrue()
+        ->and(Storage::disk('images')->exists('.meta/'.str_repeat('a', 246).'.png.yaml'))->toBeTrue();
+});
+
+it('names the stored path and what failed when the inline preset listener cannot read the file', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+
+    expect(config('queue.default'))->toBe('sync');
+
+    $name = 'junk-'.bin2hex(random_bytes(4)).'.png';
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode('this is not a png'),
+            'filename' => $name,
+            'folder' => 'blog',
+        ])
+        ->assertOk()
+        ->assertSee('"path":"blog/'.$name.'"')
+        ->assertSee('"result":"uploaded — live"')
+        ->assertSee('"not_stored":["image presets —');
+
+    Exceptions::assertReportedCount(1);
+
+    expect(Storage::disk('images')->exists("blog/{$name}"))->toBeTrue();
+});
+
+it('names the stored path when the body is an HTML page under an image name', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+
+    $name = 'page-'.bin2hex(random_bytes(4)).'.png';
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode('<html><body>Access denied</body></html>'),
+            'filename' => $name,
+        ])
+        ->assertOk()
+        ->assertSee('"path":"'.$name.'"')
+        ->assertSee('"not_stored":["image presets —');
+
+    Exceptions::assertReported(UnableToReadFile::class);
+
+    expect(Storage::disk('images')->exists($name))->toBeTrue();
+});
+
+it('refuses a folder with a control character as a tool error, nothing reported', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+            'folder' => "blog\n2026",
+        ])
+        ->assertHasErrors(['folder may not contain control characters']);
+
+    Exceptions::assertNothingReported();
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+});
+
+it('stores a filename with a control character under a clean name, nothing reported', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+    Queue::fake();
+
+    $response = Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => "he\nro.png",
+        ]);
+
+    Exceptions::assertNothingReported();
+
+    $response->assertOk();
+
+    expect(array_filter(Storage::disk('images')->allFiles(), fn (string $path) => ! str_contains($path, '.meta')))->toHaveCount(1);
+});
+
+it('refuses a .meta folder, because no later call could reach a file stored there', function (string $folder) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hidden.png',
+            'folder' => $folder,
+        ])
+        ->assertHasErrors(["folder may not be Statamic's .meta directory"]);
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+})->with(['.meta', 'blog/.meta', '.meta/sub', '.META', 'blog/.Meta']);
+
+it('does not call a failed asset save a stored upload', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    config(['app.debug' => false]);
+    Exceptions::fake();
+
+    Event::listen(AssetUploaded::class, fn () => throw new RuntimeException('the asset database is down'));
+
+    $response = Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ]);
+
+    $response->assertHasErrors(['An internal server error occurred.'])
+        ->assertDontSee('uploaded — live')
+        ->assertDontSee('not a readable image');
+
+    Exceptions::assertReported(RuntimeException::class);
+});
+
+it('lets a validation error from a listener reach the agent', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Exceptions::fake();
+
+    Event::listen(AssetCreating::class, fn () => throw ValidationException::withMessages(['file' => 'This site refuses that image.']));
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['This site refuses that image.'])
+        ->assertDontSee('the disk did not store');
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+});
+
+it('undoes a refused upload quietly, because AssetDeleted would strip every reference to that path', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    Event::fake([AssetDeleted::class]);
+    imagesDiskThatRefusesWrites();
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store']);
+
+    Event::assertNotDispatched(AssetDeleted::class);
 });

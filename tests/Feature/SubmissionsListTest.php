@@ -192,3 +192,16 @@ it('treats unexposed and missing forms identically, listing only exposed handles
         ->tool(SubmissionsList::class, ['form' => 'ghost'])
         ->assertHasErrors(["form 'ghost' not found — available: contact"]);
 });
+
+it('matches search as plain text, so % and _ are never wildcards', function () {
+    Fixtures::site();
+    Fixtures::form();
+    Fixtures::submission('contact', ['name' => 'Ann', 'message' => '50% off'], '2026-09-25 10:00:00');
+    Fixtures::submission('contact', ['name' => 'Bob', 'message' => '500 off'], '2026-09-25 10:00:01');
+
+    Server::actingAs(Fixtures::makeUser('view contact form submissions'))
+        ->tool(SubmissionsList::class, ['form' => 'contact', 'search' => '50%'])
+        ->assertOk()
+        ->assertSee('50% off')
+        ->assertDontSee('500 off');
+});

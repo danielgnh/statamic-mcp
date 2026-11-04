@@ -18,6 +18,8 @@ use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
 use Danielgnh\StatamicMcp\Support\McpRoute;
 use Error;
+use Illuminate\Contracts\Translation\HasLocalePreference;
+use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
@@ -25,6 +27,7 @@ use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
 use Laravel\Mcp\Server as McpServer;
+use Laravel\Mcp\Server\Middleware\ReorderJsonAccept;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
@@ -36,6 +39,8 @@ use Statamic\Providers\AddonServiceProvider;
 class ServiceProvider extends AddonServiceProvider
 {
     protected $config = false;
+
+    protected $translations = false;
 
     protected $commands = [
         IssueToken::class,
@@ -61,6 +66,8 @@ class ServiceProvider extends AddonServiceProvider
         ], 'statamic-mcp-views');
 
         Blade::anonymousComponentPath(__DIR__.'/../resources/views/components', 'statamic-mcp');
+
+        $this->loadJsonTranslationsFrom(__DIR__.'/../lang');
 
         $this->registerPermission();
 
@@ -96,16 +103,19 @@ class ServiceProvider extends AddonServiceProvider
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
-        $middleware = [
+        $route = $this->routePath();
+        $server = $this->serverClass();
+        $beforeHeaderChecks = [
+            ReorderJsonAccept::class,
             EnsureMcpEnabled::forCurrentAuth(),
             ...$this->configuredMiddleware(),
-            ...($oauth
-                ? [AuthenticateOAuth::class]
-                : [AuthenticateMcpToken::class]),
+        ];
+        $afterHeaderChecks = [
+            $oauth ? AuthenticateOAuth::class : AuthenticateMcpToken::class,
             EnsureMcpPermission::class,
         ];
 
-        Mcp::web($this->routePath(), $this->serverClass())->middleware($middleware);
+        Route::group(['middleware' => $beforeHeaderChecks], fn () => Mcp::web($route, $server)->middleware($afterHeaderChecks));
 
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
@@ -113,9 +123,23 @@ class ServiceProvider extends AddonServiceProvider
             Route::middleware([EnsureMcpEnabled::class.':oauth', 'throttle:60,1'])->group(fn () => Mcp::oauthRoutes());
 
             if (! app()->bound(AuthorizationViewResponse::class)) {
-                Passport::authorizationView('statamic-mcp::oauth.authorize');
+                Passport::authorizationView(fn (array $parameters) => $this->consentView($parameters));
             }
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $parameters
+     */
+    protected function consentView(array $parameters): Response
+    {
+        $user = $parameters['user'] ?? null;
+
+        if ($user instanceof HasLocalePreference && ($locale = $user->preferredLocale()) !== null) {
+            app()->setLocale($locale);
+        }
+
+        return response()->view('statamic-mcp::oauth.authorize', $parameters);
     }
 
     /** @return array<array-key, mixed> */

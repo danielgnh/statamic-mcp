@@ -74,7 +74,7 @@ class EntriesList extends Tool
         }
 
         if ($search = $validated['search'] ?? null) {
-            $query->where('title', 'like', '%'.$search.'%');
+            $query->where('title', 'like', $this->containsPattern($query, $search));
         }
 
         $total = (clone $query)->count();

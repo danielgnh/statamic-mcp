@@ -4,20 +4,63 @@ All notable changes to `danielgnh/statamic-mcp` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org). Before `v1.0.0`,
 breaking changes landed in minor (`0.x`) releases and are called out here
-explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
+explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Added
+
+- **The Control Panel pages speak the user's language.** Tools → MCP, the
+  OAuth consent page, and the Access MCP permission follow each user's
+  Control Panel language, with translations for German (`de`, `de_CH`),
+  Spanish, French, Italian, Dutch, Norwegian, Portuguese (Brazil), and
+  Russian. Other languages keep English, and an app overrides any wording
+  from its own `lang/<locale>.json`. Dates on the Connections page follow
+  Carbon's locale, as the relative times beside them already did.
+
 ### Changed
 
+- **Rebuild a cached route list after updating.** The Connections page moved to
+  another controller method, and the MCP route's middleware order changed. With
+  a route cache from an older version, Connections answers 500, and GET and
+  DELETE still skip the kill switch and the throttle. Run
+  `php artisan route:cache` or `php artisan optimize`.
+- **Tools → MCP opens on a page for choosing Connections or Guidelines.** Super
+  admins used to land on Guidelines. Users who can only open Connections still
+  go straight to it. Connections now comes first in the sidebar too.
 - **Only bad config keeps MCP off at boot.** A `route`, `server`, or
   `middleware` value of the wrong shape still leaves the site up with MCP
   unmounted and reports the failure. Any other exception while registering the
   routes now surfaces, as it would from any other package, instead of quietly
   turning MCP off.
+- **One user can hold at most 100 tokens through the Control Panel.** Every MCP
+  request parses the whole token file, so one user issuing tokens without end
+  slowed everybody down. `mcp:token` on the console has no limit.
 
 ### Fixed
 
+- **The docs now say what the code does.**
+  - `enabled: false` doesn't remove Passport's own routes, such as
+    `/oauth/authorize` and `/oauth/token`, though the README, UPGRADE, and the
+    `mcp:doctor` warning said all OAuth routes went off.
+    [docs/oauth.md](docs/oauth.md#turning-mcp-off) now covers what they do with
+    MCP off and how to remove them.
+  - A missing or invalid tool argument answers HTTP 200 with `isError: true`,
+    not the 400 `docs/troubleshooting.md` gave.
+  - `resources` doesn't hide stored values everywhere, as UPGRADE said. A raw
+    read returns an entry id, term slug, or asset path outside the exposure,
+    `navigations_get` returns a linked entry's id and any title set on the
+    branch, and `entries`, `terms`, and `link` fields can store a value outside
+    the exposure.
+  - `uploads.max_size` doesn't always stop a download early. A body without a
+    `Content-Length` is refused when the transfer ends, which can take the full
+    15 seconds.
+  - The edit chart added up to 1,868 tokens because it left out the 100-token
+    result of `entries_update`. The 1,968 total was right, and the chart and
+    README now show the 100.
+- **Code snippets on the Connections page follow the Control Panel's theme.**
+  The Claude Code and Cursor snippets, in How to connect and on a newly created
+  token, stayed dark in light mode.
 - **`mcp:doctor` no longer suggests deleting `tokens.yaml` when the user store
   fails.** A failed user lookup was reported as a corrupt file. It now says the
   file is fine and names the failure.
@@ -35,6 +78,38 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
   mount.** A `route` that wasn't a string crashed the command, and so did a
   `server` class that couldn't load. A `middleware` entry that wasn't a string
   passed as fine.
+- **`assets_upload` no longer reports a file it did not store.** When the disk
+  refuses the write, for example a read-only disk, the tool answers with an
+  error and leaves nothing behind. It used to answer "uploaded — live". A
+  filename over 250 bytes is refused up front: its `.yaml` sidecar wouldn't fit
+  the 255 bytes filesystems allow, and on the file cache store the upload ended
+  in an internal error.
+- **`assets_upload` names a stored file Statamic can't read as an image.** On a
+  sync queue, an HTML error page from a `source_url`, say, was stored and live
+  while the tool answered with an internal error. The result now names the file
+  and says what failed under `not_stored`.
+- **`assets_upload` refuses a `.meta` folder and control characters in
+  `folder`.** A file stored under `.meta` could not be read or deleted by any
+  later call.
+- **A `source_url` redirect to an unparseable URL is a tool error,** not an
+  internal error.
+- **`search` on `entries_list`, `terms_list`, and `submissions_list` matches
+  plain text on the default Stache driver.** `%` and `_` used to act as
+  wildcards, so a search for `50%` also found `500`, and a search full of `%`
+  could cost hundreds of times a normal one. SQL-backed repositories keep their
+  wildcards, because SQLite and SQL Server have no default escape character.
+- **`terms_update` refuses a localized slug another term has in that site,** as
+  the Control Panel does.
+- **New sets of a Replicator or Grid inside a Group get fresh ids** when their
+  id is blank, `0`, or sent twice, like everywhere else.
+- **A route cache built without the MCP routes no longer breaks the Control
+  Panel.** Caching routes while MCP was off, or before installing the addon,
+  and then turning it on made every Control Panel page answer 500. The Tools →
+  MCP item now stays away until the cache is rebuilt.
+- **The OAuth consent page shows a redirect URI with a user part as it is.** It
+  used to print the part after the host wrong.
+- **`mcp:setup` changes every line of a key that appears twice in `.env`.** It
+  rewrote the first and reported "applied" while the last one kept winning.
 - **A database outage no longer reads as missing keys in OAuth mode.** The
   endpoint's 503 and `mcp:doctor` told you to run `php artisan migrate` or
   `mcp:keys`, and `mcp:keys` then generated a new pair. Writing that pair to
@@ -60,11 +135,59 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers moving from 0.x to 1.0.
 
 ### Security
 
+- **`assets_upload` connects to the address the guard checked.** The guard read
+  the host with `parse_url` and pinned it with `CURLOPT_RESOLVE`, which applies
+  only when curl reads the same host. It doesn't always:
+  `http://x{a}.example.com/` expands to `x.example.com`, and a leading `-` turns
+  the pin into a removal. A caller with upload permission and a DNS name they
+  control could reach loopback, private, and cloud metadata addresses and store
+  the answer as an asset. Numeric hosts such as `2130706433` and `127.1` did the
+  same where the site's resolver answers for them. The connection now uses
+  `CURLOPT_CONNECT_TO`, which applies to whatever host curl reads, and always
+  runs on curl. Guzzle's stream handler ignored the pin, for example where
+  `curl_exec` and `curl_multi_exec` are disabled, so such a server now refuses URL
+  uploads. Through an HTTP proxy, a download now sends `CONNECT` to the validated
+  IP instead of the hostname, so a proxy that filters `CONNECT` by hostname or
+  port can refuse it.
+- **`assets_upload` refuses the address ranges its docs said it did.** The
+  `source_url` guard relied on PHP's IP filter flags, and those pass
+  `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`, `198.18.0.0/15`,
+  `198.51.100.0/24`, `203.0.113.0/24`, and `224.0.0.0/4`, plus IPv6 ranges such
+  as `100::/64`, `2001:2::/48`, `2001:db8::/32`, `3fff::/20`, `5f00::/16`,
+  `fec0::/10`, and `ff00::/8`. A caller with upload permission could make the
+  server request those addresses and store the answer as an asset. The guard
+  now refuses them, whether they come as a literal address, a DNS result, or a
+  redirect. For IPv6 it accepts only global unicast (`2000::/3`) and the NAT64
+  form of an address it would accept. It also refuses `168.63.129.16`, the
+  public address of Azure's wire server. A site that downloads from one of
+  these ranges on its own network now gets a refusal, and
+  `uploads.source_allowlist` doesn't override it.
 - **A malformed `middleware` config no longer leaves the endpoint open.**
   `'middleware' => [['throttle:60,1']]` failed after the route was registered,
   so the endpoint stayed up without authentication: an anonymous caller could
   initialize and list the tools. Tool calls still refused without a user. Any
   entry that isn't a string now keeps the route unmounted.
+- **Computed values no longer bypass exposure in `format=augmented`.** A
+  computed value that returned a collection, paginator, or array of entries,
+  terms, assets, or users came back in full: another collection's content, and
+  other users' emails and super flags. It now gets the same treatment as a
+  relation field: items outside the exposure are dropped, and the rest are
+  reduced to stubs. Global variables and form submissions are handled the same
+  way. A computed value that returns plain data, such as a string or an
+  entry's `toArray()`, still comes back as written, because nothing marks where
+  it came from: keep such values out of collections an agent may read.
+- **A Bard image in an unexposed container no longer reveals whether the file
+  exists.** `format=augmented` rendered an existing and a missing file
+  differently, so writing guessed paths and reading them back told them apart.
+- **The tree URL check inside the lock no longer names an entry the caller
+  can't view.** When another call took a URL between the check and the save,
+  the message named that entry's id. It now says the URL is taken.
+- **The kill switch and the throttle now cover the whole endpoint.** GET and
+  DELETE skipped both, and a POST that laravel/mcp refused for its headers was
+  answered before them. With `enabled` off and routes cached, every verb is now
+  a 404. Without a route cache the route isn't mounted at all, so Statamic's
+  frontend route answers, with a 419 for a POST or DELETE. Every request counts
+  against `statamic.mcp.middleware`.
 
 ## [1.0.0] - 2026-11-01
 

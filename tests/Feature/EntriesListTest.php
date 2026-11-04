@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesList;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
+use Statamic\Query\EloquentQueryBuilder;
 
 it('lists entries in an exposed collection', function () {
     Fixtures::site();
@@ -249,4 +250,40 @@ it('breaks a date tie by id, so pages never repeat or skip an entry', function (
         ->assertOk()
         ->assertSee('b-story')
         ->assertDontSee('a-story');
+});
+
+it('matches search as plain text, so % and _ are never wildcards', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    foreach (['50% off' => 'percent', '500 off' => 'plain', 'a_b' => 'underscore', 'axb' => 'other'] as $title => $slug) {
+        Entry::make()->collection('blog')->locale('en')->slug($slug)->data(['title' => $title])->save();
+    }
+
+    $user = Fixtures::makeUser('view blog entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesList::class, ['collection' => 'blog', 'search' => '50%'])
+        ->assertOk()
+        ->assertSee('50% off')
+        ->assertDontSee('500 off');
+
+    Server::actingAs($user)
+        ->tool(EntriesList::class, ['collection' => 'blog', 'search' => 'a_b'])
+        ->assertOk()
+        ->assertSee('a_b')
+        ->assertDontSee('axb');
+
+    Server::actingAs($user)
+        ->tool(EntriesList::class, ['collection' => 'blog', 'search' => '%a%f'])
+        ->assertOk()
+        ->assertSee('"total":0');
+});
+
+it('leaves % and _ alone on an SQL query, because SQLite and SQL Server have no default escape character', function () {
+    $pattern = new ReflectionMethod(EntriesList::class, 'containsPattern');
+
+    expect($pattern->invoke(new EntriesList, Mockery::mock(EloquentQueryBuilder::class), 'john_doe'))->toBe('%john_doe%')
+        ->and($pattern->invoke(new EntriesList, Entry::query(), 'john_doe'))->toBe('%john\_doe%');
 });

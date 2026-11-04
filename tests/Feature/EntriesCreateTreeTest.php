@@ -559,7 +559,7 @@ it('reports a placement onto a URL another call gave a page after it was checked
 
     $response->assertSee(sprintf('"id":"%s"', $created->id()))
         ->assertSee('"not_stored":'.json_encode([
-            "tree placement — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' already belongs to entry '{$team}' in collection 'pages' — pick another slug or parent; Statamic lists the entry at the end of the top level, not under '{$about}' — move it with entries_update and parent, which needs 'reorder pages entries'",
+            "tree placement — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' is already taken — pick another slug or parent; Statamic lists the entry at the end of the top level, not under '{$about}' — move it with entries_update and parent, which needs 'reorder pages entries'",
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
     expect(Fixtures::storedPagesTree())->toBe($competing)

@@ -606,7 +606,7 @@ it('refuses a move onto a URL another call gave a page before the tree was saved
 
     Server::actingAs(Fixtures::makeUser('edit pages entries', 'reorder pages entries'))
         ->tool(EntriesUpdate::class, ['id' => $team, 'data' => ['title' => 'The team'], 'parent' => $about])
-        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' already belongs to entry '{$otherTeam}' in collection 'pages' — pick another slug or parent. Any other change in this update was saved."]);
+        ->assertHasErrors(["the entry was not moved — another call changed the tree of collection 'pages' (site 'en') after this one checked it: URL '/about/team' is already taken — pick another slug or parent. Any other change in this update was saved."]);
 
     expect(Fixtures::storedPagesTree())->toBe($competing);
 });

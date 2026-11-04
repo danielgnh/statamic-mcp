@@ -104,6 +104,25 @@ it('shows no notice without a 0.6.0 global set', function () {
         ->assertDontSee('0.6.0', false);
 });
 
+it("labels the form in the user's control panel language", function () {
+    $super = tap(Fixtures::makeSuper()->setPreference('locale', 'de'))->save();
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.guidelines.edit'))
+        ->assertOk()
+        ->assertSee('"display":"Sammlungen und Taxonomien"', false)
+        ->assertDontSee('"display":"Collections and taxonomies"', false);
+});
+
+it("explains a rejected template tag in the user's control panel language", function () {
+    $super = tap(Fixtures::makeSuper()->setPreference('locale', 'de'))->save();
+
+    $this->actingAs($super)
+        ->patchJson(cp_route('mcp.guidelines.update'), guidelinesForm('Headings read like {{ title }}.', 'Hero first.'))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.site.0', 'Statamic würde {{ }}, Antlers- und Blade-Komponenten-Tags sowie @props hier als Template-Code ausführen. Beschreibe den Tag stattdessen in Worten.');
+});
+
 it('opens the page when a hand-edited file has malformed rows, so a super admin can save good ones over them', function (string $yaml) {
     File::ensureDirectoryExists(resource_path('addons'));
     File::put(resource_path('addons/statamic-mcp.yaml'), $yaml);

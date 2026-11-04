@@ -5,11 +5,13 @@ namespace Danielgnh\StatamicMcp\Support;
 use Carbon\CarbonInterface;
 use Closure;
 use Danielgnh\StatamicMcp\Tools\ToolException;
+use GuzzleHttp\Handler\CurlHandler;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\HttpFoundation\IpUtils;
 
@@ -21,7 +23,24 @@ class SourceDownloader
 
     private const float MIN_HOP_TIMEOUT_SECONDS = 0.1;
 
-    private const array NON_PUBLIC_RANGES_PHP_FLAGS_MISS = ['100.64.0.0/10', '64:ff9b:1::/48', '2002::/16', '2001::/32'];
+    private const array NON_PUBLIC_RANGES_PHP_FLAGS_MISS = [
+        '100.64.0.0/10',
+        '192.0.0.0/24',
+        '192.0.2.0/24',
+        '192.88.99.0/24',
+        '198.18.0.0/15',
+        '198.51.100.0/24',
+        '203.0.113.0/24',
+        '224.0.0.0/4',
+        '2001::/23',
+        '2001:db8::/32',
+        '2002::/16',
+        '3fff::/20',
+    ];
+
+    private const string AZURE_WIRE_SERVER = '168.63.129.16';
+
+    private const string IPV6_GLOBAL_UNICAST = '2000::/3';
 
     private const string NAT64_PREFIX = '64:ff9b::/96';
 
@@ -35,6 +54,10 @@ class SourceDownloader
      */
     public function download(string $url): array
     {
+        if (! function_exists('curl_exec')) {
+            throw new ToolException('source_url downloads need curl_exec, which this server has disabled — nothing was uploaded');
+        }
+
         $maxBytes = self::maxKilobytes() * 1024;
         $deadline = now()->addSeconds(self::TIMEOUT_SECONDS);
 
@@ -50,7 +73,11 @@ class SourceDownloader
                     throw new ToolException('source_url redirected without a Location header — nothing was uploaded');
                 }
 
-                $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                try {
+                    $url = (string) UriResolver::resolve(new Uri($url), new Uri($location));
+                } catch (InvalidArgumentException $e) {
+                    throw new ToolException('source_url redirected to an invalid URL — nothing was uploaded', $e->getCode(), $e);
+                }
 
                 continue;
             }
@@ -81,6 +108,12 @@ class SourceDownloader
 
         if ($parts === false || ! isset($parts['host'])) {
             throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url));
+        }
+
+        try {
+            new Uri($url);
+        } catch (InvalidArgumentException $e) {
+            throw new ToolException(sprintf("source_url is not a valid absolute URL: '%s'", $url), $e->getCode(), $e);
         }
 
         if (! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) {
@@ -142,7 +175,7 @@ class SourceDownloader
             return false;
         }
 
-        if (IpUtils::checkIp($ip, self::NON_PUBLIC_RANGES_PHP_FLAGS_MISS)) {
+        if (IpUtils::checkIp($ip, [...self::NON_PUBLIC_RANGES_PHP_FLAGS_MISS, self::AZURE_WIRE_SERVER])) {
             return false;
         }
 
@@ -150,24 +183,21 @@ class SourceDownloader
             return $this->isPublicIp((string) inet_ntop(substr((string) inet_pton($ip), -4)));
         }
 
-        return true;
+        return ! str_contains($ip, ':') || IpUtils::checkIp($ip, self::IPV6_GLOBAL_UNICAST);
     }
 
     private function fetch(string $url, string $ip, int $maxBytes, CarbonInterface $deadline): Response
     {
         $timeoutSeconds = $this->ensureTimeLeft($deadline);
 
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
         $port = parse_url($url, PHP_URL_PORT)
             ?? (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80);
 
-        $literalHost = filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false;
-
         try {
-            return Http::withOptions([
+            return Http::setHandler(new CurlHandler)->withOptions([
                 'allow_redirects' => false,
-                'curl' => $literalHost ? [] : [CURLOPT_RESOLVE => [
-                    sprintf('%s:%d:%s', $host, $port, str_contains($ip, ':') ? "[{$ip}]" : $ip),
+                'curl' => [CURLOPT_CONNECT_TO => [
+                    sprintf('::%s:%d', str_contains($ip, ':') ? "[{$ip}]" : $ip, $port),
                 ]],
                 'on_headers' => function (ResponseInterface $response) use ($maxBytes): void {
                     if ((int) $response->getHeaderLine('Content-Length') > $maxBytes) {

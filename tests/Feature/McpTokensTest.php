@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Js;
 
@@ -244,6 +245,7 @@ it('flashes old input when the store is busy on issuance', function () {
     $user = Fixtures::makeUser('access cp');
 
     $this->mock(TokenRepository::class, function ($mock) {
+        $mock->shouldReceive('all')->andReturn([]);
         $mock->shouldReceive('issue')->andThrow(new LockTimeoutException);
     });
 
@@ -337,6 +339,33 @@ it('403s revocation without the access mcp permission, even for own tokens', fun
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
 });
 
+it("renders in the user's control panel language", function () {
+    $user = tap(Fixtures::makeUser('access cp')->setPreference('locale', 'de'))->save();
+
+    $this->actingAs($user)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertSee('text="Token erstellen"', false)
+        ->assertDontSee('text="Create token"', false);
+});
+
+it('formats dates in the locale Carbon is set to, as the relative times beside them already do', function () {
+    $user = Fixtures::makeUser('access cp');
+
+    $this->travelTo(Carbon::parse('2026-03-05 12:00:00'), fn () => app(TokenRepository::class)->issue($user, 'dated'));
+
+    Carbon::setLocale('de');
+
+    try {
+        $this->actingAs($user)
+            ->get(cp_route('mcp.connections.index'))
+            ->assertOk()
+            ->assertSee('5. Mär 2026', false);
+    } finally {
+        Carbon::setLocale('en');
+    }
+});
+
 it('403s revoking a hand-edited token without an owner, instead of a 500 from the missing key', function () {
     File::ensureDirectoryExists(storage_path('statamic/mcp'));
     File::put(storage_path('statamic/mcp/tokens.yaml'), "ownerless:\n  hash: x");
@@ -346,4 +375,37 @@ it('403s revoking a hand-edited token without an owner, instead of a 500 from th
         ->assertForbidden();
 
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
+});
+
+it('stops one user issuing tokens without end, because every mcp request parses the whole token file', function () {
+    $user = Fixtures::makeUser('access cp');
+    $tokens = app(TokenRepository::class);
+
+    foreach (range(1, 100) as $i) {
+        $tokens->issue($user, "token {$i}");
+    }
+
+    $this->actingAs($user)
+        ->post(cp_route('mcp.connections.tokens.store'), ['name' => 'one more', 'expiry' => 'never'])
+        ->assertRedirect(cp_route('mcp.connections.index'))
+        ->assertSessionHas('error');
+
+    expect($tokens->all())->toHaveCount(100);
+
+    $other = Fixtures::makeUser('access cp');
+
+    $this->actingAs($other)
+        ->post(cp_route('mcp.connections.tokens.store'), ['name' => 'first', 'expiry' => 'never'])
+        ->assertSessionHas('statamic-mcp.plain_token');
+});
+
+it('still issues a token when a hand-edited record has no user', function () {
+    $user = Fixtures::makeUser('access cp');
+
+    File::ensureDirectoryExists(storage_path('statamic/mcp'));
+    File::put(storage_path('statamic/mcp/tokens.yaml'), "handedited:\n  name: pruned\n  hash: abc\n");
+
+    $this->actingAs($user)
+        ->post(cp_route('mcp.connections.tokens.store'), ['name' => 'mine', 'expiry' => 'never'])
+        ->assertSessionHas('statamic-mcp.plain_token');
 });

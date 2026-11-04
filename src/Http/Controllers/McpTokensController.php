@@ -11,6 +11,8 @@ use Statamic\Http\Controllers\CP\CpController;
 
 class McpTokensController extends CpController
 {
+    private const int MAX_TOKENS_PER_USER = 100;
+
     public function store(Request $request, TokenRepository $tokens): RedirectResponse
     {
         abort_if(config('statamic.mcp.auth') === 'oauth', 403);
@@ -26,6 +28,12 @@ class McpTokensController extends CpController
 
         abort_if($user === null, 401);
 
+        if (collect($tokens->all())->where('user', (string) $user->id())->count() >= self::MAX_TOKENS_PER_USER) {
+            return redirect()->to(cp_route('mcp.connections.index'))
+                ->with('error', __('You hold :max tokens, the most one user can have — revoke one first.', ['max' => self::MAX_TOKENS_PER_USER]))
+                ->withInput();
+        }
+
         try {
             $plain = $tokens->issue($user, $validated['name'] ?? null, $days);
         } catch (LockTimeoutException) {
@@ -38,7 +46,7 @@ class McpTokensController extends CpController
             'token' => $plain->token,
             'tokenId' => $plain->tokenId,
             'name' => $plain->name,
-            'expiresAt' => $plain->expiresAt?->toFormattedDateString(),
+            'expiresAt' => $plain->expiresAt?->isoFormat('ll'),
         ]);
     }
 

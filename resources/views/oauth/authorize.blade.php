@@ -15,8 +15,9 @@
 
     $redirectUri = $request->query('redirect_uri') ?: ($client->redirect_uris[0] ?? null);
     $redirect = $redirectUri ? \Illuminate\Support\Uri::of($redirectUri) : null;
-    $redirectScheme = $redirect ? $redirect->scheme().'://' : null;
-    $redirectRest = $redirect ? mb_substr($redirect->value(), mb_strlen($redirectScheme.$redirect->host())) : null;
+    $redirectUser = $redirect?->user(withPassword: true);
+    $redirectOrigin = $redirect ? $redirect->scheme().'://'.($redirectUser === null ? '' : $redirectUser.'@') : null;
+    $redirectRest = $redirect ? mb_substr($redirect->value(), mb_strlen($redirectOrigin.$redirect->host())) : null;
     $redirectIsShort = $redirect && mb_strlen($redirect->value()) <= 64;
 @endphp
 
@@ -27,7 +28,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <meta name="color-scheme" content="light dark">
-    <title>Authorize {{ $client->name }} — {{ config('app.name', 'MCP') }}</title>
+    <title>{{ __('Authorize :client', ['client' => $client->name]) }} — {{ config('app.name', 'MCP') }}</title>
     <script>
         (function () {
             let mode = @js($colorMode) ?? localStorage.getItem('statamic.color_mode') ?? 'auto';
@@ -309,7 +310,7 @@
     <main>
         <x-statamic-mcp::auth-card
             :title="$client->name"
-            description="wants access to your {{ config('app.name', 'Statamic') }} account."
+            :description="__('wants access to your :app account.', ['app' => config('app.name', 'Statamic')])"
         >
             <x-slot:logo>
                 <x-statamic-mcp::avatar :name="$client->name" size="lg" />
@@ -318,7 +319,7 @@
             <div class="ui-profile">
                 <x-statamic-mcp::avatar :name="$userName" :seed="$userIdentity" :src="$userAvatar" />
                 <div>
-                    <span class="ui-profile__label">Signed in as</span>
+                    <span class="ui-profile__label">{{ __('Signed in as') }}</span>
                     <span class="ui-profile__identity">{{ $userIdentity }}</span>
                 </div>
             </div>
@@ -338,13 +339,13 @@
                 <div class="ui-redirect">
                     <span class="ui-redirect__icon">{!! Statamic::svg('icons/external-link') !!}</span>
                     <div>
-                        <span class="ui-profile__label">Authorizing sends you to</span>
+                        <span class="ui-profile__label">{{ __('Authorizing sends you to') }}</span>
                         @if ($redirectIsShort)
-                            <span class="ui-redirect__uri"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                            <span class="ui-redirect__uri"><span class="ui-redirect__origin">{{ $redirectOrigin }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
                         @else
                             <details class="ui-redirect__uri">
                                 <summary>
-                                    <span class="ui-redirect__text"><span class="ui-redirect__origin">{{ $redirectScheme }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
+                                    <span class="ui-redirect__text"><span class="ui-redirect__origin">{{ $redirectOrigin }}<span class="ui-redirect__host">{{ $redirect->host() }}</span></span><span class="ui-redirect__rest">{{ $redirectRest }}</span></span>
                                     {!! Statamic::svg('icons/chevron-down') !!}
                                 </summary>
                             </details>
@@ -360,7 +361,7 @@
                     <input type="hidden" name="state" value="{{ $request->state ?? '' }}">
                     <input type="hidden" name="client_id" value="{{ $client->id }}">
                     <input type="hidden" name="auth_token" value="{{ $authToken }}">
-                    <x-statamic-mcp::button type="submit" text="Cancel" />
+                    <x-statamic-mcp::button type="submit" :text="__('Cancel')" />
                 </form>
 
                 <form method="POST" action="{{ route('passport.authorizations.approve') }}">
@@ -368,7 +369,7 @@
                     <input type="hidden" name="state" value="{{ $request->state ?? '' }}">
                     <input type="hidden" name="client_id" value="{{ $client->id }}">
                     <input type="hidden" name="auth_token" value="{{ $authToken }}">
-                    <x-statamic-mcp::button type="submit" variant="primary" text="Authorize" />
+                    <x-statamic-mcp::button type="submit" variant="primary" :text="__('Authorize')" />
                 </form>
             </div>
         </x-statamic-mcp::auth-card>

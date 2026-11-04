@@ -18,3 +18,7 @@ it('fails closed when the configured server is not a laravel/mcp server', functi
         ->expectsOutputToContain('[FAIL] MCP is enabled but its route is not mounted')
         ->assertExitCode(1);
 });
+
+it('leaves no route group open behind a failed mount, so later routes keep their own middleware', function () {
+    expect(app('router')->hasGroupStack())->toBeFalse();
+});
