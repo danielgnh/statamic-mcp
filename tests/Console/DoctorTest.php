@@ -416,3 +416,15 @@ it('does not warn about the URL when APP_URL is https', function () {
         ->doesntExpectOutputToContain('[WARN] APP_URL')
         ->assertExitCode(0);
 });
+
+it('names a database it cannot reach in oauth mode, because the migrations it would otherwise suggest cannot help', function () {
+    config(['statamic.mcp.auth' => 'oauth', 'database.default' => 'unconfigured']);
+
+    expect(Artisan::call('statamic:mcp:doctor'))->toBe(1);
+
+    expect(Artisan::output())
+        ->toContain("[FAIL] Can't reach the database")
+        ->toContain('unconfigured')
+        ->not->toContain('php artisan migrate')
+        ->not->toContain('tables are missing');
+});

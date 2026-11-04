@@ -16,7 +16,7 @@ class McpGuidelinesController extends CpController
         abort_unless(User::current()?->isSuper(), 403);
 
         $blueprint = $guidelines->blueprint();
-        $fields = $blueprint->fields()->addValues($guidelines->values())->preProcess();
+        $fields = $blueprint->fields()->addValues($guidelines->wellFormedValues())->preProcess();
 
         return view('statamic-mcp::mcp.guidelines', [
             'blueprint' => $blueprint->toPublishArray(),

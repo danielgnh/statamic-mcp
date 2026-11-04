@@ -196,17 +196,13 @@ class Setup extends Command
         $this->line('');
         $this->components->info('Verifying with mcp:doctor…');
 
-        $healthy = $this->runProcess('php please mcp:doctor');
-
-        $url = url(config()->string('statamic.mcp.route', 'mcp/statamic'));
-
-        if (! $healthy) {
+        if (! $this->runProcess('php please mcp:doctor')) {
             $this->components->error('The doctor found problems — fix the [FAIL] items above and re-run `php please mcp:setup`.');
 
             return self::FAILURE;
         }
 
-        $this->components->info('Done. Add this connector URL to claude.ai or ChatGPT: '.$url);
+        $this->components->info('Done. Add this connector URL to claude.ai or ChatGPT: '.url(config()->string('statamic.mcp.route', 'mcp/statamic')));
         $this->line('Connectors need the site reachable over HTTPS from the internet.');
 
         return self::SUCCESS;

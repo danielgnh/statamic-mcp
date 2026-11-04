@@ -36,6 +36,7 @@
     "Last refreshed": "Sist fornyet",
     "Leftover tokens": "Gjenværende tokener",
     "MCP endpoint": "MCP-endepunkt",
+    "MCP is not mounted because statamic.mcp.route is not a path. Fix it, then run php please mcp:doctor.": "MCP er ikke montert fordi statamic.mcp.route ikke er en sti. Rett det, og kjør deretter php please mcp:doctor.",
     "Name (optional)": "Navn (valgfritt)",
     "No connections yet": "Ingen tilkoblinger ennå",
     "No tokens yet": "Ingen tokener ennå",

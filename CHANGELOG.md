@@ -110,6 +110,28 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   used to print the part after the host wrong.
 - **`mcp:setup` changes every line of a key that appears twice in `.env`.** It
   rewrote the first and reported "applied" while the last one kept winning.
+- **A database outage no longer reads as missing keys in OAuth mode.** The
+  endpoint's 503 and `mcp:doctor` told you to run `php artisan migrate` or
+  `mcp:keys`, and `mcp:keys` then generated a new pair. Writing that pair to
+  `.env` overrides the stored one, so every connected client would have to
+  reconnect once the database was back. All three now name the database, and
+  `mcp:keys` refuses to generate a pair, or to write key files to `.env`, until
+  it can read the stored key. A sqlite file that doesn't exist yet still gets
+  the migrate advice, since nothing can be stored in it.
+- **Malformed guideline rows no longer break `blueprints_get` or the Guidelines
+  page.** With `resources: nope` in a hand-edited settings file, every
+  `blueprints_get` answered with the generic error and the page returned a 500,
+  as it did for a row without a `type`. Rows that aren't objects are now ignored
+  and reported, the rows around them keep working, and a row without a `type`
+  opens as a normal row.
+- **`mcp:token` and the Connections page survive a `route` that isn't a path.**
+  `mcp:token` wrote the token, then crashed before showing it; it now issues
+  nothing and says why. The Connections page returned a 500; it now opens with
+  an alert, so tokens can still be revoked. `mcp:setup` reports the failing
+  doctor instead of crashing on the same config.
+- **A value that crashes a validation rule now names the field.** A list sent to
+  a `time` field got the generic error. The agent now gets the field's name, and
+  the failure is reported, since the rule itself can be the bug.
 
 ### Security
 

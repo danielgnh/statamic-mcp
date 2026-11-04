@@ -83,6 +83,12 @@
         </template>
     </ui-header>
 
+    @if ($endpoint === null)
+        <div class="mb-8">
+            <ui-alert variant="error" text="{{ __('MCP is not mounted because statamic.mcp.route is not a path. Fix it, then run php please mcp:doctor.') }}"></ui-alert>
+        </div>
+    @endif
+
     @if ($insecureUrl)
         <div class="mb-8">
             <ui-alert variant="warning" text="{{ __('The MCP endpoint is not HTTPS — credentials travel unencrypted. Set APP_URL to your real https:// site URL.') }}"></ui-alert>

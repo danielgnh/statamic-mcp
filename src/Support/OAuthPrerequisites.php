@@ -3,9 +3,12 @@
 namespace Danielgnh\StatamicMcp\Support;
 
 use Danielgnh\StatamicMcp\OAuth\KeyStore;
+use Illuminate\Database\SQLiteDatabaseDoesNotExistException;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 use Laravel\Passport\Contracts\AuthorizationViewResponse;
 use Laravel\Passport\Passport;
+use PDOException;
 
 class OAuthPrerequisites
 {
@@ -14,6 +17,17 @@ class OAuthPrerequisites
     public function passportInstalled(): bool
     {
         return class_exists(Passport::class);
+    }
+
+    public function databaseFailure(): PDOException|InvalidArgumentException|null
+    {
+        try {
+            $this->keys->tableExists();
+
+            return null;
+        } catch (PDOException|InvalidArgumentException $e) {
+            return $e->getPrevious() instanceof SQLiteDatabaseDoesNotExistException ? null : $e;
+        }
     }
 
     public function passportKeysExist(): bool

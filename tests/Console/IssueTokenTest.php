@@ -100,3 +100,18 @@ it("warns when the user lacks 'access mcp' but still issues the token", function
 
     expect(app(TokenRepository::class)->all())->toHaveCount(1);
 });
+
+it('issues nothing when the route config is not a path, because the crash would lose the secret after writing the token', function (mixed $route) {
+    $user = Fixtures::makeUser();
+
+    config(['statamic.mcp.route' => $route]);
+
+    expect(Artisan::call('statamic:mcp:token', ['email' => $user->email()]))->toBe(1);
+
+    expect(Artisan::output())->toContain('mcp:doctor')
+        ->and(app(TokenRepository::class)->all())->toBe([]);
+})->with([
+    'null' => [null],
+    'a list' => [['mcp']],
+    'empty' => [''],
+]);

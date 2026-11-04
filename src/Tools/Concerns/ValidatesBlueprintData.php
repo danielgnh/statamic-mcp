@@ -22,6 +22,7 @@ use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Support\Arr;
+use Throwable;
 
 trait ValidatesBlueprintData
 {
@@ -81,6 +82,16 @@ trait ValidatesBlueprintData
                 $this->keyedBySetId($e->errors(), $values),
                 JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
             ), $e->getCode(), $e);
+        } catch (Error|ErrorException|InvalidArgumentException|AssetNotFoundException $e) {
+            $field = $this->fieldValidationChokesOn($fields, $only, $replacements);
+
+            if ($field === null) {
+                throw $e;
+            }
+
+            report($e);
+
+            throw $this->unprocessable($field, $e);
         }
 
         return collect($only)->mapWithKeys(function (int|string $handle) use ($fields, $values) {
@@ -415,6 +426,28 @@ trait ValidatesBlueprintData
         return $containers->count() === 1 ? $containers->first() : null;
     }
 
+    /**
+     * @param  list<array-key>  $only
+     * @param  array<string, string>  $replacements
+     */
+    private function fieldValidationChokesOn(Fields $fields, array $only, array $replacements): ?Field
+    {
+        foreach ($only as $handle) {
+            try {
+                $fields->newInstance()
+                    ->setFields($fields->all()->only([$handle]))
+                    ->validator()
+                    ->withReplacements($replacements)
+                    ->validator()
+                    ->fails();
+            } catch (Error|ErrorException|InvalidArgumentException|AssetNotFoundException) {
+                return $fields->get($handle);
+            }
+        }
+
+        return null;
+    }
+
     private function orUnprocessable(Field $field, callable $process): mixed
     {
         try {
@@ -422,12 +455,17 @@ trait ValidatesBlueprintData
         } catch (Error|ErrorException|InvalidArgumentException|AssetNotFoundException $e) {
             report_if($e instanceof Error || $e instanceof ErrorException, $e);
 
-            throw new ToolException(sprintf(
-                "field %s has a value its fieldtype (%s) can't process — send the raw shape the get tools return; blueprints_get shows each field's example",
-                $field->handle(),
-                $field->type(),
-            ), $e->getCode(), $e);
+            throw $this->unprocessable($field, $e);
         }
+    }
+
+    private function unprocessable(Field $field, Throwable $cause): ToolException
+    {
+        return new ToolException(sprintf(
+            "field %s has a value its fieldtype (%s) can't process — send the raw shape the get tools return; blueprints_get shows each field's example",
+            $field->handle(),
+            $field->type(),
+        ), $cause->getCode(), $cause);
     }
 
     /**

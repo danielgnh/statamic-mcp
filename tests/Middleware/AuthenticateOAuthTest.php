@@ -6,6 +6,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Exceptions;
 use Symfony\Component\HttpFoundation\Response;
 
 // These tests drive the real handle() path. The guard is wired exactly as the
@@ -47,6 +48,24 @@ it('answers 503 with the keys remedy when Passport keys are missing', function (
         ->and(json_decode($response->getContent(), true)['remedy'])
         ->toContain('php artisan migrate')
         ->toContain('mcp:keys');
+});
+
+it('answers 503 naming the database when it cannot be reached, because migrating or generating keys would rotate a pair that is still good', function () {
+    config(['passport.private_key' => null, 'passport.public_key' => null, 'database.default' => 'unconfigured']);
+
+    Exceptions::fake();
+
+    $response = oauthHandle(Request::create('/mcp/statamic', 'POST'));
+    $body = json_decode($response->getContent(), true);
+
+    expect($response->getStatusCode())->toBe(503)
+        ->and($response->headers->get('Retry-After'))->toBe('60')
+        ->and($body['error'])->toContain('database')
+        ->and($body['remedy'])->not->toContain('php artisan migrate')
+        ->and($body['remedy'])->not->toContain('mcp:keys')
+        ->and($response->getContent())->not->toContain('unconfigured');
+
+    Exceptions::assertReported(InvalidArgumentException::class);
 });
 
 it('rejects an unauthenticated request with 401 and WWW-Authenticate', function () {

@@ -314,3 +314,67 @@ it('pairs an env key with the key file of its other half, as Passport does', fun
         ])
         ->and(file_get_contents($this->keyDir.'/oauth-public.key'))->toBe($public);
 });
+
+it('refuses to generate a pair when the database cannot be reached, because a fresh pair in .env would override the stored one', function () {
+    config(['database.default' => 'unconfigured']);
+
+    [$exit, $stdout, $stderr] = keysApart();
+
+    expect($exit)->toBe(1)
+        ->and($stdout)->not->toContain('PASSPORT_PRIVATE_KEY')
+        ->and($stderr)->toContain("Can't reach the database")
+        ->and($stderr)->toContain('php artisan passport:keys')
+        ->and(file_exists(Passport::keyPath('oauth-private.key')))->toBeFalse();
+});
+
+it('exports existing key files when the database cannot be reached, warning that a stored pair may differ', function () {
+    $private = OAuthFixtures::rsaPrivateKey();
+    file_put_contents(Passport::keyPath('oauth-private.key'), $private);
+    file_put_contents(Passport::keyPath('oauth-public.key'), (new KeyStore)->publicKeyFor($private));
+
+    config(['database.default' => 'unconfigured']);
+
+    [$exit, $stdout, $stderr] = keysApart();
+
+    expect($exit)->toBe(0)
+        ->and($stdout)->toContain('PASSPORT_PRIVATE_KEY='.envEscapedKey($private))
+        ->and($stderr)->toContain('may not be the pair in use');
+});
+
+it('refuses to write key files into .env when the database cannot be reached, because they may be stale and would override the stored pair', function () {
+    $private = OAuthFixtures::rsaPrivateKey();
+    file_put_contents(Passport::keyPath('oauth-private.key'), $private);
+    file_put_contents(Passport::keyPath('oauth-public.key'), (new KeyStore)->publicKeyFor($private));
+
+    $env = new class extends EnvWriter
+    {
+        public array $writes = [];
+
+        public function apply(string $path, string $key, string $value): EditResult
+        {
+            $this->writes[] = $key;
+
+            return EditResult::Applied;
+        }
+    };
+    app()->instance(EnvWriter::class, $env);
+
+    config(['database.default' => 'unconfigured']);
+
+    [$exit, , $stderr] = keysApart(['--write' => true]);
+
+    expect($exit)->toBe(1)
+        ->and($stderr)->toContain('may not be the pair in use')
+        ->and($env->writes)->toBe([]);
+});
+
+it('generates a pair on a site whose sqlite file does not exist yet, because nothing can be stored in it', function () {
+    config(['database.default' => 'probe', 'database.connections.probe' => ['driver' => 'sqlite', 'database' => '/nonexistent/none.sqlite', 'prefix' => '']]);
+    DB::purge();
+
+    [$exit, $stdout] = keysApart();
+
+    expect($exit)->toBe(0)
+        ->and($stdout)->toContain('PASSPORT_PRIVATE_KEY=')
+        ->and(file_exists(Passport::keyPath('oauth-private.key')))->toBeTrue();
+});

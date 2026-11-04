@@ -27,7 +27,8 @@ runtime.
   on it); token counts distinguish **active** from **expired** and **orphaned-user**
   tokens — "5 tokens issued but none are active" is a locked door that looks
   configured.
-- **OAuth mode** — Passport installed; encryption keys available, naming the
+- **OAuth mode** — Passport installed; the database reachable (if it isn't, that's the
+  only OAuth check reported); encryption keys available, naming the
   source (environment config / database / key files / pending provision — keys
   are database-managed and provision automatically once `php artisan migrate`
   created the addon's key table; `PASSPORT_*` env vars take precedence, and
@@ -42,7 +43,7 @@ runtime.
 |---|---|
 | `401` + `WWW-Authenticate: Bearer` | Missing, malformed, expired, or revoked token — or the token's user was deleted. Deliberately identical in every case (no token enumeration). In OAuth mode: Passport's ResourceServer rejected the bearer, or its user no longer resolves. |
 | `403` "requires 'access mcp'…" | The user authenticated fine but lacks the `Access MCP` permission — grant it to one of their roles in the CP. |
-| `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing; the body names the exact fix. Only the MCP route is affected. |
+| `503` + `remedy` (OAuth mode) | An OAuth prerequisite is missing, or the database that holds the keys can't be reached; the body names the exact fix. Only the MCP route is affected. |
 | `400`, `404`, or `500` with a JSON-RPC `error` in the body | The endpoint works and refused that one request: `404` for a method the server doesn't offer, `500` for an internal error, `400` for anything else, such as an unknown tool. The `message` says which. |
 | `200` with `isError: true` in the result | The tool ran and refused: a missing or invalid argument, a missing permission, or something that doesn't exist. The text says which. `An internal server error occurred.` means the tool failed unexpectedly, and your exception handler has the details. |
 | `404` without a JSON-RPC body, or `419` for a POST or DELETE, on the endpoint | MCP is disabled, or enabled but failed to mount, so Statamic's frontend route answers instead. Check the log for `Statamic MCP failed to mount` and run `mcp:doctor`. If the site caches routes, a 404 also means the cache was built under another `enabled` or `auth` setting: run `php artisan optimize`. |

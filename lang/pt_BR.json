@@ -36,6 +36,7 @@
     "Last refreshed": "Última renovação",
     "Leftover tokens": "Tokens restantes",
     "MCP endpoint": "Endpoint MCP",
+    "MCP is not mounted because statamic.mcp.route is not a path. Fix it, then run php please mcp:doctor.": "O MCP não está montado porque statamic.mcp.route não é um caminho. Corrija isso e execute php please mcp:doctor.",
     "Name (optional)": "Nome (opcional)",
     "No connections yet": "Nenhuma conexão ainda",
     "No tokens yet": "Nenhum token ainda",

@@ -3,6 +3,7 @@
 use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
@@ -311,4 +312,29 @@ it('counts blocks of unrelated blueprints apart, even at the same path', functio
     expect(guidelinesOutput())
         ->toContain('1 of 2 blocks have instructions.')
         ->toContain("  In collections.guides.page\n    page_builder: hero\n");
+});
+
+it('moves every row of the 0.6.0 set as it is, because the set is deleted afterwards', function () {
+    Fixtures::site();
+    Fixtures::legacyGuidelinesSet(['en' => [
+        'site' => 'Friendly, never salesy.',
+        'resources' => ['Open with a hero', ['id' => 'a', 'type' => 'resource', 'enabled' => true, 'collections' => ['blog'], 'guidelines' => 'Keep it short.']],
+    ]]);
+
+    expect(guidelinesOutput())->toContain('Moved');
+
+    expect(app(AgentGuidelines::class)->values()['resources'][0])->toBe('Open with a hero');
+});
+
+it('leaves a settings file holding only malformed rows alone, because agents ignoring them does not make it empty', function () {
+    Fixtures::site();
+    Fixtures::legacyGuidelinesSet(['en' => ['site' => 'Friendly, never salesy.']]);
+
+    File::ensureDirectoryExists(resource_path('addons'));
+    File::put(resource_path('addons/statamic-mcp.yaml'), "guidelines:\n  resources: nope");
+
+    expect(guidelinesOutput())->toContain('already has guidelines');
+
+    expect(app(AgentGuidelines::class)->values())->toBe(['resources' => 'nope'])
+        ->and(GlobalSet::find('guidelines'))->not->toBeNull();
 });

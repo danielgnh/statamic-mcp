@@ -256,3 +256,17 @@ it('shows what mcp:keys did, never the key it printed', function () {
 
     Process::assertRan('php please mcp:keys');
 });
+
+it('reports a failing doctor instead of crashing when the route config is not a path', function () {
+    Process::fake(['php please mcp:doctor' => Process::result(exitCode: 1)]);
+    fakeEnvWriter();
+    stubOAuthPrereqs(['installed' => true, 'keys' => true, 'tables' => true, 'columns' => true]);
+
+    config(['statamic.mcp.auth' => 'oauth', 'statamic.mcp.route' => null]);
+
+    $this->artisan('statamic:mcp:setup')
+        ->expectsChoice('How will AI clients connect to this site?', 'oauth', MODE_OPTIONS)
+        ->expectsConfirmation('Publish the OAuth consent screen to customize it? (a working default is already bound)', 'no')
+        ->expectsOutputToContain('The doctor found problems')
+        ->assertExitCode(1);
+});
