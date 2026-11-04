@@ -9,6 +9,7 @@ use Illuminate\Support\Arr;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
+use Statamic\Fieldtypes\Group;
 
 /**
  * Needs ValidatesBlueprintData in the same tool: the merged data is checked
@@ -86,6 +87,12 @@ trait MergesSets
 
             if (TextEdit::accepts($field, $patch)) {
                 $data[$handle] = TextEdit::apply($field, $current[$handle] ?? null, $patch, $at);
+
+                continue;
+            }
+
+            if (is_array($patch) && $field?->fieldtype() instanceof Group) {
+                $data[$handle] = Sets::withoutUnaddressableIds($fields, [$handle => $patch])[$handle];
 
                 continue;
             }

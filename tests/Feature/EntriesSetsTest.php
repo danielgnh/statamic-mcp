@@ -1040,3 +1040,61 @@ it('refuses a new set whose type is not a string with the set-type error, before
         ]]])
         ->assertHasErrors(['page_builder.1 must be a set object with a type — valid set types: section_hero, section_text_block']);
 });
+
+function pageWithGroupedReplicator(): void
+{
+    Fixtures::site();
+    Fixtures::pages();
+
+    Blueprint::makeFromFields([
+        'title' => ['type' => 'text'],
+        'seo' => ['type' => 'group', 'fields' => [
+            ['handle' => 'faqs', 'field' => ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+                'faq' => ['fields' => [['handle' => 'q', 'field' => ['type' => 'text']]]],
+            ]]]]],
+        ]],
+    ])->setHandle('page')->setNamespace('collections.pages')->save();
+}
+
+function unaddressableFaqs(): array
+{
+    return [
+        ['id' => 'same0001', 'type' => 'faq', 'q' => 'One'],
+        ['id' => 'same0001', 'type' => 'faq', 'q' => 'Two'],
+        ['id' => '', 'type' => 'faq', 'q' => 'Blank'],
+        ['id' => '0', 'type' => 'faq', 'q' => 'Zero'],
+        ['id' => 'keepme01', 'type' => 'faq', 'q' => 'Kept'],
+    ];
+}
+
+function expectFreshFaqIds(array $faqs): void
+{
+    $ids = array_map(fn (array $set) => $set['id'] ?? null, $faqs);
+
+    expect($ids)->toHaveCount(5)
+        ->and(array_unique($ids))->toHaveCount(5)
+        ->and($ids[4])->toBe('keepme01')
+        ->and(array_filter($ids, fn (mixed $id) => in_array($id, ['', '0', 'same0001', null], true)))->toBe([]);
+}
+
+it('gives fresh ids to new sets of a replicator inside a group on create', function () {
+    pageWithGroupedReplicator();
+
+    Server::actingAs(Fixtures::makeUser('create pages entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'pages', 'slug' => 'home', 'data' => ['title' => 'Home', 'seo' => ['faqs' => unaddressableFaqs()]]])
+        ->assertOk();
+
+    expectFreshFaqIds(Entry::query()->where('collection', 'pages')->where('slug', 'home')->first()->get('seo')['faqs']);
+});
+
+it('gives fresh ids to new sets of a replicator inside a group on update', function () {
+    pageWithGroupedReplicator();
+
+    $entry = tap(Entry::make()->collection('pages')->slug('home')->data(['title' => 'Home']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['seo' => ['faqs' => unaddressableFaqs()]]])
+        ->assertOk();
+
+    expectFreshFaqIds(Entry::find($entry->id())->get('seo')['faqs']);
+});

@@ -9,6 +9,7 @@ use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
+use Statamic\Fieldtypes\Group;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Fieldtypes\RowId;
 use Stringable;
@@ -125,6 +126,8 @@ class Sets
 
             if (self::addressable($field) && is_array($value) && array_is_list($value)) {
                 $data[$handle] = self::withoutUnaddressableIdsAt($field, $value, array_keys($value));
+            } elseif (is_array($value) && ($group = $field?->fieldtype()) instanceof Group) {
+                $data[$handle] = self::withoutUnaddressableIds($group->fields(), $value);
             }
         }
 
