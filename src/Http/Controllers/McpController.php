@@ -14,18 +14,8 @@ use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * Tools → MCP. Every route sits behind 'can:access mcp' (routes/cp.php);
- * Guidelines has its own controller, Connections lists tokens and OAuth
- * connections: a user's own, or everyone's for a super admin.
- */
 class McpController extends CpController
 {
-    /**
-     * The nav item's target: the first page this user may open. The sidebar
-     * links through Inertia, and Inertia::location() sends it straight to the
-     * Blade page instead of rendering that page twice.
-     */
     public function index(): Response
     {
         return Inertia::location(cp_route(User::current()?->isSuper() ? 'mcp.guidelines.edit' : 'mcp.connections.index'));
@@ -60,9 +50,6 @@ class McpController extends CpController
     }
 
     /**
-     * tokens.yaml is hand-editable, so records may be partial — every key is
-     * coalesced so a pruned key can't 500 the page.
-     *
      * @param  array<string, array<string, mixed>>  $records
      * @return Collection<int, array{id: string, name: mixed, user_id: mixed, user: UserContract|null, created_at: Carbon, expires_at: Carbon|null, expired: bool}>
      */
@@ -92,9 +79,6 @@ class McpController extends CpController
     }
 
     /**
-     * Rows arrive shaped and sorted from the repository — this only filters
-     * visibility and attaches the user.
-     *
      * @param  Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool}>  $connections
      * @return Collection<int, array{user_id: string, client_id: string, client_name: string, connected_at: Carbon, last_refreshed_at: Carbon, active: bool, user: UserContract|null}>
      */

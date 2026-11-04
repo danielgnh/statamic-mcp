@@ -7,8 +7,6 @@ use Danielgnh\StatamicMcp\Http\Controllers\McpTokensController;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Illuminate\Support\Facades\Route;
 
-// Statamic loads this file on its own, whatever the addon's config says, so
-// the kill switch is checked here, each time routes load.
 if (! config('statamic.mcp.enabled')) {
     return;
 }

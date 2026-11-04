@@ -21,15 +21,6 @@ use Statamic\Facades\Taxonomy;
 use Statamic\Globals\Variables;
 use Statamic\Taxonomies\LocalizedTerm;
 
-/**
- * Base class for every MCP tool, host-app tools included: the protected
- * helpers are public API.
- *
- * Each tool's execute() re-validates the request and re-checks the write/delete
- * gates itself: laravel/mcp enforces neither the declared JSON schema nor
- * shouldRegister() server-side, and a stale client tool cache can still
- * invoke a tool that is no longer registered.
- */
 abstract class Tool extends BaseTool
 {
     public const LIVENESS_DRAFT = 'saved as draft — not live';
@@ -50,11 +41,11 @@ abstract class Tool extends BaseTool
 
     public const LIVENESS_WORKING_COPY_AMENDED = 'working copy amended — live entry unchanged';
 
-    public const LIVENESS_LIVE = 'updated — live'; // terms/globals have no draft state
+    public const LIVENESS_LIVE = 'updated — live';
 
     public const LIVENESS_CREATED = 'created — live';
 
-    public const LIVENESS_UPLOADED = 'uploaded — live'; // assets have no draft state
+    public const LIVENESS_UPLOADED = 'uploaded — live';
 
     final public function handle(Request $request): Response
     {
@@ -69,13 +60,6 @@ abstract class Tool extends BaseTool
 
     abstract protected function execute(Request $request): Response;
 
-    /**
-     * The acting Statamic user, mode-agnostic (ActingUser::resolve normalizes
-     * Passport's Eloquent model and token auth's Statamic user alike). Behind
-     * the fail-closed HTTP middleware a user always exists, but stdio/inspector
-     * contexts reach tools unauthenticated — guard so they get a clear tool
-     * error instead of a TypeError-turned-opaque-500.
-     */
     protected function user(Request $request): UserContract
     {
         $user = ActingUser::resolve($request->user());
@@ -91,9 +75,6 @@ abstract class Tool extends BaseTool
 
     /**
      * @param  'collections'|'taxonomies'|'globals'|'asset_containers'|'navigations'|'forms'  $type
-     *
-     * Throws when $handle is missing OR exists-but-unexposed — indistinguishable
-     * by design; the error lists only exposed handles.
      */
     protected function ensureExposed(string $type, string $handle): void
     {
@@ -182,10 +163,6 @@ abstract class Tool extends BaseTool
         }
     }
 
-    /**
-     * Throwing guard for every delete tool: read_only trumps deletes, so the
-     * message always names the switch that actually blocked the call.
-     */
     protected function ensureDeletesEnabled(): void
     {
         $this->ensureWritesEnabled();
@@ -198,9 +175,6 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Compact JSON in a text block. Response::json() encodes with
-     * JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE (verified v1.1.2).
-     *
      * @param  array<array-key, mixed>  $data
      */
     protected function json(array $data): Response
@@ -217,10 +191,6 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Liveness block appended to every write response: pass a
-     * LIVENESS_* constant. editUrl() verified on Entry, LocalizedTerm,
-     * Variables, and Asset in 6.x source.
-     *
      * @return array{result: string, cp_edit_url: mixed}
      */
     protected function liveness(EntryContract|LocalizedTerm|Variables|AssetContract $saved, string $state): array
@@ -241,10 +211,6 @@ abstract class Tool extends BaseTool
     }
 
     /**
-     * Liveness for an entry that was just saved live. On dated collections a
-     * published entry is only live when its date allows it, so the result
-     * follows status() and $whenLive applies only when nothing overrides it.
-     *
      * @return array{result: string, cp_edit_url: mixed}
      */
     protected function entryLiveness(EntryContract $entry, string $whenLive): array

@@ -13,13 +13,6 @@ use Statamic\Fields\Blueprint;
 
 trait NormalizesEntryInput
 {
-    /**
-     * A time without an offset is read in app.timezone, the zone
-     * statamic_overview reports as server.timezone. Carbon throws
-     * InvalidFormatException for malformed input and other
-     * \InvalidArgumentException subclasses for out-of-range values — catch the
-     * shared root so both surface as one clean tool error.
-     */
     protected function parseEntryDate(string $date): Carbon
     {
         try {
@@ -29,11 +22,6 @@ trait NormalizesEntryInput
         }
     }
 
-    /**
-     * Publish state moved to entries_publish / entries_unpublish. A client
-     * with a stale tool cache may still send published — refuse it loudly
-     * rather than save a draft the agent believes is live.
-     */
     protected function rejectPublishedArgument(Request $request, string $tool): void
     {
         if ($request->get('published') !== null) {
@@ -45,11 +33,6 @@ trait NormalizesEntryInput
     }
 
     /**
-     * slug and (on dated collections) date are top-level tool parameters: v6
-     * auto-injects them as blueprint fields but entries never store them in
-     * data, so the ambiguous data-key spelling gets a targeted error instead of
-     * the generic unknown-field one.
-     *
      * @param  array<string, mixed>  $data
      */
     protected function rejectAmbiguousDataKeys(array $data, bool $dated): void
@@ -63,12 +46,6 @@ trait NormalizesEntryInput
         }
     }
 
-    /**
-     * CP parity (EntriesController::resolveSlug): an entry whose blueprint has
-     * no slug field gets no slug, and Statamic names its file by id. Turning a
-     * collection's slugs off leaves that field out, and the CP form then has
-     * no field to send a slug through.
-     */
     protected function rejectSlugWithoutSlugField(?string $slug, Blueprint $blueprint, CollectionContract $collection): void
     {
         if ($slug !== null && ! $blueprint->hasField('slug')) {

@@ -7,11 +7,6 @@ use Illuminate\Http\RedirectResponse;
 use Statamic\Facades\User;
 use Statamic\Http\Controllers\CP\CpController;
 
-/**
- * Route-level authorization is the 'can:access mcp' middleware, same as
- * McpTokensController. destroy() is the only action —
- * connections are created solely by the OAuth consent flow itself.
- */
 class McpConnectionsController extends CpController
 {
     public function destroy(ConnectionRepository $connections, string $clientId, string $userId): RedirectResponse
@@ -20,8 +15,6 @@ class McpConnectionsController extends CpController
 
         abort_if($user === null, 401);
 
-        // Ownership comes from the URL and is checked before existence, so a
-        // non-super probing other users' pairs learns nothing (403 either way).
         abort_unless($user->isSuper() || $userId === (string) $user->id(), 403);
 
         abort_unless($connections->disconnect($userId, $clientId), 404);

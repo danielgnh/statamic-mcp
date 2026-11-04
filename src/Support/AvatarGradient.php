@@ -2,11 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Support;
 
-/**
- * PHP port of the deterministic mesh-gradient fallback in Statamic's
- * ui/Avatar.vue, so server-rendered avatars on the OAuth consent screen get
- * the same look as control panel avatars without any JavaScript.
- */
 class AvatarGradient
 {
     public static function for(string $seed): string
@@ -37,10 +32,6 @@ class AvatarGradient
         return "{$gradients}, {$colors[0]}";
     }
 
-    /**
-     * The same accumulator Avatar.vue uses, wrapped to 32 bits like
-     * JavaScript's bitwise operators.
-     */
     private static function hash(string $seed): int
     {
         $hash = 0;

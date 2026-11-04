@@ -55,8 +55,6 @@ class EntriesLocalize extends Tool
     {
         $this->ensureWritesEnabled();
 
-        // Statamic's own switch for everything site-related in the CP; a
-        // client with a stale tool cache may still call this on one site.
         if (! Site::multiEnabled()) {
             throw new ToolException('this install has one site, so there is no other site to add an entry to — entries_localize is available once multisite is on (statamic.system.multisite, a Statamic Pro feature)');
         }
@@ -81,13 +79,8 @@ class EntriesLocalize extends Tool
         $collection = $entry->collection();
         $collectionHandle = $collection->handle();
 
-        // CP parity: with origin_behavior root the localization originates
-        // from the root entry whatever localization was passed; otherwise
-        // the passed entry is the origin, the CP's active and select cases.
         $origin = $collection->originBehavior() === 'root' ? $entry->root() : $entry;
 
-        // CP parity (LocalizeEntryController): the edit permission for the
-        // origin, not create, plus access to its site and the target site.
         $this->ensureSiteAccess($user, $origin->locale());
         $this->ensureEntryPermission($user, 'edit', $origin);
 
@@ -117,9 +110,6 @@ class EntriesLocalize extends Tool
 
         $slug = $this->resolveSlug($validated['slug'] ?? $origin->slug(), $site);
 
-        // The localization validates with the values it inherits under its
-        // own, as in the CP's form, so a required field it inherits never
-        // false-fails; only its own data is stored. The date is inherited too.
         $values = [...$origin->values()->all(), ...$data, 'slug' => $slug];
 
         if ($collection->dated()) {
@@ -133,10 +123,6 @@ class EntriesLocalize extends Tool
             ['collection' => $collectionHandle, 'site' => $site],
         );
 
-        // CP parity (Entry::makeLocalization, then Revisable::store): the
-        // origin, its slug, and a draft. The tree placement goes through
-        // saveTreeChange rather than the vendor callback so it takes the
-        // tree's lock, as entries_create does.
         $localization = Entry::make()
             ->origin($origin)
             ->collection($collection)
@@ -226,13 +212,6 @@ class EntriesLocalize extends Tool
         ));
     }
 
-    /**
-     * Entry::save() re-normalizes the slug with the site's language, so the
-     * blueprint's rules and the URL check run on what will be persisted, as
-     * in entries_create. An origin without a slug, as in a collection with
-     * slugs turned off, gives its localization none (CP parity,
-     * Entry::makeLocalization).
-     */
     private function resolveSlug(?string $slug, string $site): ?string
     {
         if ($slug === null) {
@@ -248,11 +227,6 @@ class EntriesLocalize extends Tool
         return $normalized;
     }
 
-    /**
-     * CP parity (Entry::addToStructure): the id of the target site's
-     * localization of the origin's parent, or null for the top level when
-     * the origin is at the top level or its parent has no localization there.
-     */
     private function localizedParent(EntryContract $origin, string $site): ?string
     {
         $parent = $origin->parent()?->in($site);

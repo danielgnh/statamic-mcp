@@ -5,12 +5,6 @@ namespace Danielgnh\StatamicMcp\Rules;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
-/**
- * Statamic runs addon settings through Antlers every time it loads them, and
- * these are the sequences that make it render something: a tag, a component,
- * or a directive. Text containing one would run or fail on load instead of
- * reaching agents as written.
- */
 class WithoutTemplateSyntax implements ValidationRule
 {
     public const PATTERN = '/\{\{|<(?:s|statamic|x)[:-]|@(?:props|aware|cascade)/';

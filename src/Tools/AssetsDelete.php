@@ -57,18 +57,10 @@ class AssetsDelete extends Tool
         $id = $asset->id();
         $path = $asset->path();
 
-        // No TermsDelete-style syncOriginal needed: UpdateAssetReferences'
-        // delete handler keys off getOriginal('path'), and Asset::getOriginal()
-        // self-heals by syncing from current state when originals are empty.
-        // delete() returns false when an AssetDeleting listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $asset->delete()) {
             throw new ToolException('the delete was cancelled by a listener — the asset was not deleted');
         }
 
-        // Outcome statement only — deliberately NO cp_edit_url: the deleted
-        // asset's CP page would 404 (amended spec exception, same as the
-        // other delete tools).
         return $this->json([
             'deleted' => true,
             'id' => $id,

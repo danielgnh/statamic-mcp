@@ -61,51 +61,26 @@ class GlobalsUpdate extends Tool
 
         $user = $this->user($request);
 
-        // v6 has no 'view {handle} globals' permission — edit is the only
-        // per-set permission.
         $this->ensurePermission($user, "edit {$handle} globals");
 
         $set = GlobalSet::findByHandle($handle);
 
-        // ensureExposed() checked the handle against GlobalSet::all(), but
-        // the index and the item fetch can drift (a deploy deleting the set
-        // under a warm Stache) — report the indistinguishable not-found
-        // shape rather than fatal on the null.
         if ($set === null) {
             return $this->notFound('global', $handle, $this->exposedHandles('globals'));
         }
 
-        // Global sets only exist in their own configured sites; the trait
-        // enforces 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $set->sites());
 
-        // v6: in() returns the existing localization, or a fresh unsaved one
-        // via makeLocalization(); saving below persists it — the transparent-
-        // creation rule.
         $variables = $set->in($site) ?? $set->makeLocalization($site);
 
-        // supportsFields: false — globals_get has no fields parameter, the
-        // remediation text must not invent one.
         $this->rejectPreviewObjects($patch, 'globals_get', supportsFields: false);
 
-        // Statamic-managed front-matter is never writable via data — enforced
-        // even without a blueprint: the global-variables Stache store strips
-        // an 'origin' data key on rehydration, so it would be silent data loss.
         $this->rejectReservedKeys($patch);
 
-        // Sets without a blueprint accept free-form variables (Statamic's own
-        // fallback blueprint is generated from current values, so it must not
-        // be used to reject new keys); with one, unknown keys are rejected.
         $blueprint = $set->blueprint();
 
-        // The merge basis is the SITE's own data bucket — the exact
-        // round-trippable shape globals_get returns for that site.
         $existing = $variables->data()->all();
 
-        // Sets merge into, and the patch validates against, the EFFECTIVE
-        // values (origin-site values under the local overrides, mirroring
-        // the CP's full-form submit) so a partial localized patch never
-        // false-fails required fields — only the local bucket is stored.
         $effective = [
             ...($variables->hasOrigin() ? $variables->origin()->values()->all() : []),
             ...$existing,
@@ -121,9 +96,6 @@ class GlobalsUpdate extends Tool
 
         $merged = array_merge($existing, $patch);
 
-        // Strict compare over normalized values: assoc key
-        // order is irrelevant, but types matter — loose == would turn an
-        // explicit null-clear of a falsy variable into a false no-op.
         if ($this->normalize($merged) === $this->normalize($existing)) {
             return $this->json([
                 'handle' => $handle,
@@ -133,10 +105,6 @@ class GlobalsUpdate extends Tool
             ]);
         }
 
-        // Variables carry no Statamic-managed metadata (no TracksLastModified
-        // in v6 — CP parity: the CP update path stamps nothing either).
-        // save() returns false when a GlobalVariablesSaving listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $variables->data($merged)->save()) {
             throw new ToolException('the save was cancelled by a listener — the global variables were not updated');
         }
@@ -149,10 +117,6 @@ class GlobalsUpdate extends Tool
     }
 
     /**
-     * Without a blueprint there are no fieldtypes, so nothing says which
-     * variable is a Replicator — an object sent for a stored list would be
-     * saved as is, and the agent's merge silently turned into a replacement.
-     *
      * @param  array<string, mixed>  $patch
      * @param  array<string, mixed>  $current
      */

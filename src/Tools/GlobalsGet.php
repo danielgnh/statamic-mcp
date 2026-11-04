@@ -48,64 +48,39 @@ class GlobalsGet extends Tool
 
     private function one(Request $request, UserContract $user, string $handle): Response
     {
-        // Missing and exists-but-unexposed are indistinguishable by design;
-        // the error lists only exposed handles.
         $this->ensureExposed('globals', $handle);
 
-        // v6 has no 'view {handle} globals' permission — edit is the only
-        // per-set permission and the CP gates viewing on it too.
         $this->ensurePermission($user, "edit {$handle} globals");
 
         $set = GlobalSet::findByHandle($handle);
 
-        // ensureExposed() checked the handle against GlobalSet::all(), but
-        // the index and the item fetch can drift (a deploy deleting the set
-        // under a warm Stache) — report the indistinguishable not-found
-        // shape rather than fatal on the null.
         if ($set === null) {
             return $this->notFound('global', $handle, $this->exposedHandles('globals'));
         }
 
-        // Global sets only exist in their own configured sites; the trait
-        // enforces 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $set->sites());
 
         return $this->json([
             'handle' => $handle,
             'title' => $set->title(),
             'site' => $site,
-            // in() is null when the set is configured for this site but has no
-            // saved localization yet; makeLocalization() is the empty-but-valid
-            // stand-in (never saved on this read path). Mirrors globals_update.
             ...$this->variablesPayload($set->in($site) ?? $set->makeLocalization($site)),
         ]);
     }
 
     private function all(Request $request, UserContract $user): Response
     {
-        // No valid-sites argument: with no specific set in play, any
-        // configured site is valid (sets not in it are filtered below).
         $site = $this->resolveSite($request, $user);
 
         $globals = collect($this->exposedHandles('globals'))
             ->sort()
-            // Exposed but not editable by this user → silently omitted,
-            // exactly like statamic_overview.
             ->filter(fn (string $handle) => $this->can($user, "edit {$handle} globals"))
             ->map(fn (string $handle) => GlobalSet::findByHandle($handle))
-            // A handle exposed in config but deleted on disk resolves to
-            // null. Narrowing to the concrete class (needed for static
-            // analysis — the contract is an empty marker interface) would
-            // also omit sets from a third-party repository returning its own
-            // implementation; acceptable, the core repository is the
-            // supported surface.
             ->filter(fn ($set) => $set instanceof GlobalSetInstance)
             ->filter(fn ($set) => $set->sites()->contains($site))
             ->map(fn ($set) => [
                 'handle' => $set->handle(),
                 'title' => $set->title(),
-                // in() is null for a site the set is configured for but never
-                // saved into — same empty-but-valid stand-in as the single path.
                 ...$this->variablesPayload($set->in($site) ?? $set->makeLocalization($site)),
             ])
             ->values()
@@ -118,13 +93,6 @@ class GlobalsGet extends Tool
     }
 
     /**
-     * The raw round-trippable shape for globals_update: this site's own data
-     * bucket. A localization configured with an origin site falls back to it
-     * for everything not overridden locally (vendor HasOrigin) — represented
-     * honestly as inherited, mirroring terms_get. Variables carry no
-     * Statamic-managed metadata (no TracksLastModified), so data is returned
-     * verbatim.
-     *
      * @return array<string, mixed>
      */
     private function variablesPayload(Variables $variables): array

@@ -56,12 +56,8 @@ class SubmissionsDelete extends Tool
 
         $payload = $this->submissionPayload($submission);
 
-        // Vendor Submission::delete() always returns true: there is no
-        // SubmissionDeleting event a listener could cancel it with.
         $submission->delete();
 
-        // Outcome statement only — no cp_url: the deleted submission's CP
-        // page would 404.
         return $this->json([
             'deleted' => true,
             'form' => $handle,

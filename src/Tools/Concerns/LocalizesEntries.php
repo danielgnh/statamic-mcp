@@ -7,18 +7,9 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Fields\Blueprint;
 
-/**
- * An entry of a collection in several sites has one localization per site,
- * each inheriting from its origin every field it does not override.
- * Requires ResolvesSites (canAccessSite()).
- */
 trait LocalizesEntries
 {
     /**
-     * The entry's localization in each site of its collection the user may
-     * access, null where there is none. Null on a collection in one site,
-     * so single-site responses stay as they were.
-     *
      * @return array<string, array{id: string, status: string}|null>|null
      */
     protected function localizations(UserContract $user, EntryContract $entry): ?array
@@ -40,11 +31,6 @@ trait LocalizesEntries
     }
 
     /**
-     * CP parity: a localization holds its own value only for a field marked
-     * localizable. Every other field is read-only there and shows the
-     * origin's value, so an override the CP can neither show nor undo is
-     * refused.
-     *
      * @param  array<string, mixed>  $data
      */
     protected function rejectUnlocalizableFields(EntryContract $origin, Blueprint $blueprint, array $data): void

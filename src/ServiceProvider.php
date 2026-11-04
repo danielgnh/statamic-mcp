@@ -72,7 +72,7 @@ class ServiceProvider extends AddonServiceProvider
         try {
             $this->registerMcpRoutes();
         } catch (Throwable $e) {
-            report($e); // misconfiguration must never brick the host site
+            report($e);
 
             Log::warning('Statamic MCP failed to mount; run `php please mcp:doctor`', [
                 'exception' => $e->getMessage(),
@@ -96,26 +96,16 @@ class ServiceProvider extends AddonServiceProvider
         if ($oauth) {
             $this->registerOAuthGuard();
 
-            // Converts Passport's bigint user_id columns to string(36) so
-            // Statamic's UUID ids fit — loaded only in OAuth mode so the addon
-            // never touches Passport tables a host app uses for other things.
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
 
-        // Build the full middleware stack BEFORE Mcp::web() registers anything,
-        // so a config-shape error throws while zero routes exist — a throw after
-        // registration would leave an unauthenticated route behind (fail closed).
         $middleware = [
             EnsureMcpEnabled::forCurrentAuth(),
             ...Arr::wrap(config('statamic.mcp.middleware', [])),
             ...($oauth
-                // Wrapper runs the oauth preflight then delegates to the api
-                // guard — deliberately NOT 'auth:api' directly, which Laravel's
-                // middleware priority would hoist above the preflight; must not
-                // implement AuthenticatesRequests.
                 ? [AuthenticateOAuth::class]
                 : [AuthenticateMcpToken::class]),
-            EnsureMcpPermission::class, // 'access mcp', checked after auth in both modes
+            EnsureMcpPermission::class,
         ];
 
         Mcp::web(config('statamic.mcp.route'), $this->serverClass())->middleware($middleware);
@@ -123,13 +113,8 @@ class ServiceProvider extends AddonServiceProvider
         if ($oauth && class_exists(Passport::class)) {
             $this->manageDatabaseKeys();
 
-            Route::middleware([EnsureMcpEnabled::class.':oauth', 'throttle:60,1'])->group(fn () => Mcp::oauthRoutes()); // hard-requires Passport — guarded so bootAddon never throws
+            Route::middleware([EnsureMcpEnabled::class.':oauth', 'throttle:60,1'])->group(fn () => Mcp::oauthRoutes());
 
-            // Passport 12+ ships no default consent view and never binds
-            // AuthorizationViewResponse — /oauth/authorize 500s with
-            // "Target [...AuthorizationViewResponse] is not instantiable"
-            // unless someone calls authorizationView(). Guarded on `! bound` so a host
-            // app's own Passport::authorizationView() wins whichever boots first.
             if (! app()->bound(AuthorizationViewResponse::class)) {
                 Passport::authorizationView('statamic-mcp::oauth.authorize');
             }
@@ -152,15 +137,6 @@ class ServiceProvider extends AddonServiceProvider
         return $server;
     }
 
-    /**
-     * The runtime seam of database-managed keys. Passport reads
-     * config('passport.*_key') lazily while building its two server
-     * singletons (see PassportServiceProvider::makeCryptKey), and the
-     * container fires beforeResolving callbacks on every make() — so the
-     * stored pair is injected just in time, wherever the servers are resolved
-     * from (the addon's guard, /oauth/authorize, /oauth/token). PassportKeys
-     * skips out when the environment already configures keys.
-     */
     protected function manageDatabaseKeys(): void
     {
         $inject = fn () => $this->app->make(PassportKeys::class)->inject();
@@ -169,14 +145,6 @@ class ServiceProvider extends AddonServiceProvider
         $this->app->beforeResolving(ResourceServer::class, $inject);
     }
 
-    /**
-     * OAuth mode brings its own guard, defined here in config so the host app
-     * never edits config/auth.php: the driver validates the bearer via
-     * Passport's ResourceServer but resolves the user through the Statamic
-     * repository — file users and Eloquent users alike. The definition is
-     * addon-namespaced and only exists in OAuth mode, so a host app's own
-     * guards are untouched.
-     */
     protected function registerOAuthGuard(): void
     {
         Auth::viaRequest(PassportBearerGuard::DRIVER, new PassportBearerGuard);

@@ -45,19 +45,12 @@ class EntriesDelete extends Tool
 
         $user = $this->user($request);
 
-        // Exposure + site-access (the entry's own locale) in one place —
-        // never look up by bare id.
         $entry = $this->findExposedEntry($validated['id'], $user);
 
         $collection = $entry->collection()->handle();
 
         $this->ensureEntryPermission($user, 'delete', $entry);
 
-        // Vendor Entry::delete() refuses origins that still have localizations
-        // (it throws) — v6 never cascades implicitly. The CP resolves this by
-        // asking, and only offers its cascading "Delete" choice to users with
-        // access to every descendant's site. Mirror that: gate every
-        // localization site BEFORE deleting anything, then cascade explicitly.
         /** @var Collection<int, Entry> $descendants */
         $descendants = $entry->descendants();
 
@@ -80,23 +73,13 @@ class EntriesDelete extends Tool
             try {
                 $entry->deleteDescendants();
             } catch (\Exception $cascadeFailure) {
-                // A cancelled deeper localization leaves a survivor that makes
-                // its PARENT's delete() throw vendor's raw 'Cannot delete an
-                // entry with localizations.' mid-sweep — same root cause as a
-                // cancelled direct child (which deleteDescendants() silently
-                // swallows), so both shapes route into the survivor check below.
+                //
             }
 
-            // fresh() past the Blink cache: it goes stale when the cascade
-            // aborts mid-sweep (deleteDescendants() only forgets it on
-            // completion), and deleted entries must not be named as survivors.
             $survivors = $entry->descendants()->map->fresh()->filter();
 
             if ($survivors->isNotEmpty()) {
                 if ($cascadeFailure) {
-                    // The agent gets the survivor ToolException below; the
-                    // swallowed vendor throw still goes to the host app's
-                    // exception reporter so operators see the root cause.
                     report($cascadeFailure);
                 }
 
@@ -116,23 +99,16 @@ class EntriesDelete extends Tool
             }
 
             if ($cascadeFailure) {
-                // Nothing survived, so it wasn't a cancellation — don't mask
-                // an unknown failure behind a false success.
                 throw $cascadeFailure;
             }
         }
 
-        // delete() returns false when an EntryDeleting listener cancels
-        // (approval addons do this) — never report success for it, same rule
-        // as save().
         if (! $entry->delete()) {
             throw new ToolException($deleted === []
                 ? 'the delete was cancelled by a listener on this site — the entry was not deleted'
                 : 'the delete was cancelled by a listener on this site — the origin entry was not deleted, but its localizations were already deleted');
         }
 
-        // Outcome statement only — deliberately NO cp_edit_url: the deleted
-        // entry's CP page would 404 (amended spec exception).
         $payload = [
             'id' => $entry->id(),
             'collection' => $collection,

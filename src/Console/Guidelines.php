@@ -22,12 +22,6 @@ use Statamic\Globals\GlobalSet as GlobalSetInstance;
 use Statamic\Globals\Variables;
 use Symfony\Component\Console\Terminal;
 
-/**
- * Lists page builder blocks without instructions, which agents only know by
- * name until they look one up. Only resources exposed in
- * statamic.mcp.resources count. First it moves the guidelines a 0.6.0 site
- * kept in a global set to Tools → MCP → Guidelines.
- */
 class Guidelines extends Command
 {
     use RunsInPlease;
@@ -53,11 +47,6 @@ class Guidelines extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * Moves the values only into empty guidelines, and only when Statamic can
-     * load them from addon settings as written. The set goes after they are
-     * saved, unless another site of it holds text, which 0.6.0 never read.
-     */
     protected function moveLeftoverSet(AgentGuidelines $guidelines): void
     {
         $set = $guidelines->leftoverSet();
@@ -158,10 +147,6 @@ class Guidelines extends Command
         }
     }
 
-    /**
-     * Wraps text to the terminal width, indenting continuation lines by
-     * $hanging more than the first.
-     */
     protected function wrap(string $text, int $indent, int $hanging = 0): string
     {
         $width = max(min((new Terminal)->getWidth(), 120) - $indent - $hanging, 40);
@@ -173,9 +158,6 @@ class Guidelines extends Command
     }
 
     /**
-     * Every set in these fields, including sets nested inside other sets,
-     * grids, and groups, as blueprints_get finds them.
-     *
      * @param  SupportCollection<string, Field>  $fields
      * @return list<array{key: string, handle: string, field: string, instructions: ?string, hidden: bool}>
      */
@@ -209,10 +191,6 @@ class Guidelines extends Command
     }
 
     /**
-     * A set that several blueprints share through a fieldset is one block,
-     * but its path doesn't say so: unrelated blueprints can each have their
-     * own page_builder.hero. The same path with the same definition does.
-     *
      * @param  array{display: ?string, instructions: ?string, fields: Fields}  $set
      */
     protected function blockKey(string $path, array $set): string
@@ -247,9 +225,6 @@ class Guidelines extends Command
     }
 
     /**
-     * The same rule as Tool::exposedHandles(): true exposes every handle, a
-     * list exposes those, anything else exposes nothing.
-     *
      * @param  array<int, string>  $all
      * @return list<string>
      */

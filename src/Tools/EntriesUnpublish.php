@@ -56,9 +56,6 @@ class EntriesUnpublish extends Tool
 
         $applyingWorkingCopy = $entry->revisionsEnabled() && $entry->hasWorkingCopy();
 
-        // CP parity (PublishedEntriesController@destroy, 6.x), spelled out
-        // because Publishable::unpublish() returns the entry even when a
-        // listener cancels the save on a plain collection.
         if ($entry->revisionsEnabled()) {
             $draft = $entry->unpublishWorkingCopy(['user' => $user, 'message' => 'via MCP entries_unpublish']);
         } else {

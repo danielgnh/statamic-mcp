@@ -66,8 +66,6 @@ class EntriesUpdate extends Tool
         $validated = $request->validate(
             [
                 'id' => 'required|string',
-                // present (not required): Laravel's 'required' fails on [],
-                // and a slug, date, or parent-only update sends an empty object.
                 'data' => 'present|array',
                 'slug' => 'nullable|string',
                 'date' => 'nullable|string',
@@ -79,7 +77,6 @@ class EntriesUpdate extends Tool
 
         $user = $this->user($request);
 
-        // Exposure + site-match + site-access in one place — never look up by bare id.
         $entry = $this->findExposedEntry($validated['id'], $user, $validated['site'] ?? null);
 
         $collection = $entry->collection();
@@ -87,10 +84,6 @@ class EntriesUpdate extends Tool
 
         $this->ensureEntryPermission($user, 'edit', $entry);
 
-        // updated_at/updated_by are Statamic-managed metadata (entries_get
-        // strips them from raw output, but stale copies may live in agent
-        // context) — silently ignored, never merged or treated as a change.
-        // So is the entry's own blueprint; naming another one stays an error.
         $data = collect((array) $validated['data'])
             ->except(['updated_at', 'updated_by'])
             ->reject(fn (mixed $value, int|string $key) => $key === 'blueprint' && $value === $entry->blueprint()->handle())
@@ -102,23 +95,13 @@ class EntriesUpdate extends Tool
 
         $blueprint = $entry->blueprint();
 
-        // Routing is snapshotted from the LIVE entry BEFORE any rebase:
-        // fromWorkingCopy() restores the staged published attribute into the
-        // basis, and publish state must stay keyed to what is actually live.
         $workingCopy = $entry->revisionsEnabled() && $entry->published();
         $amending = $workingCopy && $entry->hasWorkingCopy();
 
-        // CP parity (EntriesController@update, 6.x: $entry = $entry->
-        // fromWorkingCopy() before touching data): when a working copy is
-        // already staged, edits rebase onto it. fromWorkingCopy() hydrates a
-        // clone (makeFromRevision), so the live Stache instance stays pristine.
         $basis = $amending ? $entry->fromWorkingCopy() : $entry;
 
         $current = $basis->data()->all();
 
-        // A localization validates with, and merges sets into, the values it
-        // inherits under its own, as in the CP's form, so a partial patch
-        // never false-fails a required field — only its data is stored.
         $effective = [
             ...($basis->hasOrigin() ? $basis->origin()->values()->all() : []),
             ...$current,
@@ -140,13 +123,6 @@ class EntriesUpdate extends Tool
 
         $slug = $this->resolveSlug($validated['slug'] ?? null, $entry);
 
-        // The injected date field on dated collections is required — satisfy
-        // it with the effective Carbon, which preProcess() turns into the
-        // date picker's shape. Slug likewise: entries never store it in
-        // data, so a blueprint that marks slug required must be fed the
-        // effective value (the new slug, or the entry's current one).
-        // Replacements mirror the CP's update path, so unique_entry_value
-        // excludes this entry itself.
         $values = [
             ...$effective,
             ...$data,
@@ -166,11 +142,6 @@ class EntriesUpdate extends Tool
 
         $merged = array_merge($current, $processed);
 
-        // Strict compare over normalized values: assoc key order is
-        // irrelevant (sorted recursively), but types matter — loose == would
-        // juggle null == '' and '1' == 1 into false no-ops, so an explicit
-        // null could never clear a falsy field and the write would be
-        // silently dropped.
         $dirty = $this->normalize($merged) !== $this->normalize($current)
             || ($slug !== null && $slug !== $basis->slug())
             || ($date instanceof Carbon && ! $date->equalTo($basis->date()));
@@ -208,10 +179,6 @@ class EntriesUpdate extends Tool
             ]);
         }
 
-        // Stage on the rebased clone when amending, on a fresh clone of live
-        // otherwise — the live Stache instance must stay pristine: it is never
-        // saved on the working-copy path, and takes the changes on the live
-        // path only once the URL check has passed.
         $target = $this->applyChanges($amending ? $basis : clone $entry, $merged, $slug, $date);
 
         if ($liveMoveRetry !== null) {
@@ -228,15 +195,11 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move
      * @param  array<string, list<string>>  $added
      */
     private function persistWorkingCopy(EntryContract $target, UserContract $user, bool $amending, CollectionContract $collection, ?array $move, array $added): Response
     {
-        // CP parity (EntriesController@update, 6.x): makeWorkingCopy()
-        // snapshots the in-memory attributes set above — the live entry is
-        // NEVER saved. Revision::save() returns false when a RevisionSaving
-        // listener cancels; nothing was persisted then.
         $saved = $target->makeWorkingCopy()
             ->user($user)
             ->message('via MCP entries_update')
@@ -248,9 +211,6 @@ class EntriesUpdate extends Tool
 
         $placement = $this->applyMove($target, $move, workingCopy: true);
 
-        // Statamic caches URIs by entry id and the working copy shares the
-        // live entry's id, so forget it for the staged URL, and again after
-        // so the staged URL never sticks to the live entry.
         Blink::store('entry-uris')->forget($target->id());
 
         $payload = [
@@ -271,14 +231,11 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move
      * @param  array<string, list<string>>  $added
      */
     private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move, array $added): Response
     {
-        // CP parity: updates refresh updated_by/updated_at. save() returns
-        // false when an EntrySaving listener cancels (approval addons do
-        // this) — never report success for it.
         if (! $entry->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — the entry was not updated');
         }
@@ -301,10 +258,6 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * The move parent asks for, or null when it asks for none. A null parent
-     * is an omitted one, as for every other top-level parameter, so a client
-     * that sends null for each unset parameter never moves an entry.
-     *
      * @return array{from: ?string, to: ?string}|null
      */
     private function resolveMove(?string $parent, EntryContract $entry, UserContract $user): ?array
@@ -316,8 +269,6 @@ class EntriesUpdate extends Tool
         $collection = $entry->collection();
         $tree = $this->placementTree($collection, $entry->locale()) ?? throw $this->cannotNest($collection);
 
-        // CP parity: the collection tree view saves moves under this
-        // permission (CollectionPolicy::reorder), not under edit.
         $this->ensurePermission($user, "reorder {$collection->handle()} entries");
 
         $page = $tree->find($entry->id());
@@ -348,7 +299,7 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * @param  array{from: ?string, to: ?string}|null  $move  from resolveMove()
+     * @param  array{from: ?string, to: ?string}|null  $move
      */
     private function ensureUniqueUriAfter(UserContract $user, EntryContract $entry, ?array $move, ?string $retry = null): void
     {
@@ -362,9 +313,6 @@ class EntriesUpdate extends Tool
     }
 
     /**
-     * Tree position is not part of an entry's revisions: like the CP's tree
-     * view, a move saves the live tree at once, whatever the data does.
-     *
      * @param  array{from: ?string, to: ?string}|null  $move
      * @return array<string, mixed>
      */
@@ -407,8 +355,6 @@ class EntriesUpdate extends Tool
             return null;
         }
 
-        // Symmetry with the slug path: an empty value is an error, never a
-        // silent ignore (Carbon::parse('') would quietly mean "now").
         if (trim($date) === '') {
             throw new ToolException('date is empty — pass e.g. 2026-07-09 or 2026-07-09T15:30:00+02:00, or omit date');
         }
@@ -420,8 +366,6 @@ class EntriesUpdate extends Tool
             ));
         }
 
-        // CP parity: a localization inherits a non-localizable date, and
-        // publishing a working copy would silently drop one staged here.
         if ($entry->hasOrigin() && ! $entry->blueprint()->field('date')?->isLocalizable()) {
             throw new ToolException(sprintf(
                 "this localization inherits its date from entry '%s' — change the date there, or omit date",
@@ -432,12 +376,6 @@ class EntriesUpdate extends Tool
         return $this->parseEntryDate($date);
     }
 
-    /**
-     * The normalized new slug, or null when none was sent. Entry::save()
-     * re-normalizes through Routable::slug() with the site's language — run
-     * the exact same call here so the no-op comparison, the blueprint's rules
-     * and the URL check all see what will actually be persisted.
-     */
     private function resolveSlug(?string $slug, EntryContract $entry): ?string
     {
         if ($slug === null) {

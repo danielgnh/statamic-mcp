@@ -8,13 +8,6 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Fields\Blueprint;
 
-/**
- * The author rules of Statamic's EntryPolicy and EntriesController. On a
- * blueprint with an author field, an entry the user is not an author of,
- * including one with no author, needs the "other authors" variant of the
- * permission. Only that permission lets a user name anyone but themselves
- * as author.
- */
 trait AuthorizesEntries
 {
     /**
@@ -30,10 +23,6 @@ trait AuthorizesEntries
     }
 
     /**
-     * CP parity (EntriesController@store): the acting user becomes the author
-     * when data names none, so an agent can edit what it creates. The list
-     * form is what the CP puts in before validating.
-     *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
@@ -61,9 +50,6 @@ trait AuthorizesEntries
     }
 
     /**
-     * CP parity (EntriesController@update): without "edit other authors" the
-     * author stays as it is.
-     *
      * @param  array<string, mixed>  $data
      */
     protected function ensureAuthorUnchanged(UserContract $user, EntryContract $entry, array $data): void

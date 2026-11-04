@@ -67,27 +67,20 @@ class AssetsUpload extends Tool
 
         $user = $this->user($request);
 
-        // The CP's only upload gate (AssetPolicy::store, 6.x): v6 removed the
-        // per-container allow_uploads toggle — permission is the whole story.
         $this->ensurePermission($user, "upload {$handle} assets");
 
         $folder = $this->normalizeFolder($validated['folder'] ?? null);
 
-        // Bytes come before the collision check on purpose: URL uploads only
-        // know their final filename after redirects resolve.
         [$contents, $derivedName] = $sourceUrl !== null
             ? app(SourceDownloader::class)->download($sourceUrl)
             : [$this->decodeBase64($base64), null];
 
-        // CP parity: the same filename sanitizer the CP's store path applies.
         $basename = AssetUploader::getSafeFilename(
             $this->resolveBasename($validated['filename'] ?? null, $derivedName),
         );
 
         $path = ltrim(($folder === null ? '' : $folder.'/').$basename, '/');
 
-        // No silent overwrite: the CP 409s here and asks a human. Also keeps
-        // Statamic's exists-therefore-timestamp rename fallback from ever firing.
         if ($existing = $this->findAsset($container, $path)) {
             throw new ToolException(sprintf(
                 "asset '%s' already exists in container '%s' (id '%s') — pick another filename, or delete it first if it should be replaced",
@@ -102,9 +95,6 @@ class AssetsUpload extends Tool
         try {
             $this->validateAgainstContainerRules($container, $file);
 
-            // upload() is the CP path: cancellable AssetCreating, SVG
-            // sanitization, meta generation, AssetUploaded/AssetCreated.
-            // false = a listener cancelled — never report success for it.
             $asset = $container->makeAsset($path)->upload($file);
 
             if ($asset === false) {
@@ -170,15 +160,9 @@ class AssetsUpload extends Tool
             throw new ToolException('could not stage the upload to a temp file — check disk space on the server');
         }
 
-        // test: true because these bytes never arrived via PHP's upload
-        // machinery — without it isValid() fails and Statamic refuses them.
         return new UploadedFile($temp, $basename, test: true);
     }
 
-    /**
-     * The CP's own upload gate (AssetsController@store, 6.x): Statamic's
-     * global AllowedFile denylist plus the container's configured rules.
-     */
     private function validateAgainstContainerRules(AssetContainerContract $container, UploadedFile $file): void
     {
         $rules = collect($container->validationRules())

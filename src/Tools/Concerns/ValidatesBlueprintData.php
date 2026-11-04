@@ -24,15 +24,6 @@ trait ValidatesBlueprintData
     abstract protected function normalize(mixed $value): mixed;
 
     /**
-     * Statamic silently stores unknown keys (typos become content) — reject
-     * them instead, naming valid handles plus a Levenshtein "did you mean".
-     * The check descends into replicator and Bard sets (whose type must be
-     * one the field defines), grid rows, and groups. Asset references must
-     * resolve in their field's container: processing would silently drop a
-     * dangling path, and throw on a dangling id.
-     * 'slug' is v6's auto-injected blueprint field; it is a
-     * dedicated tool parameter, never a data key, so it's excluded here.
-     *
      * @param  array<string, mixed>  $data
      */
     protected function rejectUnknownKeys(Blueprint $blueprint, array $data): void
@@ -43,13 +34,6 @@ trait ValidatesBlueprintData
     }
 
     /**
-     * Front-matter keys Statamic manages itself — data keys shadow them on
-     * disk (fileData()), so a blueprint that happens to define a 'published'
-     * toggle would let a create-only user persist publish state through data
-     * (and the global-variables store silently strips 'origin' on
-     * rehydration). Hard-rejected regardless of blueprint contents — called
-     * directly by blueprint-less write paths (globals).
-     *
      * @param  array<string, mixed>  $data
      */
     protected function rejectReservedKeys(array $data): void
@@ -67,18 +51,6 @@ trait ValidatesBlueprintData
     }
 
     /**
-     * The CP's save path (validate, then process()) fed the stored shape the
-     * get tools return: preProcess() first turns it into the publish form's
-     * shape, the only one the blueprint's rules understand, and process()
-     * turns that back into exactly what the CP stores — a single-file asset
-     * as a string, set ids, the date save format. Callers pass MERGED values
-     * (existing + patch) so partial updates never false-fail required fields,
-     * plus the CP's rule placeholder replacements (collection/site, and id on
-     * updates) so rules like unique_entry_value scope correctly; only the
-     * $only keys come back. Explicit nulls skip both steps: null is how an
-     * agent clears a field, and preProcess() would swap in the default.
-     * Field-level messages reach the model for one-round-trip self-correction.
-     *
      * @param  array<string, mixed>  $values
      * @param  list<array-key>  $only
      * @param  array<string, string>  $replacements
@@ -88,8 +60,6 @@ trait ValidatesBlueprintData
     {
         $fields = $blueprint->fields()->addValues($values);
 
-        // Stored values are Statamic's own; the agent's may not survive a
-        // fieldtype's preProcess() — name the field instead of a bare 500.
         $fields->setFields($fields->all()->map(function (Field $field) use ($only) {
             if ($field->value() === null) {
                 return $field;
@@ -122,10 +92,6 @@ trait ValidatesBlueprintData
     }
 
     /**
-     * Statamic's validator names a set by its index, page_builder.0.heading;
-     * the agent addresses it by id, so name it page_builder.wKJQXf2s.heading
-     * wherever the item carries one.
-     *
      * @param  array<string, list<string>>  $errors
      * @param  array<string, mixed>  $values
      * @return array<string, list<string>>
@@ -150,8 +116,8 @@ trait ValidatesBlueprintData
 
     /**
      * @param  array<array-key, mixed>  $data
-     * @param  list<string>  $except  handles the blueprint defines that are never data keys
-     * @param  list<string>  $allowed  keys Statamic stores beside the fields (a set's type, row ids)
+     * @param  list<string>  $except
+     * @param  list<string>  $allowed
      */
     private function rejectUnknownFields(Fields $fields, array $data, string $path = '', array $except = [], array $allowed = [], mixed $stored = null): void
     {
@@ -203,7 +169,6 @@ trait ValidatesBlueprintData
 
         $fieldtype = $field->fieldtype();
 
-        // Bard extends Replicator, so it has to be matched first.
         if ($fieldtype instanceof Bard) {
             return $this->invalidBard($fieldtype, $value, $path, $stored);
         }
@@ -294,10 +259,6 @@ trait ValidatesBlueprintData
         return $messages;
     }
 
-    /**
-     * Sets are named by their id where they carry one, as the agent and the
-     * validation errors address them, by position otherwise.
-     */
     private function setLabel(mixed $set, int $index): string
     {
         $id = is_array($set) ? data_get($set, Sets::idHandle()) : null;
@@ -341,7 +302,6 @@ trait ValidatesBlueprintData
      */
     private function invalidBard(Bard $fieldtype, mixed $nodes, string $path, mixed $stored): array
     {
-        // An HTML string is fine: preProcess() converts it to ProseMirror.
         if (is_string($nodes)) {
             return [];
         }
@@ -420,7 +380,6 @@ trait ValidatesBlueprintData
             throw new ToolException("{$path} links a container not exposed to MCP — leave it out of data");
         }
 
-        // An unresolvable container is a blueprint problem, not the agent's.
         if (! $container instanceof AssetContainerContract) {
             return;
         }
@@ -441,10 +400,6 @@ trait ValidatesBlueprintData
         }
     }
 
-    /**
-     * Mirrors the (protected) Assets::container(): the configured container,
-     * or the only one when there is exactly one.
-     */
     private function assetsFieldContainer(Field $field): ?AssetContainerContract
     {
         if ($configured = $field->get('container')) {

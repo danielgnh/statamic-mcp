@@ -14,19 +14,6 @@ use Laravel\Passport\Passport;
 use Statamic\Console\RunsInPlease;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 
-/**
- * Provision and export Passport's keys. Since the addon manages keys in the
- * database (provisioned automatically, shared across the fleet, encrypted
- * with APP_KEY), deploys need no key step at all — this command remains as
- * the explicit path: provision now instead of on first request, adopt
- * existing key files into the store, or export the pair as PASSPORT_* env
- * variables for hosts that want config-level keys. Source precedence mirrors
- * what the runtime trusts: config (env vars), then the database, then key
- * files — and only when nothing exists anywhere is a fresh pair generated
- * (into the database when its table exists, else the legacy key files).
- * Existing keys are never overwritten — regeneration would silently 401
- * every connected client.
- */
 class Keys extends Command
 {
     use RunsInPlease;
@@ -78,8 +65,6 @@ class Keys extends Command
             return $this->configuredPair();
         }
 
-        // Named before resolve(): an undecryptable row must fail loudly, never
-        // fall through to a regeneration that 401s every connected client.
         if ($store->undecryptable()) {
             $this->messages()->error("The stored signing key can't be decrypted — APP_KEY changed since it was stored. Restore the previous APP_KEY, or delete the row in '".KeyStore::TABLE."' to let a fresh pair provision (every connected client must then reconnect).");
 
@@ -98,15 +83,10 @@ class Keys extends Command
             return [$pair['private'], $pair['public'], $pair['source']];
         }
 
-        // No store table to provision into (migrate hasn't run) — fall back
-        // to the key files, exactly what `passport:keys` would produce.
         return $this->generateFiles();
     }
 
     /**
-     * Either PASSPORT_* key set means Passport reads each half from its env
-     * key, else from its key file, and the database copy stays out of it.
-     *
      * @return array{string, string, string}|null
      */
     protected function configuredPair(): ?array
@@ -193,20 +173,11 @@ class Keys extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * One paste-safe line: real newlines become the two characters \n, which
-     * phpdotenv expands back inside double quotes — the exact format every
-     * host env panel and .env file accepts.
-     */
     protected function envValue(string $pem): string
     {
         return '"'.str_replace(["\r\n", "\n"], '\n', trim($pem)).'"';
     }
 
-    /**
-     * Notices and errors go to stderr, like the guidance below, so
-     * `mcp:keys | pbcopy`, `--json | jq`, and `>> .env` capture only the keys.
-     */
     protected function messages(): Factory
     {
         $output = $this->output->getOutput();
@@ -214,10 +185,6 @@ class Keys extends Command
         return new Factory(new OutputStyle($this->input, $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output));
     }
 
-    /**
-     * Goes to stderr on purpose: `mcp:keys | pbcopy` and shell redirection
-     * capture only the two variables above.
-     */
     protected function printGuidance(string $source): void
     {
         $err = $this->output->getErrorStyle();

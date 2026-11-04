@@ -84,25 +84,9 @@ class Setup extends Command
             );
         }
 
-        // mcp:token owns issuance, output, and the permission/APP_URL warnings.
         return $this->call('statamic:mcp:token', ['email' => $email]);
     }
 
-    /**
-     * Users stay wherever they are — file or Eloquent — because the addon's
-     * own guard resolves OAuth tokens through the Statamic repository. What
-     * OAuth needs is Passport itself, its tables (with user_id columns wide
-     * enough for Statamic's UUID ids — the addon's migration), and its keys.
-     *
-     * Every step follows the same rhythm: already satisfied? report and move
-     * on — otherwise confirm and apply. The .env flip runs before migrate on
-     * purpose: the addon's migrations only load in OAuth mode, so the
-     * subprocess must already see the new mode. Keys come LAST, after
-     * migrate, so mcp:keys provisions the pair into the freshly created
-     * database table instead of the legacy key files. An aborted run still
-     * never leaves a broken endpoint live — the route answers 503 with the
-     * exact remedy until every prerequisite is in place.
-     */
     protected function setupOAuth(EnvWriter $env): int
     {
         $steps = [
@@ -135,18 +119,12 @@ class Setup extends Command
         if (! $this->confirmStep('Install laravel/passport via composer now?')) {
             $this->printManual('composer require laravel/passport');
 
-            return false; // every remaining step needs the package
+            return false;
         }
 
         return $this->runProcess('composer require laravel/passport');
     }
 
-    /**
-     * Runs after migrate, so provisioning lands in the database — shared
-     * across every server, surviving releases, no env pasting. 'provisionable'
-     * is not "skipped": provisioning eagerly here beats surprising the first
-     * OAuth request with 4096-bit key generation.
-     */
     protected function ensurePassportKeys(): bool
     {
         if (! in_array($this->prereqs->keySource(), [null, 'provisionable'], true)) {
@@ -158,23 +136,14 @@ class Setup extends Command
         if (! $this->confirmStep('Provision Passport encryption keys now?')) {
             $this->line('  Keys will be provisioned into the database automatically on the first OAuth request.');
 
-            return true; // declining is fine — provisioning is self-serve
+            return true;
         }
 
-        // Subprocess on purpose: when Passport was installed moments ago by
-        // this very wizard, its classes are not autoloadable in THIS process.
-        // Its stdout is the private key, and this output ends up in CI logs
-        // and agent transcripts, so only what it did (stderr) is shown.
         return $this->runProcess('php please mcp:keys', stdout: false);
     }
 
     protected function offerConsentViews(): bool
     {
-        // OAuth mode auto-binds a working, self-contained consent screen (see
-        // the addon service provider), so this step is optional — publish only
-        // to customize the Blade. It publishes the ADDON's view, not
-        // laravel/mcp's: that one depends on a compiled Vite/Tailwind bundle and
-        // 500s on any site without one, which is why the addon ships its own.
         if (! $this->confirmStep('Publish the OAuth consent screen to customize it? (a working default is already bound)', whenYes: false, default: false)) {
             return true;
         }
@@ -202,15 +171,8 @@ class Setup extends Command
         return true;
     }
 
-    /**
-     * Runs AFTER the mode flip so the subprocess loads the addon's user_id
-     * migration (OAuth mode only). Publishing Passport's migrations first is
-     * required — Passport 13 doesn't auto-load them — and is idempotent.
-     */
     protected function runMigrations(): bool
     {
-        // The key-store check keeps upgrades honest: a site set up before
-        // database-managed keys has Passport's tables but not the addon's.
         if ($this->prereqs->oauthTablesMigrated()
             && $this->prereqs->oauthUserIdColumnsFitStatamicIds()
             && $this->prereqs->keyStoreMigrated()) {
@@ -234,8 +196,6 @@ class Setup extends Command
         $this->line('');
         $this->components->info('Verifying with mcp:doctor…');
 
-        // Subprocess on purpose: the doctor must see the files this wizard
-        // just edited, not this process's stale in-memory config.
         $healthy = $this->runProcess('php please mcp:doctor');
 
         $url = url(config()->string('statamic.mcp.route', 'mcp/statamic'));
@@ -273,11 +233,6 @@ class Setup extends Command
         return $result->successful();
     }
 
-    /**
-     * Every confirmation goes through here so --yes means one thing
-     * everywhere: answer with $whenYes instead of prompting. Steps that are
-     * optional say so by passing whenYes: false.
-     */
     protected function confirmStep(string $label, bool $whenYes = true, bool $default = true): bool
     {
         if ($this->option('yes')) {
@@ -288,11 +243,6 @@ class Setup extends Command
     }
 
     /**
-     * The one rhythm every file edit follows: announce the change and the
-     * file, confirm, apply — and on decline or bail, print the manual snippet
-     * and carry on. The wizard never edits silently (--yes still shows every
-     * change) and never mangles a file it doesn't recognize.
-     *
      * @param  Closure(): EditResult  $apply
      * @param  Closure(): string  $snippet
      */

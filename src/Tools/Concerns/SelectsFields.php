@@ -10,30 +10,17 @@ use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fieldtypes\Grid;
 
-/**
- * The fields parameter of the get tools: which fields come back, which
- * single sets of a page builder, and which large values are previewed.
- */
 trait SelectsFields
 {
-    // Bytes (strlen) of encoded JSON before truncation — byte-based on purpose:
-    // it approximates token cost; multibyte characters count per-byte.
     private const int PREVIEW_THRESHOLD = 500;
 
-    // Characters of plain-text preview kept (Str::limit is mb-safe — never cuts mid-character).
     private const int PREVIEW_LENGTH = 300;
 
-    // A Replicator field (a page builder) over this many bytes becomes an
-    // index of its sets instead: enough to keep a few blocks inline, while a
-    // long page costs one short call to find a set's id.
     private const int LARGE_VALUE_THRESHOLD = 4096;
 
     private const int SET_PREVIEW_LENGTH = 60;
 
     /**
-     * fields entries are top-level handles, or handle.id to select one set
-     * (or row) of a Replicator or Grid field by the id Statamic stamps on it.
-     *
      * @param  list<string>  $requested
      * @param  list<array-key>  $stored
      * @return array{0: list<string>, 1: array<string, list<string>>} the handles, and the selected set ids by handle
@@ -75,9 +62,6 @@ trait SelectsFields
     }
 
     /**
-     * The selected sets, as an object keyed by id: the shape the update
-     * tools merge by id, so sending it back can never drop a sibling.
-     *
      * @param  array<string, mixed>  $data
      * @param  array<string, list<string>>  $selectedSets
      * @return array<string, mixed>
@@ -107,9 +91,6 @@ trait SelectsFields
             return;
         }
 
-        // 'slug' is v6's auto-injected blueprint field (ensure*BlueprintFields);
-        // it lives outside data() and is always returned as a top-level response key,
-        // so it's never a selectable data field.
         $handles = $blueprint->fields()->all()->keys()->reject(fn ($handle) => $handle === 'slug')->values()->all();
         $unknown = array_values(array_diff($requestedFields, $handles, $stored));
 
@@ -128,11 +109,6 @@ trait SelectsFields
     }
 
     /**
-     * Long Bard/markdown values become {__preview, truncated, note} objects,
-     * large Replicator values an index of their sets under the same keys,
-     * and any other large value a preview too, unless explicitly requested
-     * via fields. A Grid stays inline whatever its size.
-     *
      * @param  array<string, mixed>  $data
      * @param  list<string>  $requestedFields
      * @return array<string, mixed>
@@ -150,7 +126,6 @@ trait SelectsFields
                 continue;
             }
 
-            // Augmented values are JsonSerializable wrappers; normalize before measuring.
             $raw = $value instanceof JsonSerializable ? $value->jsonSerialize() : $value;
 
             $encoded = json_encode($raw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -226,10 +201,6 @@ trait SelectsFields
     }
 
     /**
-     * The set's own text, so an agent can tell blocks of one type apart:
-     * its title-like field, else its first filled text-like field, else
-     * its first string of any kind.
-     *
      * @param  array<string, mixed>  $set
      */
     private function setPreview(Field $field, array $set): string
@@ -247,8 +218,6 @@ trait SelectsFields
     }
 
     /**
-     * Augmented sets are Values objects; plain arrays either way.
-     *
      * @return list<mixed>
      */
     private function decoded(mixed $value): array
@@ -258,14 +227,10 @@ trait SelectsFields
         return is_array($decoded) ? array_values($decoded) : [];
     }
 
-    /**
-     * Extract readable text from a ProseMirror document (Bard stores
-     * {type, content: [{type: text, text: ...}]} trees) or pass strings through.
-     */
     private function plainText(mixed $value): string
     {
         if (is_string($value)) {
-            return strip_tags($value); // augmented bard is HTML — markup wastes preview budget
+            return strip_tags($value);
         }
 
         if (! is_array($value)) {

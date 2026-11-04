@@ -56,8 +56,6 @@ class SubmissionsList extends Tool
 
         $this->ensureCanViewSubmissions($this->user($request), $handle);
 
-        // date is what the CP's listing sorts by; ids are microsecond
-        // timestamps, so the order is stable across pages.
         $query = FormSubmission::query()
             ->where('form', $handle)
             ->orderBy('date', 'desc');
@@ -94,10 +92,6 @@ class SubmissionsList extends Tool
         ]);
     }
 
-    /**
-     * The Control Panel's search on the submissions listing: the date plus
-     * the text, textarea, and integer fields (vendor QueriesFormSubmissionSearch).
-     */
     private function applySearch(SubmissionQueryBuilder $query, FormContract $form, string $search): void
     {
         $query->where(function ($query) use ($form, $search) {
@@ -109,10 +103,6 @@ class SubmissionsList extends Tool
         });
     }
 
-    /**
-     * A time without an offset is read in app.timezone, the zone
-     * statamic_overview reports as server.timezone.
-     */
     private function parseDate(string $date, string $parameter): Carbon
     {
         try {

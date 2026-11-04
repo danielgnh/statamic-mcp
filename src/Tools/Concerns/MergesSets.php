@@ -10,10 +10,6 @@ use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
 
-/**
- * Needs ValidatesBlueprintData in the same tool: the merged data is checked
- * against the blueprint and against the stored values it merges over.
- */
 trait MergesSets
 {
     /**
@@ -29,18 +25,8 @@ trait MergesSets
     abstract protected function rejectReservedKeys(array $data): void;
 
     /**
-     * Validates a patch and merges its set patches. A Replicator or Grid
-     * field is addressed set by set through the id Statamic stamps on every
-     * set and row, so changing one page builder block never costs the whole
-     * page: an object keyed by id merges into just those sets, and null
-     * removes one. A list sets the order as well: an item carrying a stored
-     * id merges into that set the same way, any other item is a new set,
-     * and the sets it leaves out are removed. A Replicator or Grid nested
-     * in a set merges the same way. The result is the complete list
-     * everything downstream always saw.
-     *
-     * @param  array<string, mixed>  $data  the patch
-     * @param  array<string, mixed>  $current  the values the patch merges over
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $current
      * @return array<string, mixed>
      */
     protected function mergeSetPatches(Blueprint $blueprint, array $data, array $current): array
@@ -49,7 +35,6 @@ trait MergesSets
 
         $data = $this->mergeSetPatchesIn($blueprint->fields(), $data, $current, '');
 
-        // 'slug' is v6's auto-injected blueprint field, a tool parameter, never a data key.
         $this->rejectUnknownFields($blueprint->fields(), $data, except: ['slug'], stored: $current);
 
         return $data;
@@ -94,7 +79,6 @@ trait MergesSets
                 continue;
             }
 
-            // PHP can't tell {} from [], and {} would wipe the field, so neither clears it: null does.
             if ($patch === []) {
                 throw new ToolException(sprintf(
                     '%s is empty — send null to clear the field, the list of its %ss to replace it, or an object keyed by %s id to merge',
@@ -113,7 +97,7 @@ trait MergesSets
     }
 
     /**
-     * @param  array<array-key, mixed>  $patches  set patches keyed by id
+     * @param  array<array-key, mixed>  $patches
      * @return list<mixed>
      */
     private function mergeSets(Field $field, array $patches, mixed $sets, string $path): array

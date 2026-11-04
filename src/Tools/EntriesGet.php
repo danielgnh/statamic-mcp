@@ -73,9 +73,6 @@ class EntriesGet extends Tool
 
         $entry = $staged ? $live->fromWorkingCopy() : $live;
 
-        // Statamic caches URIs by entry id and the working copy shares the live
-        // entry's id, so forget it here for a staged slug, and again below so
-        // the staged URI never sticks to the live entry.
         if ($staged) {
             Blink::store('entry-uris')->forget($entry->id());
         }
@@ -88,18 +85,9 @@ class EntriesGet extends Tool
         if ($format === 'augmented') {
             $data = $this->augmentedData($entry->toAugmentedArray(), $user);
         } else {
-            // raw: the round-trippable write shape. updated_at/updated_by and
-            // blueprint are Statamic-managed metadata (its own toArray excludes
-            // updated_at) — stripped so agents can't round-trip stale values
-            // into updates. The blueprint comes back at the top level instead.
             $data = $entry->data()->except(self::METADATA)->all();
 
             if ($entry->hasOrigin()) {
-                // Walk the whole origin chain: each origin's data() is its OWN
-                // values only (chain resolution lives in values(), which also
-                // merges the collection cascade — not round-trippable), so a
-                // field set only on the root would otherwise vanish here.
-                // += keeps the nearest origin's value when levels collide.
                 $inherited = [];
 
                 for ($origin = $entry->origin(); $origin !== null; $origin = $origin->origin()) {
@@ -109,14 +97,13 @@ class EntriesGet extends Tool
                 $inherited = array_diff_key($inherited, $data);
 
                 $localization = [
-                    // the DIRECT origin — it's what a severing write detaches from
                     'origin_id' => $entry->origin()->id(),
                     'local_overrides' => array_keys($data),
                     'inherited_from_origin' => array_keys($inherited),
                     'note' => 'inherited fields are shown from the origin — sending one back in entries_update makes it a local override',
                 ];
 
-                $data = array_merge($inherited, $data); // disjoint by the diff_key above — local wins there
+                $data = array_merge($inherited, $data);
             }
         }
 
@@ -192,7 +179,6 @@ class EntriesGet extends Tool
 
         $site = $this->resolveSite($request, $user);
 
-        // Before the lookup: its error can list other entries of the collection.
         $this->ensurePermission($user, "view {$collection} entries");
 
         $entries = Entry::query()
@@ -205,8 +191,6 @@ class EntriesGet extends Tool
             throw new ToolException(sprintf("entry '%s/%s' not found in site '%s'", $collection, $slug, $site));
         }
 
-        // CP parity: only the URL is unique, so pages under different parents
-        // can share a slug — never answer with an arbitrary one of them.
         if ($entries->count() > 1) {
             throw new ToolException(sprintf(
                 "%d entries of collection '%s' have slug '%s' in site '%s' — pass the id of the one you mean: %s",

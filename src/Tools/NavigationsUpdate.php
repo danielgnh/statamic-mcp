@@ -50,8 +50,6 @@ class NavigationsUpdate extends Tool
     {
         $this->ensureWritesEnabled();
 
-        // 'present' not 'required': an empty list clears the tree, and
-        // Laravel's 'required' fails on [].
         $validated = $request->validate(
             [
                 'handle' => 'required|string',
@@ -74,11 +72,8 @@ class NavigationsUpdate extends Tool
 
         $nav = $this->findNav($handle);
 
-        // A navigation only has trees in its own sites; the trait enforces
-        // 'access {site} site' on multisite.
         $site = $this->resolveSite($request, $user, $this->navSites($nav));
 
-        // A navigation without a tree yet gets its first one on this write.
         $tree = $nav->in($site) ?? $nav->makeTree($site);
 
         $branches = $this->branches($nav, $site, $tree->tree(), $validated['tree'], 'tree', 1);
@@ -106,8 +101,6 @@ class NavigationsUpdate extends Tool
 
         $added = array_values(array_diff($this->branchIds($branches, 'tree'), $this->branchIds($tree->tree(), 'tree')));
 
-        // save() returns false when a NavTreeSaving listener cancels
-        // (approval addons do this) — never report success for it.
         if (! $tree->tree($branches)->save()) {
             throw new ToolException('the save was cancelled by a listener — the navigation was not updated');
         }
@@ -117,8 +110,6 @@ class NavigationsUpdate extends Tool
             'site' => $site,
             'result' => self::LIVENESS_LIVE,
             ...array_filter(['added' => $added]),
-            // showUrl() is the CP's tree editor; editUrl() is the
-            // navigation's settings, which need 'configure navs'.
             'cp_edit_url' => $tree->showUrl(),
         ]);
     }
@@ -141,9 +132,6 @@ class NavigationsUpdate extends Tool
     }
 
     /**
-     * One branch in the shape the CP's tree save stores: {id, entry, title,
-     * url, data, children}, with empty values left out.
-     *
      * @param  array<int, array<string, mixed>>  $storedTree
      * @return array<string, mixed>
      */
@@ -153,8 +141,6 @@ class NavigationsUpdate extends Tool
             throw new ToolException("{$path} must be a branch object: {id?, entry?, title?, url?, data?, children?}");
         }
 
-        // navigations_get's read-only resolved block is ignored, and a null
-        // key counts as an absent one.
         $branch = array_filter(Arr::except($branch, 'resolved'), fn (mixed $value) => $value !== null);
 
         $unknown = array_values(array_diff(array_keys($branch), self::BRANCH_KEYS));
@@ -226,10 +212,6 @@ class NavigationsUpdate extends Tool
     }
 
     /**
-     * Only the entry picker's choices are linkable: the navigation's own
-     * collections, and the tree's site unless the navigation selects across
-     * sites. A dangling id would silently vanish from the rendered menu.
-     *
      * @param  array<int, array<string, mixed>>  $storedTree
      */
     private function ensureLinkable(NavContract $nav, string $site, array $storedTree, string $id, string $path): void
@@ -275,12 +257,6 @@ class NavigationsUpdate extends Tool
     }
 
     /**
-     * The CP's tree save runs a branch's title, url, and data through the
-     * navigation blueprint (title and url ensured as text fields), then
-     * stores title and url on the branch and the rest as data. A branch with
-     * none of them has nothing to process, like one added from the CP's
-     * entry picker without opening its editor.
-     *
      * @param  array<string, mixed>  $branch
      * @return array<array-key, mixed>
      */
@@ -312,7 +288,6 @@ class NavigationsUpdate extends Tool
             return [];
         }
 
-        // processAgainstBlueprint() names the field, not the branch.
         try {
             return $this->processAgainstBlueprint($blueprint, $values, array_keys($values));
         } catch (ToolException $e) {
