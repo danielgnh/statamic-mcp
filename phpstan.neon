@@ -36,5 +36,5 @@ parameters:
             identifier: argument.type
             message: '#^Parameter \#1 \$view of function view expects view-string\|null, string given\.$#'
             paths:
-                - src/Http/Controllers/McpController.php
+                - src/Http/Controllers/McpConnectionsController.php
                 - src/Http/Controllers/McpGuidelinesController.php

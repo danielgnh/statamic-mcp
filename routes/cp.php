@@ -17,7 +17,7 @@ Route::prefix('mcp')->name('mcp.')->middleware([EnsureMcpEnabled::class, 'can:ac
     Route::get('guidelines', [McpGuidelinesController::class, 'edit'])->name('guidelines.edit');
     Route::patch('guidelines', [McpGuidelinesController::class, 'update'])->name('guidelines.update');
 
-    Route::get('connections', [McpController::class, 'connections'])->name('connections.index');
+    Route::get('connections', [McpConnectionsController::class, 'index'])->name('connections.index');
     Route::post('connections/tokens', [McpTokensController::class, 'store'])->name('connections.tokens.store');
     Route::delete('connections/tokens/{tokenId}', [McpTokensController::class, 'destroy'])->name('connections.tokens.destroy');
     Route::delete('connections/oauth/{clientId}/{userId}', [McpConnectionsController::class, 'destroy'])->name('connections.oauth.destroy');
