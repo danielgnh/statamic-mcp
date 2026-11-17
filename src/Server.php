@@ -36,6 +36,9 @@ use Laravel\Mcp\Server as McpServer;
 use Laravel\Mcp\Server\Attributes\Instructions;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
+use ReflectionAttribute;
+use ReflectionClass;
 
 #[Name('Statamic')]
 #[Instructions('MCP server for this Statamic site. Call statamic_overview first: it returns the sites, collections, taxonomies, global sets, asset containers, navigations, and forms you can work with, plus your own permission flags per resource, and the site\'s guidelines for agents when it has them. Before creating or updating content, call blueprints_get for the target blueprint — writes accept raw field data only (never augmented data). It also lists page builder blocks with their instructions, and the collection\'s guidelines when written; follow both. Entry creates and updates never publish — they save drafts, or working copies on revision-enabled collections. Going live is a separate call, entries_publish, gated on the collection\'s publish permission. On multisite an entry belongs to one site: entries_localize adds it to another site as a localization that inherits every field it does not override, and entries_get lists the sites under localizations. To check how a draft or working copy renders, call entries_preview and fetch its URL. To schedule a post, give it a future date and publish it: on collections whose date_behavior.future is private it stays scheduled and Statamic takes it live on that date. Asset uploads are live immediately — set alt text with assets_update after uploading. Form submissions come from submissions_list, newest first with each one\'s full data, and submissions_get; blueprints_get with type form names their fields. Nothing edits a submission, as in the Control Panel.')]
@@ -75,14 +78,51 @@ class Server extends McpServer
 
     public int $defaultPaginationLength = 50;
 
+    private const string ADDON_TOOLS = 'statamic-mcp.addon-tools';
+
+    /**
+     * @param  class-string<Tool>  ...$tools
+     */
+    public static function addTools(string ...$tools): void
+    {
+        app()->instance(self::ADDON_TOOLS, array_values(array_unique([...self::addonTools(), ...$tools])));
+    }
+
+    /**
+     * @internal
+     *
+     * @return list<class-string<Tool>>
+     */
+    public static function addonTools(): array
+    {
+        return app()->bound(self::ADDON_TOOLS) ? app(self::ADDON_TOOLS) : [];
+    }
+
     #[\Override]
     protected function boot(): void
     {
-        $registry = new ToolRegistry($this->tools);
+        $addonTools = array_values(array_diff(self::addonTools(), $this->tools));
+        $registry = (new ToolRegistry($this->tools))->add(...$addonTools);
 
         $this->tools($registry);
 
+        if (config('statamic.mcp.read_only')) {
+            $registry->remove(...array_filter($addonTools, fn (string $tool) => ! $this->declaresReadOnly($tool)));
+        }
+
         $this->tools = $registry->all();
+        $this->defaultPaginationLength = max($this->defaultPaginationLength, count($this->tools));
+        $this->maxPaginationLength = max($this->maxPaginationLength, $this->defaultPaginationLength);
+    }
+
+    /**
+     * @param  class-string<Tool>  $tool
+     */
+    private function declaresReadOnly(string $tool): bool
+    {
+        $attribute = (new ReflectionClass($tool))->getAttributes(IsReadOnly::class, ReflectionAttribute::IS_INSTANCEOF)[0] ?? null;
+
+        return $attribute?->newInstance()->value === true;
     }
 
     protected function tools(ToolRegistry $tools): void
