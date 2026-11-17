@@ -67,8 +67,16 @@ it('translates every string of the control panel into :dataset', function (strin
     expect(array_values(array_diff(addonTranslationKeys(), $translated)))->toBe([]);
 })->with('shipped languages');
 
-it('never shadows a translation Statamic ships, in :dataset', function (string $locale) {
-    expect(array_keys(array_intersect_key(addonTranslations($locale), statamicTranslations($locale))))->toBe([]);
+it('never changes the wording of a translation Statamic ships, so a key Statamic adds later only has to match, in :dataset', function (string $locale) {
+    $statamic = statamicTranslations($locale);
+
+    $overridden = array_filter(
+        addonTranslations($locale),
+        fn (string $value, string $key) => array_key_exists($key, $statamic) && $statamic[$key] !== $value,
+        ARRAY_FILTER_USE_BOTH,
+    );
+
+    expect(array_keys($overridden))->toBe([]);
 })->with('shipped languages');
 
 it('ships no translation the control panel no longer uses, in :dataset', function (string $locale) {
