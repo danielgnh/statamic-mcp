@@ -8,6 +8,46 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Added
+
+- **Add-ons can serve MCP tools.** An add-on calls `Server::addTools()` from its
+  service provider, and every site that installs it serves those tools without
+  a server class of its own. The site's `tools()` runs after the add-ons', so
+  it can still remove or replace them. With `read_only` on, an add-on tool
+  whose class does not declare `#[IsReadOnly]` is left out. A class that is
+  not a tool fails the MCP endpoint, not the site. See "Tools from an add-on"
+  in `docs/tools.md`.
+- **Entry and site helpers on the base `Tool`.** `findExposedEntry()`,
+  `ensureEntryPermission()`, `ensureAuthorUnchanged()`, `ensureSiteAccess()`,
+  and `canAccessSite()` moved from internal traits onto
+  `Danielgnh\StatamicMcp\Tools\Tool` and are now documented API. With them, a
+  tool from an add-on or a site applies the `resources` allowlist, site access,
+  and the edit, publish, delete, and other-author permissions as the built-in
+  tools do. A tool that reads an entry still checks `view {collection} entries`
+  itself, as `entries_get` does.
+- **The doctor checks the tools.** `mcp:doctor` counts the tools the server
+  serves and lists each add-on tool with its class, including the ones it does
+  not serve. It fails on two tools with one name, on a tool that cannot be
+  built, on a registered class that is not a tool, and on a server that throws
+  while it starts. It warns about a tool whose `shouldRegister()` throws, and
+  when the configured server does not extend `Danielgnh\StatamicMcp\Server` and
+  so never loads add-on tools.
+
+### Changed
+
+- **Every tool is on the first page of `tools/list`.** The page grows with the
+  number of tools, so clients that never send a cursor see all of them. A
+  server class that lowered `$defaultPaginationLength` gets the larger page too.
+- **The `AuthorizesEntries` and `ResolvesEntries` traits are gone.** They were
+  internal. A tool that used them extends `Tool` and calls the helpers above.
+  The internal `ResolvesSites` trait lost `ensureSiteAccess()` and
+  `canAccessSite()` to `Tool`, and seven built-in tools that no longer need it
+  dropped it, so a subclass of `EntriesDelete`, `EntriesPreview`,
+  `EntriesPublish`, `EntriesUnpublish`, `EntriesUpdate`, `StatamicOverview`, or
+  `TermsCreate` that called `resolveSite()` or `ensureCollectionInSite()` no
+  longer finds them. A tool of yours that defines a method named like one of the
+  new `Tool` helpers needs it `protected` with the same signature, or a new name.
+
 ### Fixed
 
 - **Statamic's own Dutch "Disconnect" keeps its wording.** Statamic 6.42 added

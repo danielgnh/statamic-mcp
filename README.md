@@ -183,6 +183,21 @@ Then point the config at it:
 
 Your tools run behind the same authentication and Access MCP check as the built-in ones. `replace()` swaps a built-in tool for yours, usually a subclass that overrides `execute()` or `schema()` and keeps the name. `remove()` drops one. Extend `Danielgnh\StatamicMcp\Tools\Tool` to get the acting user and the permission helpers. [docs/tools.md](docs/tools.md#your-own-tools) has a complete tool, the helper reference, and a test.
 
+An add-on registers its tools from its service provider instead, and every site that installs it serves them without a server class of its own:
+
+```php
+use Danielgnh\StatamicMcp\Server;
+
+public function bootAddon(): void
+{
+    if (method_exists(Server::class, 'addTools')) {
+        Server::addTools(SeoAudit::class);
+    }
+}
+```
+
+The site's own `tools()` runs after the add-ons', so it can still remove or replace their tools. With `read_only` on, add-on tools that do not declare `#[IsReadOnly]` are left out. The `method_exists()` check keeps the add-on working on sites without this addon or with a version before 1.2. [docs/tools.md](docs/tools.md#tools-from-an-add-on) covers tool names, what breaks the server, and testing.
+
 ## Configuration
 
 ```bash
@@ -217,7 +232,7 @@ The doctor runs every check, even after one fails, and prints the fix for each p
 
 ## Versioning
 
-Releases follow [semantic versioning](https://semver.org). A minor or patch release keeps what this README and [docs/](docs) describe working: tool names, their parameters and response fields, config keys and environment variables, Artisan and `please` commands, the HTTP routes, and the extension API in [docs/tools.md](docs/tools.md). That API is `Server`, `ToolRegistry`, the `Tool` base class with the helpers listed there, `ToolException`, and the built-in tool classes, which you can replace, remove, or subclass by name.
+Releases follow [semantic versioning](https://semver.org). A minor or patch release keeps what this README and [docs/](docs) describe working: tool names, their parameters and response fields, config keys and environment variables, Artisan and `please` commands, the HTTP routes, and the extension API in [docs/tools.md](docs/tools.md). That API is `Server` with `addTools()`, `ToolRegistry`, the `Tool` base class with the helpers listed there, `ToolException`, and the built-in tool classes, which you can replace, remove, or subclass by name.
 
 Two things can change in any release. A security fix may narrow what a response reveals, as 1.0.0 did with augmented output, and the CHANGELOG says so. What `laravel/mcp` handles itself, such as the protocol and OAuth client registration, follows its own releases. Other classes under `src/`, the traits in `Tools/Concerns` included, are internal.
 
