@@ -4,6 +4,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Support\ActingUser;
 use Illuminate\Routing\Exceptions\UrlGenerationException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -14,9 +15,11 @@ use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Collection;
+use Statamic\Facades\Entry;
 use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
+use Statamic\Facades\Site;
 use Statamic\Facades\Taxonomy;
 use Statamic\Globals\Variables;
 use Statamic\Stache\Query\Builder as StacheQueryBuilder;
@@ -148,6 +151,105 @@ abstract class Tool extends BaseTool
             $permission,
             $user->email(),
         ));
+    }
+
+    protected function findExposedEntry(string $id, UserContract $user, ?string $site = null): EntryContract
+    {
+        $entry = Entry::find($id);
+
+        if (! $entry || ! in_array($entry->collection()->handle(), $this->exposedHandles('collections'), true)) {
+            throw new ToolException("entry '{$id}' not found");
+        }
+
+        if ($site !== null && $site !== $entry->locale()) {
+            $siblings = $entry->collection()->sites()
+                ->map(fn (string $handle) => $entry->in($handle))
+                ->filter()
+                ->map(fn (EntryContract $localization) => $localization->locale().' => '.$localization->id())
+                ->values()
+                ->all();
+
+            throw new ToolException(sprintf(
+                "entry '%s' belongs to site '%s', not '%s' — pass the matching localization id instead (or omit site). Localizations: %s",
+                $id,
+                $entry->locale(),
+                $site,
+                implode('; ', $siblings),
+            ));
+        }
+
+        $this->ensureSiteAccess($user, $entry->locale());
+
+        return $entry;
+    }
+
+    /**
+     * @param  'edit'|'publish'|'delete'  $ability
+     */
+    protected function ensureEntryPermission(UserContract $user, string $ability, EntryContract $entry): void
+    {
+        $collection = $entry->collectionHandle();
+
+        $this->ensurePermission($user, $this->hasAnotherAuthor($user, $entry)
+            ? "{$ability} other authors {$collection} entries"
+            : "{$ability} {$collection} entries");
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function ensureAuthorUnchanged(UserContract $user, EntryContract $entry, array $data): void
+    {
+        if (! array_key_exists('author', $data) || $this->sameAuthors(data_get($data, 'author'), $entry->authors()->all())) {
+            return;
+        }
+
+        $permission = "edit other authors {$entry->collectionHandle()} entries";
+
+        if (! $this->can($user, $permission)) {
+            throw new ToolException(sprintf(
+                "changing the author requires '%s' — grant it to a role of %s in the Control Panel, or leave author out of data",
+                $permission,
+                $user->email(),
+            ));
+        }
+    }
+
+    protected function hasAnotherAuthor(UserContract $user, EntryContract $entry): bool
+    {
+        return $entry->blueprint()->hasField('author')
+            && ! $entry->authors()->contains($user->id());
+    }
+
+    /**
+     * @param  array<int, mixed>  $authors
+     */
+    protected function sameAuthors(mixed $given, array $authors): bool
+    {
+        $ids = fn (mixed $value) => collect(Arr::wrap($value))
+            ->filter(fn (mixed $id) => (is_string($id) || is_int($id)) && filled($id))
+            ->map(fn (string|int $id) => (string) $id)
+            ->sort()
+            ->values()
+            ->all();
+
+        return $ids($given) === $ids($authors);
+    }
+
+    protected function ensureSiteAccess(UserContract $user, string $site): void
+    {
+        if (! $this->canAccessSite($user, $site)) {
+            $this->ensurePermission($user, "access {$site} site");
+        }
+    }
+
+    protected function canAccessSite(UserContract $user, string $site): bool
+    {
+        if (! Site::multiEnabled()) {
+            return true;
+        }
+
+        return $this->can($user, "access {$site} site");
     }
 
     protected function writesEnabled(): bool

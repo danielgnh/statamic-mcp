@@ -2,9 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -22,10 +19,6 @@ use Statamic\Facades\URL;
 #[IsDestructive(false)]
 class EntriesPreview extends Tool
 {
-    use AuthorizesEntries;
-    use ResolvesEntries;
-    use ResolvesSites;
-
     #[\Override]
     public function schema(JsonSchema $schema): array
     {
