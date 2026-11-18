@@ -24,7 +24,7 @@
     "Connections appear here when a connector (claude.ai, ChatGPT) adds this site and a user completes the consent flow.": "Verbindingen verschijnen hier zodra een connector (claude.ai, ChatGPT) deze site toevoegt en een gebruiker toestemming geeft.",
     "Create token": "Token aanmaken",
     "Created": "Aangemaakt",
-    "Disconnect": "Verbreken",
+    "Disconnect": "Verbreek verbinding",
     "Disconnect this client? It will have to re-authorize before it can reconnect.": "Deze client verbreken? Hij moet zich opnieuw autoriseren voordat hij weer verbinding kan maken.",
     "Expires": "Verloopt",
     "For every agent, in everything it writes: voice and tone, words to use or avoid, how formal to be. Agents read this first, with statamic_overview.": "Voor elke agent, in alles wat hij schrijft: stem en toon, woorden om te gebruiken of te vermijden, hoe formeel. Agents lezen dit als eerste, samen met statamic_overview.",

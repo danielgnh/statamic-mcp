@@ -8,6 +8,13 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Statamic's own Dutch "Disconnect" keeps its wording.** Statamic 6.42 added
+  "Verbreek verbinding", and the addon's "Verbreken" replaced it across the
+  Control Panel. The addon now uses Statamic's wording, which older Statamic
+  versions don't ship.
+
 ## [1.1.0] - 2026-11-05
 
 ### Added
