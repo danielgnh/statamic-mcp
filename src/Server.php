@@ -83,9 +83,9 @@ class Server extends McpServer
     /**
      * @param  class-string<Tool>  ...$tools
      */
-    public static function addTools(string ...$tools): void
+    public static function registerAddonTools(string ...$tools): void
     {
-        app()->instance(self::ADDON_TOOLS, array_values(array_unique([...self::addonTools(), ...$tools])));
+        app()->instance(self::ADDON_TOOLS, array_values(array_unique([...self::registeredAddonTools(), ...$tools])));
     }
 
     /**
@@ -93,7 +93,7 @@ class Server extends McpServer
      *
      * @return list<class-string<Tool>>
      */
-    public static function addonTools(): array
+    public static function registeredAddonTools(): array
     {
         return app()->bound(self::ADDON_TOOLS) ? app(self::ADDON_TOOLS) : [];
     }
@@ -101,7 +101,7 @@ class Server extends McpServer
     #[\Override]
     protected function boot(): void
     {
-        $addonTools = array_values(array_diff(self::addonTools(), $this->tools));
+        $addonTools = array_values(array_diff(self::registeredAddonTools(), $this->tools));
         $registry = (new ToolRegistry($this->tools))->add(...$addonTools);
 
         $this->tools($registry);

@@ -71,7 +71,7 @@ it('serves add-on tools through the laravel/mcp test harness', function () {
 });
 
 it('keeps the built-in tool on tools/call when an add-on tool takes its name', function () {
-    Server::addTools(ShadowOverviewTool::class);
+    Server::registerAddonTools(ShadowOverviewTool::class);
 
     $response = addonPost('tools/call', ['name' => 'statamic_overview', 'arguments' => (object) []], addonToken())->assertOk();
 
@@ -80,7 +80,7 @@ it('keeps the built-in tool on tools/call when an add-on tool takes its name', f
 });
 
 it('hides an add-on tool under read_only unless its own class declares IsReadOnly, as laravel/mcp reads readOnlyHint', function (string $tool, string $name) {
-    Server::addTools($tool);
+    Server::registerAddonTools($tool);
     config(['statamic.mcp.read_only' => true]);
     $token = addonToken();
 
@@ -95,14 +95,14 @@ it('hides an add-on tool under read_only unless its own class declares IsReadOnl
 ]);
 
 it('keeps an add-on tool under read_only when it declares a subclass of IsReadOnly, as laravel/mcp accepts one', function () {
-    Server::addTools(AddonHintedReadTool::class);
+    Server::registerAddonTools(AddonHintedReadTool::class);
     config(['statamic.mcp.read_only' => true]);
 
     expect(addonToolNames(addonToken()))->toContain('addon_hinted_read');
 });
 
 it('takes any class at registration, so a broken add-on fails the MCP route and not the boot of the site', function () {
-    expect(fn () => Server::addTools(stdClass::class))->not->toThrow(Throwable::class);
+    expect(fn () => Server::registerAddonTools(stdClass::class))->not->toThrow(Throwable::class);
 
     addonPost('tools/list', [], addonToken())->assertServerError();
 });

@@ -11,6 +11,6 @@ class SecondAddonProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        Server::addTools(AddonWriteTool::class, AddonReadTool::class);
+        Server::registerAddonTools(AddonWriteTool::class, AddonReadTool::class);
     }
 }

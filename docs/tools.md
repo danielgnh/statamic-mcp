@@ -163,10 +163,10 @@ read it.
 
 The README shows the shape: a server class that extends `Danielgnh\StatamicMcp\Server`,
 overrides `tools()` to add, replace, or remove tool classes, and is named in the
-`server` config key. An add-on registers its tools with `Server::addTools()` instead.
-This section starts with a complete tool, then covers what the base tool class gives
-you, tools from an add-on, what `read_only` expects from you, how to replace one of
-ours, and how to test.
+`server` config key. An add-on registers its tools with
+`Server::registerAddonTools()` instead. This section starts with a complete tool, then
+covers what the base tool class gives you, tools from an add-on, what `read_only`
+expects from you, how to replace one of ours, and how to test.
 
 ### A complete tool
 
@@ -255,15 +255,16 @@ use Danielgnh\StatamicMcp\Server;
 
 public function bootAddon(): void
 {
-    if (method_exists(Server::class, 'addTools')) {
-        Server::addTools(SeoAudit::class, RedirectsList::class);
+    if (method_exists(Server::class, 'registerAddonTools')) {
+        Server::registerAddonTools(SeoAudit::class, RedirectsList::class);
     }
 }
 ```
 
 The `method_exists()` check lets the add-on run on sites without this addon and on
-versions before 1.2. Those have no `addTools()`, and a call there falls into laravel/mcp's
-test helpers and fails every request of the site. `class_exists()` does not catch that.
+versions before 1.2. Those have no `registerAddonTools()`, and a call there falls into
+laravel/mcp's test helpers and fails every request of the site. `class_exists()` does not
+catch that.
 
 The server builds its tool list on every MCP request: the built-in tools first, then the
 add-on tools in the order their providers booted, then the site's own `tools()`. A site
@@ -284,8 +285,9 @@ What an add-on's tools need:
   each `tools/list` and `tools/call`, so one tool that cannot be built breaks every call on
   the server. Check missing configuration in `execute()` and throw a `ToolException` there.
 
-`addTools()` stores the class names without loading them. A class that is not a laravel/mcp
-tool fails the MCP endpoint with a 500 and leaves the rest of the site running.
+`registerAddonTools()` stores the class names without loading them. A class that is not a
+laravel/mcp tool fails the MCP endpoint with a 500 and leaves the rest of the site
+running.
 `php please mcp:doctor` lists each add-on tool with its class and names the ones the server
 does not serve. It fails on two tools with one name, on a tool that cannot be built, and
 on a class that is not a tool. It warns about a tool whose `shouldRegister()` throws, since

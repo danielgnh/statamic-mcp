@@ -160,7 +160,7 @@ class Doctor extends Command
      */
     protected function checkTools(string $server): void
     {
-        $addonTools = Server::addonTools();
+        $addonTools = Server::registeredAddonTools();
 
         if ($addonTools !== [] && ! is_a($server, Server::class, true)) {
             $this->warn(sprintf(

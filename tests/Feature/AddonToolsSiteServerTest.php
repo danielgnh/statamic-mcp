@@ -12,7 +12,7 @@ use Illuminate\Testing\TestResponse;
 uses(UsesSiteServer::class);
 
 beforeEach(function () {
-    Server::addTools(AddonReadTool::class, AddonWriteTool::class, AddonNotReadOnlyTool::class);
+    Server::registerAddonTools(AddonReadTool::class, AddonWriteTool::class, AddonNotReadOnlyTool::class);
 });
 
 function siteServerList(): TestResponse

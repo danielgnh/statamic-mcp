@@ -10,7 +10,7 @@ beforeEach(function () {
     Fixtures::tags();
     Fixtures::blog();
 
-    Server::addTools(AddonEntryTool::class);
+    Server::registerAddonTools(AddonEntryTool::class);
 
     $this->origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Hello']))->save();
     $this->localization = tap($this->origin->makeLocalization('de')->data(['title' => 'Hallo']))->save();

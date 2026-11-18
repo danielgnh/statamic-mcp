@@ -14,7 +14,7 @@ use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Support\Facades\Artisan;
 
 it('lists the tools add-ons registered, by name and class', function () {
-    Server::addTools(AddonReadTool::class);
+    Server::registerAddonTools(AddonReadTool::class);
 
     Artisan::call('statamic:mcp:doctor');
 
@@ -24,7 +24,7 @@ it('lists the tools add-ons registered, by name and class', function () {
 });
 
 it('counts the tools that tools/list serves, not the ones a switch hides', function () {
-    Server::addTools(AddonReadTool::class);
+    Server::registerAddonTools(AddonReadTool::class);
     $token = app(TokenRepository::class)->issue(Fixtures::makeUser(), 'doctor')->token;
 
     $served = count($this->withHeaders([
@@ -38,7 +38,7 @@ it('counts the tools that tools/list serves, not the ones a switch hides', funct
 });
 
 it('fails on two tools with one name, because tools/call only ever reaches the first', function () {
-    Server::addTools(ShadowOverviewTool::class);
+    Server::registerAddonTools(ShadowOverviewTool::class);
 
     $exit = Artisan::call('statamic:mcp:doctor');
 
@@ -47,7 +47,7 @@ it('fails on two tools with one name, because tools/call only ever reaches the f
 });
 
 it('fails naming a tool that cannot be built, because it breaks every tools/list and tools/call', function () {
-    Server::addTools(UnbuildableTool::class);
+    Server::registerAddonTools(UnbuildableTool::class);
 
     $exit = Artisan::call('statamic:mcp:doctor');
 
@@ -56,7 +56,7 @@ it('fails naming a tool that cannot be built, because it breaks every tools/list
 });
 
 it('only warns about a shouldRegister() that throws, because one reading the request user throws only in the console', function () {
-    Server::addTools(UnregistrableTool::class);
+    Server::registerAddonTools(UnregistrableTool::class);
     app(TokenRepository::class)->issue(Fixtures::makeUser(), 'doctor');
 
     $exit = Artisan::call('statamic:mcp:doctor');
@@ -68,7 +68,7 @@ it('only warns about a shouldRegister() that throws, because one reading the req
 });
 
 it('fails when an add-on registered a class that is not a tool', function () {
-    Server::addTools(stdClass::class);
+    Server::registerAddonTools(stdClass::class);
 
     $exit = Artisan::call('statamic:mcp:doctor');
 
@@ -96,7 +96,7 @@ it('reads the tools inside a laravel/mcp ToolSearch group', function () {
 });
 
 it('names the add-on tools that are not served, such as a write tool under read_only', function () {
-    Server::addTools(AddonWriteTool::class);
+    Server::registerAddonTools(AddonWriteTool::class);
     config(['statamic.mcp.read_only' => true]);
 
     Artisan::call('statamic:mcp:doctor');
@@ -105,7 +105,7 @@ it('names the add-on tools that are not served, such as a write tool under read_
 });
 
 it('warns when add-on tools never reach the configured server', function () {
-    Server::addTools(AddonReadTool::class);
+    Server::registerAddonTools(AddonReadTool::class);
     config(['statamic.mcp.server' => PlainMcpServer::class]);
 
     Artisan::call('statamic:mcp:doctor');

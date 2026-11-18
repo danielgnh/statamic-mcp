@@ -10,13 +10,13 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ### Added
 
-- **Add-ons can serve MCP tools.** An add-on calls `Server::addTools()` from its
-  service provider, and every site that installs it serves those tools without
-  a server class of its own. The site's `tools()` runs after the add-ons', so
-  it can still remove or replace them. With `read_only` on, an add-on tool
-  whose class does not declare `#[IsReadOnly]` is left out. A class that is
-  not a tool fails the MCP endpoint, not the site. See "Tools from an add-on"
-  in `docs/tools.md`.
+- **Add-ons can serve MCP tools.** An add-on calls
+  `Server::registerAddonTools()` from its service provider, and every site that
+  installs it serves those tools without a server class of its own. The site's
+  `tools()` runs after the add-ons', so it can still remove or replace them.
+  With `read_only` on, an add-on tool whose class does not declare
+  `#[IsReadOnly]` is left out. A class that is not a tool fails the MCP
+  endpoint, not the site. See "Tools from an add-on" in `docs/tools.md`.
 - **Entry and site helpers on the base `Tool`.** `findExposedEntry()`,
   `ensureEntryPermission()`, `ensureAuthorUnchanged()`, `ensureSiteAccess()`,
   and `canAccessSite()` moved from internal traits onto
