@@ -8,6 +8,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-19
+
 ### Added
 
 - **Add-ons can serve MCP tools.** An add-on calls
@@ -1212,7 +1214,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/danielgnh/statamic-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/danielgnh/statamic-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.1...v1.0.0
 [0.9.1]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.0...v0.9.1
