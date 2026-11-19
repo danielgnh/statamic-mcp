@@ -163,9 +163,10 @@ read it.
 
 The README shows the shape: a server class that extends `Danielgnh\StatamicMcp\Server`,
 overrides `tools()` to add, replace, or remove tool classes, and is named in the
-`server` config key. This section starts with a complete tool, then covers what the
-base tool class gives you, how to replace one of ours, what `read_only` expects from
-you, and how to test.
+`server` config key. An add-on registers its tools with
+`Server::registerAddonTools()` instead. This section starts with a complete tool, then
+covers what the base tool class gives you, tools from an add-on, what `read_only`
+expects from you, how to replace one of ours, and how to test.
 
 ### A complete tool
 
@@ -220,11 +221,22 @@ a tool error response instead of a 500. The protected helpers:
 |---|---|
 | `user($request)` | The acting Statamic user, in token and OAuth mode alike. Throws a tool error when no user is authenticated. |
 | `can($user, $permission)` / `ensurePermission($user, $permission)` | Statamic's native permission check, super users pass. The throwing form names the missing permission and the remedy. |
-| `ensureExposed($type, $handle)` / `exposedHandles($type)` | Honors the `resources` allowlist for `collections`, `taxonomies`, `globals`, `asset_containers`, and `navigations`. A handle that exists but is not exposed reads as not found, on purpose. |
+| `ensureExposed($type, $handle)` / `exposedHandles($type)` | Honors the `resources` allowlist for `collections`, `taxonomies`, `globals`, `asset_containers`, `navigations`, and `forms`. A handle that exists but is not exposed reads as not found, on purpose. |
+| `findExposedEntry($id, $user, $site = null)` | The entry with that id. A tool error when it does not exist, its collection is not in the `resources` allowlist, or the user lacks `access {site} site` for its site. With `$site`, an id from another site is an error that lists the matching localization ids. |
+| `ensureEntryPermission($user, $ability, $entry)` | `edit`, `publish`, or `delete` for the entry's collection: `{ability} {collection} entries`, or `{ability} other authors {collection} entries` when the blueprint has an author field and the user is not an author. |
+| `ensureAuthorUnchanged($user, $entry, $data)` | Refuses a different `author` in `$data` without `edit other authors {collection} entries`. |
+| `canAccessSite($user, $site)` / `ensureSiteAccess($user, $site)` | `access {site} site` on a multisite. A single site always passes. |
 | `writesEnabled()` / `ensureWritesEnabled()` | The `read_only` switch. |
 | `deletesEnabled()` / `ensureDeletesEnabled()` | The `deletes` switch, with `read_only` checked first. |
 | `json($data)` | A compact JSON text response. |
 | `notFound($what, $given, $available)` | The same not-found shape the built-in tools return. |
+
+Load content through these helpers rather than `Entry::find()` or another facade. A tool
+that skips them lets an editor read or change content that the `resources` allowlist
+hides or that their roles do not grant. `findExposedEntry()` checks the allowlist and the
+site, not the collection: a tool that reads an entry also calls
+`$this->ensurePermission($user, "view {$entry->collectionHandle()} entries")`, as
+`entries_get` does, and a tool that changes one calls `ensureEntryPermission()`.
 
 Declare parameters in `schema()` and validate them in `execute()`, as `NewsletterSend`
 does. laravel/mcp does not enforce the declared schema server-side, so
@@ -233,15 +245,73 @@ does. laravel/mcp does not enforce the declared schema server-side, so
 A plain `Laravel\Mcp\Server\Tool` works too. It just runs behind the addon's middleware
 without the helpers above.
 
+### Tools from an add-on
+
+An add-on registers its tools from its service provider. Every site that installs it then
+serves them, without a server class of its own:
+
+```php
+use Danielgnh\StatamicMcp\Server;
+
+public function bootAddon(): void
+{
+    if (method_exists(Server::class, 'registerAddonTools')) {
+        Server::registerAddonTools(SeoAudit::class, RedirectsList::class);
+    }
+}
+```
+
+The `method_exists()` check lets the add-on run on sites without this addon and on
+versions before 1.2. Those have no `registerAddonTools()`, and a call there falls into
+laravel/mcp's test helpers and fails every request of the site. `class_exists()` does not
+catch that.
+
+The server builds its tool list on every MCP request: the built-in tools first, then the
+add-on tools in the order their providers booted, then the site's own `tools()`. A site
+can therefore still `remove()` an add-on's tool or `replace()` it with a class of its own.
+A class registered twice, by one add-on or by two, is served once.
+
+What an add-on's tools need:
+
+- A name that starts with the add-on's own prefix, such as `seo_audit`. When two tools
+  share a name, `tools/call` reaches the first one the server serves. The built-in tools
+  come first, but a built-in that a switch hides, such as `entries_delete` while
+  `deletes` is off, leaves its name to the next tool.
+- `#[IsReadOnly]` on every tool that only reads. With `read_only` on, the server leaves
+  out each add-on tool whose own class does not declare it, so a forgotten attribute hides
+  a tool instead of letting it write. A parent class's attribute does not count, because
+  laravel/mcp does not pass it on to clients either.
+- A constructor and `shouldRegister()` that never throw. laravel/mcp builds every tool for
+  each `tools/list` and `tools/call`, so one tool that cannot be built breaks every call on
+  the server. Check missing configuration in `execute()` and throw a `ToolException` there.
+
+`registerAddonTools()` stores the class names without loading them. A class that is not a
+laravel/mcp tool fails the MCP endpoint with a 500 and leaves the rest of the site
+running.
+`php please mcp:doctor` lists each add-on tool with its class and names the ones the server
+does not serve. It fails on two tools with one name, on a tool that cannot be built, and
+on a class that is not a tool. It warns about a tool whose `shouldRegister()` throws, since
+one that reads the request user can throw in the console alone. It also warns when the
+`server` config names a class that does not extend `Danielgnh\StatamicMcp\Server`, because
+that server never loads add-on tools.
+
 ### Your tools and read_only
 
 `read_only` hides the built-in write tools because each one implements `shouldRegister()`.
-The switch knows nothing about your tools, so a tool that writes needs the same two lines
-the built-in ones have, as `NewsletterSend` shows. `shouldRegister()` returning
-`$this->writesEnabled()` hides the tool from `tools/list`, and `$this->ensureWritesEnabled()`
-at the top of `execute()` refuses the call when a client still has the tool cached.
+Add-on tools follow the rule above.
+
+The switch knows nothing about the tools a site adds in its own `tools()`, so a tool that
+writes needs the same two lines the built-in ones have, as `NewsletterSend` shows.
+`shouldRegister()` returning `$this->writesEnabled()` hides the tool from `tools/list`, and
+`$this->ensureWritesEnabled()` at the top of `execute()` refuses the call when a client
+still has the tool cached.
 
 Read tools need neither. Mark them `#[IsReadOnly]` so clients can tell.
+
+An add-on tool that only reads but lacks the attribute disappears while `read_only` is on.
+Ask its author to add `#[IsReadOnly]`. Until then, `replace()` it in `tools()` with a
+subclass of your own that declares it: the server only leaves out classes that add-ons
+registered, so check that the tool really does not write.
 
 ### Replacing and removing tools
 
@@ -255,11 +325,11 @@ throws.
 
 Tool names must be unique on the server. `add()` dedupes by class, not by name, so if two
 classes carry the same `#[Name]`, `tools/call` reaches the first one and `tools/list`
-shows both. That is what `replace()` is for.
+shows both. That is what `replace()` is for, and `php please mcp:doctor` fails until the
+names are unique.
 
-The addon serves up to 50 tools on one page because some clients never send a cursor.
-If your server grows past that, raise `$defaultPaginationLength` and
-`$maxPaginationLength` on your class.
+The server puts every tool on the first page of `tools/list`, however many there are,
+because some clients never send a cursor.
 
 ### Testing
 
@@ -281,3 +351,31 @@ StatamicServer::actingAs($user)
 
 The harness honors `shouldRegister()`, so a hidden tool answers "not found". To pin the
 in-handler re-check, call `handle()` on a fresh instance directly.
+
+An add-on runs the same harness against `Danielgnh\StatamicMcp\Server`. Statamic's
+`AddonTestCase` skips package discovery, so add laravel/mcp's provider, which passes tool
+arguments into the request, and this addon's provider, which loads its config defaults:
+
+```php
+use Danielgnh\StatamicMcp\ServiceProvider as McpAddonServiceProvider;
+use Laravel\Mcp\Server\McpServiceProvider;
+
+protected function getPackageProviders($app)
+{
+    return [
+        ...parent::getPackageProviders($app),
+        McpServiceProvider::class,
+        McpAddonServiceProvider::class,
+    ];
+}
+```
+
+Your own provider's `bootAddon()` then registers the tools, and the test calls them:
+
+```php
+use Danielgnh\StatamicMcp\Server;
+
+Server::actingAs($user)
+    ->tool(SeoAudit::class, ['url' => '/about'])
+    ->assertOk();
+```

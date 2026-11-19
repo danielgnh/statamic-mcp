@@ -21,9 +21,11 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Laravel\Mcp\Server as McpServer;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
 use PDOException;
 use Statamic\Console\RunsInPlease;
 use Statamic\Facades\User;
+use Throwable;
 use TypeError;
 
 class Doctor extends Command
@@ -53,7 +55,10 @@ class Doctor extends Command
 
         $this->checkEnabled();
         $this->checkRoute();
-        $this->checkServer();
+        if ($server = $this->checkServer()) {
+            $this->checkTools($server);
+        }
+
         $this->checkMiddleware();
         $this->checkAppUrl();
         $this->checkAuthMigrations();
@@ -126,23 +131,114 @@ class Doctor extends Command
         $this->problem("Configured route '{$given}' is not a path — the MCP route cannot mount. Set 'route' in config/statamic/mcp.php, for example to 'mcp/statamic'.");
     }
 
-    protected function checkServer(): void
+    /**
+     * @return class-string<McpServer>|null
+     */
+    protected function checkServer(): ?string
     {
         $server = config('statamic.mcp.server', Server::class);
 
         try {
             if (is_string($server) && is_subclass_of($server, McpServer::class)) {
-                return;
+                return $server;
             }
         } catch (Error $e) {
             $this->problem("Configured server '{$server}' cannot load ({$e->getMessage()}) — the MCP route cannot mount. Point 'server' in the statamic.mcp config at a class that loads, or remove the key.");
 
-            return;
+            return null;
         }
 
         $given = is_string($server) ? $server : get_debug_type($server);
 
         $this->problem("Configured server '{$given}' is not a subclass of ".McpServer::class." — the MCP route cannot mount. Point 'server' in the statamic.mcp config at a class extending Danielgnh\\StatamicMcp\\Server, or remove the key.");
+
+        return null;
+    }
+
+    /**
+     * @param  class-string<McpServer>  $server
+     */
+    protected function checkTools(string $server): void
+    {
+        $addonTools = Server::registeredAddonTools();
+
+        if ($addonTools !== [] && ! is_a($server, Server::class, true)) {
+            $this->warn(sprintf(
+                '[WARN] Add-ons registered tools (%s), but %s does not extend %s, so the AI does not get them. Extend it, or add them in your server class.',
+                implode(', ', $addonTools),
+                $server,
+                Server::class,
+            ));
+        }
+
+        try {
+            $instance = app($server, ['transport' => new FakeTransporter]);
+            $instance->start();
+        } catch (Throwable $e) {
+            $this->problem("The MCP server cannot start ({$e->getMessage()}) — every MCP request answers 500 until this is fixed. If it names a tool class, remove that class from your server's tools(), or update or remove the add-on that registers it.");
+
+            return;
+        }
+
+        $tools = collect((fn (): array => $this->tools)->call($instance))
+            ->flatten()
+            ->map(fn (mixed $tool) => is_string($tool) ? $tool : get_debug_type($tool))
+            ->all();
+        $names = [];
+        $hidden = [];
+        $served = 0;
+        $healthy = true;
+
+        foreach ($tools as $tool) {
+            try {
+                $built = app($tool);
+            } catch (Throwable $e) {
+                $healthy = false;
+                $this->problem(sprintf('Tool %s cannot be built (%s) — every tools/list and tools/call fails while it is registered. Fix what it needs, or remove it.', $tool, $e->getMessage()));
+
+                continue;
+            }
+
+            $names[$built->name()][] = $tool;
+
+            try {
+                $eligible = $built->eligibleForRegistration();
+            } catch (Throwable $e) {
+                $healthy = false;
+                $this->warn(sprintf('[WARN] Tool %s: its shouldRegister() throws here (%s). If it throws in a request too, every tools/list and tools/call fails. One that reads the request user can throw only in the console, where there is none.', $tool, $e->getMessage()));
+
+                continue;
+            }
+
+            if ($eligible) {
+                $served++;
+            } else {
+                $hidden[] = $tool;
+            }
+        }
+
+        foreach ($names as $name => $owners) {
+            if (count($owners) > 1) {
+                $healthy = false;
+                $this->problem(sprintf("Tool name '%s' is taken by %s — tools/call only ever reaches the first one served. Remove one in your server's tools(), or ask the add-on to rename its tool.", $name, implode(' and ', $owners)));
+            }
+        }
+
+        if ($healthy) {
+            $this->info("[ OK ] {$served} tools served, every name unique.");
+        }
+
+        foreach ($names as $name => $owners) {
+            foreach (array_intersect($owners, $addonTools) as $class) {
+                $this->line("       Add-on tool {$name}: {$class}".(in_array($class, $hidden, true) ? ' (its shouldRegister() hides it)' : ''));
+            }
+        }
+
+        if (is_a($server, Server::class, true)) {
+            foreach (array_diff($addonTools, $tools) as $class) {
+                $this->line("       Add-on tool class {$class} is not served. read_only leaves out add-on tools without #[IsReadOnly] on their own class, and the server's tools() can remove them.");
+            }
+        }
     }
 
     protected function checkMiddleware(): void

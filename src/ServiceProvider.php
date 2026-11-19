@@ -53,10 +53,14 @@ class ServiceProvider extends AddonServiceProvider
     ];
 
     #[\Override]
-    public function bootAddon(): void
+    public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/mcp.php', 'statamic.mcp');
+    }
 
+    #[\Override]
+    public function bootAddon(): void
+    {
         $this->publishes([
             __DIR__.'/../config/mcp.php' => config_path('statamic/mcp.php'),
         ], 'statamic-mcp-config');

@@ -2,9 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -17,10 +14,6 @@ use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 #[IsIdempotent]
 class EntriesUnpublish extends Tool
 {
-    use AuthorizesEntries;
-    use ResolvesEntries;
-    use ResolvesSites;
-
     #[\Override]
     public function schema(JsonSchema $schema): array
     {

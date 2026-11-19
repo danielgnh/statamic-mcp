@@ -17,6 +17,15 @@ runtime.
   `Statamic MCP failed to mount; run php please mcp:doctor` with the cause, and until the
   config is fixed, requests to the endpoint reach Statamic's frontend route: a 404, or a
   419 for a POST.
+- **Tools.** The doctor starts the server as a request would and builds every tool. It
+  counts the tools `tools/list` serves and lists each add-on tool with its class,
+  including the ones the server leaves out. It fails when the server cannot start, when
+  a tool cannot be built, and when two tools share a name, because each of those breaks
+  or misroutes MCP requests. A tool whose `shouldRegister()` throws gets a warning
+  instead: in a request it breaks every `tools/list`, but one that reads the request
+  user may throw only here, where there is none. It also warns when add-ons registered
+  tools and the `server` config names a class that does not extend
+  `Danielgnh\StatamicMcp\Server`.
 - **Middleware** — every configured middleware entry must resolve to a class, alias,
   or group; a typo'd entry mounts fine and then 500s every request.
 - **APP_URL** — warns on the Laravel default (`http://localhost`) and on plain

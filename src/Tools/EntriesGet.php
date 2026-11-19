@@ -4,7 +4,6 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\PresentsAugmentedData;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\SelectsFields;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -25,7 +24,6 @@ class EntriesGet extends Tool
 {
     use LocalizesEntries;
     use PresentsAugmentedData;
-    use ResolvesEntries;
     use ResolvesSites;
     use SelectsFields;
 

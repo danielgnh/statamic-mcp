@@ -3,7 +3,6 @@
 namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Support\Sets;
-use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
 use Danielgnh\StatamicMcp\Tools\Concerns\LocalizesEntries;
 use Danielgnh\StatamicMcp\Tools\Concerns\NormalizesEntryInput;
@@ -16,17 +15,18 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Statamic\Contracts\Auth\User as UserContract;
 use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
+use Statamic\Fields\Blueprint;
 use Statamic\Support\Str;
 
 #[Name('entries_create')]
 #[Description('Create a new entry from raw field data (call blueprints_get first for the shape — never send augmented data). Always saves an unpublished draft — nothing goes live here; call entries_publish afterwards. On revision-enabled collections the draft gets an initial revision attributed to you. slug is generated from data.title when omitted, except on a collection with slugs turned off, whose entries have none. Dated collections require date. On a structured collection the entry joins its tree at the top level, or under parent: the id of an entry of the same collection and site. A new Replicator or Grid set whose id is blank, 0, or shared with another new set gets a fresh id; entries_get shows the stored ids. When the blueprint has an author field, you become the author unless data names one; naming anyone else needs \'edit other authors {collection} entries\'. On a collection in more than one site the entry exists in site only: add it to another site with entries_localize. When the collection\'s propagate is on (see statamic_overview), every site gets a localization at once, and the response lists them under localizations.')]
 class EntriesCreate extends Tool
 {
-    use AuthorizesEntries;
     use ComparesPatchData;
     use LocalizesEntries;
     use NormalizesEntryInput;
@@ -232,5 +232,32 @@ class EntriesCreate extends Tool
         }
 
         return $slug;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function withAuthor(UserContract $user, Blueprint $blueprint, string $collection, array $data): array
+    {
+        if (! $blueprint->hasField('author')) {
+            return $data;
+        }
+
+        if (! array_key_exists('author', $data)) {
+            return [...$data, 'author' => [$user->id()]];
+        }
+
+        $permission = "edit other authors {$collection} entries";
+
+        if (! $this->sameAuthors(data_get($data, 'author'), [$user->id()]) && ! $this->can($user, $permission)) {
+            throw new ToolException(sprintf(
+                "author can only be you without '%s' — grant it to a role of %s in the Control Panel, or leave author out",
+                $permission,
+                $user->email(),
+            ));
+        }
+
+        return $data;
     }
 }

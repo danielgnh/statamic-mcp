@@ -2,9 +2,6 @@
 
 namespace Danielgnh\StatamicMcp\Tools;
 
-use Danielgnh\StatamicMcp\Tools\Concerns\AuthorizesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesEntries;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Exception;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection;
@@ -21,10 +18,6 @@ use Statamic\Entries\Entry;
 #[IsDestructive]
 class EntriesDelete extends Tool
 {
-    use AuthorizesEntries;
-    use ResolvesEntries;
-    use ResolvesSites;
-
     #[\Override]
     public function schema(JsonSchema $schema): array
     {

@@ -4,7 +4,6 @@ namespace Danielgnh\StatamicMcp\Tools;
 
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Tools\Concerns\ComparesPatchData;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Danielgnh\StatamicMcp\Tools\Concerns\ValidatesBlueprintData;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -20,7 +19,6 @@ use Statamic\Support\Str;
 class TermsCreate extends Tool
 {
     use ComparesPatchData;
-    use ResolvesSites;
     use ValidatesBlueprintData;
 
     #[\Override]

@@ -57,20 +57,4 @@ trait ResolvesSites
             $collection->sites()->sort()->implode(', '),
         ));
     }
-
-    protected function ensureSiteAccess(UserContract $user, string $site): void
-    {
-        if (! $this->canAccessSite($user, $site)) {
-            $this->ensurePermission($user, "access {$site} site");
-        }
-    }
-
-    protected function canAccessSite(UserContract $user, string $site): bool
-    {
-        if (! Site::multiEnabled()) {
-            return true;
-        }
-
-        return $this->can($user, "access {$site} site");
-    }
 }

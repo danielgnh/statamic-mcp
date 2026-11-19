@@ -5,7 +5,6 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Support\AgentGuidelines;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesForms;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesNavs;
-use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesSites;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Collection as SupportCollection;
 use Laravel\Mcp\Request;
@@ -32,7 +31,6 @@ class StatamicOverview extends Tool
 {
     use ResolvesForms;
     use ResolvesNavs;
-    use ResolvesSites;
 
     #[\Override]
     public function schema(JsonSchema $schema): array
