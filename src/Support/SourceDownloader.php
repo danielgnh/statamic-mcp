@@ -196,10 +196,15 @@ class SourceDownloader
         try {
             return Http::setHandler(new CurlHandler)->withOptions([
                 'allow_redirects' => false,
+                'decode_content' => false,
                 'curl' => [CURLOPT_CONNECT_TO => [
                     sprintf('::%s:%d', str_contains($ip, ':') ? "[{$ip}]" : $ip, $port),
                 ]],
                 'on_headers' => function (ResponseInterface $response) use ($maxBytes): void {
+                    if (! in_array(strtolower(trim($response->getHeaderLine('Content-Encoding'))), ['', 'identity'], true)) {
+                        throw new ToolException('source_url answered with a compressed body, whose real size cannot be capped — nothing was uploaded. Use a URL that serves the file as it is.');
+                    }
+
                     if ((int) $response->getHeaderLine('Content-Length') > $maxBytes) {
                         throw $this->sizeLimitException();
                     }

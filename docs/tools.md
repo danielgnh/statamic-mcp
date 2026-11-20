@@ -143,7 +143,10 @@ validated IP whatever host curl reads from the URL (no DNS-rebinding window);
 every redirect hop (max 3) is re-validated; the requests of one download, redirects included, share 15 seconds,
 though a slow DNS lookup is not cut off. A `Content-Length` over
 `uploads.max_size` aborts the download. Without one, a larger body is refused
-when the transfer ends, which can take the full 15 seconds. URL uploads need
+when the transfer ends, which can take the full 15 seconds. The request offers
+no compression, and an answer that is compressed anyway (`Content-Encoding`) is
+refused and never inflated: a few hundred kilobytes can inflate to gigabytes,
+and the cap would only count the small number. URL uploads need
 `ext-curl` with `curl_exec` enabled and are refused without it.
 
 The guard knows address ranges, not your network. A public address that your
