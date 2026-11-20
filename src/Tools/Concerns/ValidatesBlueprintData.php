@@ -373,14 +373,24 @@ trait ValidatesBlueprintData
             throw new ToolException("{$path} must be a list of ProseMirror nodes, or an HTML string");
         }
 
-        $messages = [];
-        $counterparts = $this->storedByUniqueId($stored, 'attrs.id');
-
         foreach ($nodes as $index => $node) {
             if (! is_array($node) || ! is_string(data_get($node, 'type'))) {
                 throw new ToolException("{$path}.{$index} must be a ProseMirror node object with a type");
             }
 
+            if ($node['type'] !== 'set' && Str::camel($node['type']) === 'set') {
+                throw new ToolException("{$path}.{$index} is a set: write its type as 'set'");
+            }
+        }
+
+        if ($nodes !== [] && ! $fieldtype->config('inline') && $fieldtype->isLegacyData($nodes)) {
+            throw new ToolException("{$path} is in Bard's old format, a list of text and set items — send ProseMirror nodes, with each set as a node of type 'set'");
+        }
+
+        $messages = [];
+        $counterparts = $this->storedByUniqueId($stored, 'attrs.id');
+
+        foreach ($nodes as $index => $node) {
             if ($node['type'] === 'set') {
                 $counterpart = $this->counterpart($counterparts, data_get($node, 'attrs.id')) ?? $this->storedWithoutIdAt($stored, $index, $node, $counterparts, 'attrs.id');
                 $storedValues = data_get($counterpart, 'type') === 'set' ? data_get($counterpart, 'attrs.values') : null;

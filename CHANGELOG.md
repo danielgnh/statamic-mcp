@@ -76,6 +76,11 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   which can build such a link when the page renders, and Statamic's `link` tag
   resolves any id there. A link to an entry or term outside `resources` is
   still stored, as UPGRADE.md describes.
+- **A Bard set can't skip the checks on its fields any more.** A set node
+  whose type was written `Set`, and Bard's old format of text and set items,
+  were converted by Statamic after the tools had looked, so unknown keys and
+  files of an unexposed container inside them went through. Both are refused
+  now; a stored value in the old format can still be sent back unchanged.
 - **An `icon` field no longer reads files outside its icon set.** A value such
   as `../../storage/plan` made an augmented read return the contents of any
   `.svg` file the server can read. A write now refuses a value with `..` in its

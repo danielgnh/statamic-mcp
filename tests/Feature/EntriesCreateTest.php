@@ -859,6 +859,21 @@ it('stores a Bard image and a Markdown link of an exposed container, a link to a
         ->assertOk();
 });
 
+it('refuses the two Bard shapes that would skip the checks on a set: a set spelled another way, and the old format', function (array $body, string $error) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'body' => $body]])
+        ->assertHasErrors([$error]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'Set' => [[['type' => 'Set', 'attrs' => ['id' => 'abc', 'values' => ['type' => 'callout', 'text' => 'Hi', 'bogus' => 'x']]]], "body.0 is a set: write its type as 'set'"],
+    'the old format' => [[['type' => 'text', 'text' => '<p><img src="asset::private::payroll-2026.png"></p>']], "body is in Bard's old format, a list of text and set items — send ProseMirror nodes, with each set as a node of type 'set'"],
+]);
+
 it('refuses a file of an unexposed container by its URL whatever host the call arrives on', function (string $root) {
     Fixtures::site();
     Fixtures::assetContainer('images');
