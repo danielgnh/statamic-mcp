@@ -81,6 +81,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   were converted by Statamic after the tools had looked, so unknown keys and
   files of an unexposed container inside them went through. Both are refused
   now; a stored value in the old format can still be sent back unchanged.
+- **An augmented read strips a hidden link in two more Bard shapes:** a link
+  mark on a set node, and an image or link whose attributes hold `type: set`.
 - **An `icon` field no longer reads files outside its icon set.** A value such
   as `../../storage/plan` made an augmented read return the contents of any
   `.svg` file the server can read. A write now refuses a value with `..` in its

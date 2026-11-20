@@ -859,3 +859,61 @@ it('never reads a file outside the icon set for a stored icon value that climbs 
         ->assertSee('"icon":null')
         ->assertDontSee('CONFIDENTIAL FLOORPLAN');
 });
+
+it('strips a stored Bard image of an unexposed container whose attributes claim to be a set', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::pages();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text'], 'body' => ['type' => 'bard']])
+        ->setHandle('page')->setNamespace('collections.pages')->save();
+
+    config([
+        'statamic.mcp.resources.collections' => ['pages'],
+        'statamic.mcp.resources.asset_containers' => ['images'],
+    ]);
+
+    $entry = tap(Entry::make()->collection('pages')->slug('home')->data(['title' => 'Home', 'body' => [
+        ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['type' => 'set', 'src' => 'asset::private::payroll-2026.png']]]],
+    ]]))->save();
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented', 'fields' => ['body']])
+        ->assertOk()
+        ->assertDontSee('/assets/private/payroll-2026.png');
+});
+
+it('strips a link mark to an unexposed file or entry from a stored Bard set node', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+
+    $hidden = tap(Entry::make()->collection('blog')->locale('en')->slug('confidential')->data(['title' => 'Confidential post']))->save();
+
+    $set = fn (string $id, string $href) => ['type' => 'set', 'attrs' => ['id' => $id, 'values' => ['type' => 'callout', 'text' => 'hi']], 'marks' => [['type' => 'link', 'attrs' => ['href' => $href]]]];
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data(['title' => 'A', 'body' => [
+        $set('a1', 'statamic://asset::private::payroll-2026.png'),
+        $set('a2', "statamic://entry::{$hidden->id()}"),
+    ]]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented', 'fields' => ['body']])
+        ->assertOk()
+        ->assertDontSee('/assets/private/payroll-2026.png')
+        ->assertDontSee('/blog/confidential');
+});
