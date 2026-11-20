@@ -821,3 +821,41 @@ it('filters computed search results and wrapper objects holding entries by expos
         ->assertDontSee('/blog/confidential')
         ->assertDontSee('search_score');
 });
+
+it('never reads a file outside the icon set for a stored icon value that climbs directories', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::assetContainer('secretfiles');
+
+    Storage::disk('secretfiles')->put('plans/floorplan.svg', '<svg><text>CONFIDENTIAL FLOORPLAN</text></svg>');
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->ensureField('safe_icon', ['type' => 'icon'])->save();
+    Blueprint::find('taxonomies.tags.tag')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $climb = fn (string $from, string $to) => str_repeat('../', count(explode('/', trim((string) realpath($from), '/')))).ltrim($to, '/');
+    $outside = $climb(statamic_path('resources/svg/icons'), substr((string) realpath(Storage::disk('secretfiles')->path('plans/floorplan.svg')), 0, -4));
+    $inside = basename((string) collect(glob(statamic_path('resources/svg/icons/*.svg')))->first(), '.svg');
+
+    expect(file_get_contents(statamic_path('resources/svg/icons').'/'.$outside.'.svg'))->toContain('CONFIDENTIAL FLOORPLAN');
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post', 'icon' => $outside, 'safe_icon' => $inside]))->save()->id();
+    tap(Term::make()->taxonomy('tags')->slug('php'))->dataForLocale('en', ['title' => 'PHP', 'icon' => $outside])->save();
+
+    startNewRequest();
+
+    $user = Fixtures::makeUser('view blog entries', 'view tags terms');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $post, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"icon":null')
+        ->assertSee('"safe_icon":"<svg')
+        ->assertDontSee('CONFIDENTIAL FLOORPLAN');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php', 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"icon":null')
+        ->assertDontSee('CONFIDENTIAL FLOORPLAN');
+});

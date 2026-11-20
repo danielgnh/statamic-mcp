@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Danielgnh\StatamicMcp\Support\IconName;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Arrayable;
@@ -34,6 +35,7 @@ use Statamic\Fieldtypes\Collections;
 use Statamic\Fieldtypes\Entries;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Fieldtypes\Icon;
 use Statamic\Fieldtypes\Link;
 use Statamic\Fieldtypes\Link\ArrayableLink;
 use Statamic\Fieldtypes\Markdown;
@@ -100,6 +102,7 @@ trait PresentsAugmentedData
             $fieldtype instanceof Markdown => $this->withRaw($value, $this->withoutHiddenLinks($value->raw(), $exposed))->shallow(),
             $fieldtype instanceof Replicator, $fieldtype instanceof Grid, $fieldtype instanceof Group => $this->presentedSets($value->value(), $exposed),
             $fieldtype instanceof Link => $this->presentedLink($value->value(), $exposed),
+            $fieldtype instanceof Icon => IconName::leavesIconSet($value->raw()) ? null : $value->value(),
             $fieldtype === null,
             $fieldtype instanceof Entries, $fieldtype instanceof Terms, $fieldtype instanceof Assets,
             $fieldtype instanceof Collections, $fieldtype instanceof Taxonomies, $fieldtype instanceof Navs,

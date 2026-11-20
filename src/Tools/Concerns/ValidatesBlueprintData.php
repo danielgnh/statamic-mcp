@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Danielgnh\StatamicMcp\Support\IconName;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
@@ -20,6 +21,7 @@ use Statamic\Fieldtypes\Assets\Assets;
 use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Fieldtypes\Icon;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Support\Arr;
 use Throwable;
@@ -224,6 +226,14 @@ trait ValidatesBlueprintData
 
         if ($fieldtype instanceof Assets) {
             $this->rejectMissingAssets($field, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof Icon && ! is_string($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set, as a string");
+        }
+
+        if ($fieldtype instanceof Icon && IconName::leavesIconSet($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set — a path with '..' is refused");
         }
 
         return [];

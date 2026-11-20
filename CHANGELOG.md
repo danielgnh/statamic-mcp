@@ -43,6 +43,13 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   `entries_get` with `format: augmented` in full, also for a collection MCP
   doesn't expose. They are now filtered like any other relation. A resource
   with its own `toArray()` keeps its fields when what it wraps is exposed.
+- **An `icon` field no longer reads files outside its icon set.** A value such
+  as `../../storage/plan` made an augmented read return the contents of any
+  `.svg` file the server can read. A write now refuses a value with `..` in its
+  path, or one that is not a string, and an augmented read returns `null` for a
+  stored one. Statamic itself
+  resolves the stored value when a template prints the field, so a value saved
+  before this release, or through the Control Panel, still renders there.
 - **`assets_upload` can no longer be made to inflate a small download into a
   huge one.** The size cap counted compressed bytes while the body was
   inflated in full: 400 KB on the wire became 400 MB and ended the PHP process
