@@ -512,3 +512,32 @@ it('reports a listener-cancelled save instead of claiming success', function () 
 
     expect(storedNavTree())->toBe([]);
 });
+
+it("takes back a branch's stored link to a file of an unexposed container, and refuses it on another branch", function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::nav();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+
+    Nav::find('main')->in('en')->tree([
+        ['id' => 'b-doc', 'title' => 'Doc', 'url' => 'asset::private::payroll-2026.png'],
+    ])->save();
+
+    config(['statamic.mcp.resources' => ['collections' => true, 'navigations' => ['main'], 'asset_containers' => ['images']]]);
+
+    $user = Fixtures::makeUser('edit main nav');
+
+    Server::actingAs($user)
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [
+            ['id' => 'b-doc', 'title' => 'Document', 'url' => 'asset::private::payroll-2026.png'],
+        ]])
+        ->assertOk();
+
+    Server::actingAs($user)
+        ->tool(NavigationsUpdate::class, ['handle' => 'main', 'tree' => [
+            ['id' => 'b-doc', 'title' => 'Document', 'url' => 'asset::private::payroll-2026.png'],
+            ['title' => 'Copy', 'url' => 'asset::private::payroll-2026.png'],
+        ]])
+        ->assertHasErrors(['tree.1: url links a container not exposed to MCP — leave it out of data']);
+});

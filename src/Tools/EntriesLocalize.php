@@ -117,6 +117,7 @@ class EntriesLocalize extends Tool
             $values,
             array_keys($data),
             ['collection' => $collectionHandle, 'site' => $site],
+            $origin->values()->all(),
         );
 
         $localization = Entry::make()

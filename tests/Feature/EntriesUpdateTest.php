@@ -1252,6 +1252,144 @@ it('takes a key stored outside the blueprint back unchanged, so a raw read can b
         ->and($entry->fresh()->get('legacy'))->toEqual(['a' => 1, 'b' => 2]);
 });
 
+it('keeps a stored file of an unexposed container in Bard and Markdown text, and refuses a new one, a find and replace included', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('intro', ['type' => 'bard'])
+        ->ensureField('notes', ['type' => 'markdown'])
+        ->save();
+
+    $image = fn (string $src) => ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => $src]]]];
+    $text = fn (string $text) => ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => $text]]];
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data([
+        'title' => 'A',
+        'intro' => [$text('Old words'), $image('asset::private::kept.png')],
+        'notes' => 'See ![kept](statamic://asset::private::kept.png) here',
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    $user = Fixtures::makeUser('edit landing entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => [
+            'intro' => [$text('New words'), $image('asset::private::kept.png')],
+            'notes' => ['find' => 'here', 'replace' => 'there'],
+        ]])
+        ->assertOk();
+
+    expect($entry->fresh()->get('notes'))->toBe('See ![kept](statamic://asset::private::kept.png) there');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['intro' => [$text('New words'), $image('asset::private::kept.png'), $image('asset::private::other.png')]]])
+        ->assertHasErrors(['intro links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['notes' => ['find' => 'kept.png', 'replace' => 'other.png']]])
+        ->assertHasErrors(['notes links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['notes' => ['find' => 'there', 'replace' => 'there ![x](statamic://asset::private::kept.png2)']]])
+        ->assertHasErrors(['notes links a container not exposed to MCP — leave it out of data']);
+
+    expect($entry->fresh()->get('notes'))->toBe('See ![kept](statamic://asset::private::kept.png) there');
+});
+
+it('refuses to turn a stored link to a file of an unexposed container into an image of it, which would add its alt text', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')->ensureField('intro', ['type' => 'bard'])->save();
+
+    $link = ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'plan', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'statamic://asset::private::kept.png']]]]]];
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data(['title' => 'A', 'intro' => [$link]]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['intro' => [$link, ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::private::kept.png']]]]]]])
+        ->assertHasErrors(['intro links a container not exposed to MCP — leave it out of data']);
+});
+
+it('does not let a stored mention of an unexposed file excuse a new link to it elsewhere in the same field', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('blocks', ['type' => 'replicator', 'sets' => ['main' => ['sets' => [
+            'note' => ['fields' => [['handle' => 'heading', 'field' => ['type' => 'text']]]],
+            'button' => ['fields' => [['handle' => 'target', 'field' => ['type' => 'link']]]],
+        ]]]])
+        ->save();
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data([
+        'title' => 'A',
+        'blocks' => [['id' => 'b1', 'type' => 'note', 'heading' => 'asset::private::payroll-2026.png']],
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    $user = Fixtures::makeUser('edit landing entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => [['id' => 'b1'], ['type' => 'button', 'target' => 'asset::private::payroll-2026.png']]]])
+        ->assertHasErrors(['blocks links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['blocks' => [['type' => 'note', 'heading' => 'First'], ['id' => 'b1']]]])
+        ->assertOk();
+});
+
+it('keeps a stored link to an unexposed file when only its query or fragment changes', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')->ensureField('notes', ['type' => 'markdown'])->save();
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data([
+        'title' => 'A',
+        'notes' => '[plan](statamic://asset::private::plan.pdf)',
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['notes' => '[plan](statamic://asset::private::plan.pdf#page=2)']])
+        ->assertOk();
+});
+
+it('tells a new file of an unexposed container from a stored one by its whole path', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')->ensureField('notes', ['type' => 'markdown'])->save();
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data([
+        'title' => 'A',
+        'notes' => "![kept](statamic://asset::private::o'brien.png)",
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    Server::actingAs(Fixtures::makeUser('edit landing entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['notes' => "![kept](statamic://asset::private::o'brien.png) ![new](statamic://asset::private::o'ther-secret.png)"]])
+        ->assertHasErrors(['notes links a container not exposed to MCP — leave it out of data']);
+});
+
 it('says which live localizations changed when a draft origin is edited, because they inherit what they do not override', function () {
     Fixtures::multisite();
     Fixtures::tags();

@@ -114,7 +114,7 @@ class TermsUpdate extends Tool
             ...$effective,
             ...$patch,
             'slug' => $newSlug ?? $localized->slug(),
-        ], array_keys($patch)));
+        ], array_keys($patch), stored: $effective));
 
         if (! $slugChanged && $this->normalize($newLocal) === $this->normalize($existingLocal)) {
             return $this->json([

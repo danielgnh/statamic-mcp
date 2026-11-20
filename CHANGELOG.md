@@ -60,6 +60,22 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   `entries_get` with `format: augmented` in full, also for a collection MCP
   doesn't expose. They are now filtered like any other relation. A resource
   with its own `toArray()` keeps its fields when what it wraps is exposed.
+- **Writes refuse the known ways of linking a file of an unexposed
+  container.** Only Assets fields were checked. A Bard image or link, a
+  Markdown link, a `link` field, or an `asset_container` field pointing into a
+  container outside `resources` was stored, and `entries_preview` then rendered
+  the file's URL and alt text, and showed whether the file exists. Every write
+  now checks the value as Statamic will store it: a value that starts with
+  `asset::`, and any `statamic://` link, whether it names the container, leaves
+  out the `asset::` prefix, or gives the file's URL. A new one into a container
+  outside `resources` is refused with the same message for an existing and a
+  missing file. Links already stored stay where they are. The check doesn't
+  know which text Statamic resolves, so plain text holding such a link is
+  refused too. This narrows what an agent can write; it is not a guarantee
+  about what a site renders. A field with `antlers: true` holds template code,
+  which can build such a link when the page renders, and Statamic's `link` tag
+  resolves any id there. A link to an entry or term outside `resources` is
+  still stored, as UPGRADE.md describes.
 - **An `icon` field no longer reads files outside its icon set.** A value such
   as `../../storage/plan` made an augmented read return the contents of any
   `.svg` file the server can read. A write now refuses a value with `..` in its

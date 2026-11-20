@@ -136,6 +136,7 @@ class EntriesUpdate extends Tool
             $values,
             array_keys($data),
             ['id' => $entry->id(), 'collection' => $collectionHandle, 'site' => $entry->locale()],
+            $effective,
         );
 
         $merged = array_merge($current, $processed);
