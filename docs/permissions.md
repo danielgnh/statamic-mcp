@@ -77,8 +77,15 @@ only the edit permission. Its edits to entries that are already live depend on
 the collection. With revisions enabled, an edit becomes a working copy and the live
 entry stays unchanged until someone publishes it. Without revisions, the edit saves
 straight to the live entry, as it would in the CP. Statamic has no permission for
-editing live entries specifically, so if this agent must never change live content,
+editing live entries specifically, so if this agent must not edit live entries,
 enable revisions on the collection. Revisions need Statamic Pro.
+
+Revisions protect the entry that is edited, not the pages built from it. A draft
+is saved directly, with or without revisions, and two kinds of live page read
+from it: a published localization shows every field it doesn't override, and a
+published child page takes its URL from its parent's slug. An edit to such a
+draft changes those pages at once, in the CP as well. `entries_update` lists
+them under `live_changes`.
 
 If the blog blueprint has an `author` field, this agent can only edit and preview
 entries it is an author of, which includes every entry it creates. Add

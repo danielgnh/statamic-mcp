@@ -97,8 +97,18 @@ copy amended — live entry unchanged", "created — live", "updated — live") 
 includes `cp_edit_url` linking the CP edit page (delete responses omit
 `cp_edit_url` — the page would 404).
 Collections with revisions enabled get working copies through the same mechanism
-the CP uses, so an edit there never touches the live entry, and `entries_publish`
-promotes the working copy the way the CP's Publish button does. Without revisions,
+the CP uses, so an edit to a published entry there never touches it, and
+`entries_publish` promotes the working copy the way the CP's Publish button does.
+An edit saved straight to an entry, a draft included, can change other pages
+that are live: a published localization shows every field it doesn't override,
+and a published child page takes its URL from its parent's slug. `entries_update`
+names those pages under `live_changes`, and for a draft its result reads "saved
+as draft — not live, but live pages changed with it: see live_changes". A
+localization is listed with the fields it `inherits`, or with `status` and
+`status_before` when a new date schedules or expires it; a child page with `url`
+and `url_before`; a collection mounted on the page as one line; localizations in
+sites you can't access as a count. The list holds 50 changes, and
+`live_changes_not_listed` counts the rest. Without revisions,
 an edit to a published entry is live as soon as it saves.
 
 ## Scheduling

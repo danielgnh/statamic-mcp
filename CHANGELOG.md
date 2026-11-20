@@ -24,6 +24,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   offers no delete for a home page either. See Fixed.
 - **`assets_upload` refuses a `source_url` that answers with a compressed
   body.** See Security.
+- **`entries_update` lists the live pages an edit changed under
+  `live_changes`.** The key is only there when something changed. See Fixed.
 
 ### Fixed
 
@@ -33,6 +35,21 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   collection answered 500, and every later write failed, until someone fixed
   the tree file by hand. When no other page had children, the next page
   silently became the home page.
+- **"saved as draft — not live" no longer hides a change to live pages.** A
+  draft is saved directly, also on a collection with revisions. A published
+  localization shows every field it doesn't override, and a published child
+  page takes its URL from its parent's slug, so an edit to a draft could change
+  both while the result said nothing was live. The result now ends with "but
+  live pages changed with it: see live_changes". `live_changes` names each
+  published localization with the fields it inherits, or with its status
+  before and after when a new date schedules or expires it, and each published
+  child page with its URL before and after, whether a slug, a date, or a field
+  the route uses moved it. A collection mounted on the page is one line. It
+  lists 50 changes and counts the rest, and localizations in a site the caller
+  can't access are counted, not named. The README,
+  `docs/permissions.md`, `docs/tools.md`, and the server instructions said
+  revisions keep an agent from changing live content; they now say what
+  revisions cover.
 
 ### Security
 

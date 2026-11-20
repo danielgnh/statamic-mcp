@@ -1251,3 +1251,74 @@ it('takes a key stored outside the blueprint back unchanged, so a raw read can b
         ->and($entry->fresh()->template())->toBe('blog/landing')
         ->and($entry->fresh()->get('legacy'))->toEqual(['a' => 1, 'b' => 2]);
 });
+
+it('says which live localizations changed when a draft origin is edited, because they inherit what they do not override', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions('blog');
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site', 'access de site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live, but live pages changed with it: see live_changes"')
+        ->assertSee('"live_changes":[{"id":"'.$inheriting->id().'","site":"de","inherits":["title"]}]');
+
+    expect(Entry::find($inheriting->id())->value('title'))->toBe('New title')
+        ->and(Entry::query()->where('site', 'de')->where('title', 'New title')->count())->toBe(1)
+        ->and(Entry::query()->where('site', 'de')->where('title', 'Old title')->count())->toBe(0);
+});
+
+it('counts a changed live localization in a site the caller cannot access, without naming it', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"live_changes":[{"localizations_in_other_sites":1}]')
+        ->assertDontSee($inheriting->id());
+});
+
+it('says when a new date takes a live localization that inherits it offline', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Collection::findByHandle('blog')->dated(true)->futureDateBehavior('private')->save();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->date('2020-01-01')->data(['title' => 'Title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    expect($inheriting->fresh()->status())->toBe('published');
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site', 'access de site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => [], 'date' => '2099-01-01'])
+        ->assertOk()
+        ->assertSee('"live_changes":[{"id":"'.$inheriting->id().'","site":"de","status":"scheduled","status_before":"published"}]');
+});
+
+it('reports no live change for a localization that overrides the edited field, or one that is a draft', function (array $localized, bool $published) {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    tap($origin->makeLocalization('de')->data($localized)->published($published))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertDontSee('live_changes');
+})->with([
+    'its own title' => [['title' => 'Eigener Titel'], true],
+    'a draft' => [[], false],
+]);
