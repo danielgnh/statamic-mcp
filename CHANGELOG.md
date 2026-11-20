@@ -43,6 +43,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ### Security
 
+- **An augmented read strips a hidden link in two more Bard shapes:** a link
+  mark on a set node, and an image or link whose attributes hold `type: set`.
 - **Augmented reads no longer return entries outside `resources` through
   search results or wrapper objects.** A computed value holding site search
   results, a cursor paginator, a `JsonResource`, or an object whose
