@@ -8,6 +8,16 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Security
+
+- **Augmented reads no longer return entries outside `resources` through
+  search results or wrapper objects.** A computed value holding site search
+  results, a cursor paginator, a `JsonResource`, or an object whose
+  `jsonSerialize()` returns an entry or a list of entries, came out of
+  `entries_get` with `format: augmented` in full, also for a collection MCP
+  doesn't expose. They are now filtered like any other relation. A resource
+  with its own `toArray()` keeps its fields when what it wraps is exposed.
+
 ## [1.2.0] - 2026-11-19
 
 ### Added
