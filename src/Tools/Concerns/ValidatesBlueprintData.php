@@ -56,6 +56,28 @@ trait ValidatesBlueprintData
     }
 
     /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $stored
+     */
+    protected function rejectChangedKeysOutsideBlueprint(Blueprint $blueprint, array $data, array $stored): void
+    {
+        $handles = $blueprint->fields()->all()->keys()->all();
+
+        $changed = array_keys(array_filter(
+            Arr::except($data, $handles),
+            fn (mixed $value, int|string $key) => array_key_exists($key, $stored) && json_encode($this->normalize($value)) !== json_encode($this->normalize($stored[$key])),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        if ($changed !== []) {
+            throw new ToolException(sprintf(
+                '%s: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data',
+                implode(', ', $changed),
+            ));
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $values
      * @param  list<array-key>  $only
      * @param  array<string, string>  $replacements
