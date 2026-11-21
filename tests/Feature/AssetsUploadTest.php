@@ -5,6 +5,7 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\AssetsList;
 use Danielgnh\StatamicMcp\Tools\AssetsUpload;
 use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
@@ -13,6 +14,7 @@ use Illuminate\Validation\ValidationException;
 use League\Flysystem\Config;
 use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\UnableToDeleteFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
 use Statamic\Events\AssetCreating;
@@ -238,24 +240,52 @@ it('reports an upload whose filename holds braces as uploaded', function () {
     expect(Storage::disk('images')->exists('blog/wei{rd}.png'))->toBeTrue();
 });
 
-function imagesDiskThatRefusesWrites(): void
+function imagesDiskThatRefusesWrites(bool $throwing = false, bool $afterWritingHalf = false, bool $andDeletes = false, ?string $onlyTo = null): void
 {
     $root = Storage::disk('images')->path('');
 
-    $adapter = new class($root) extends LocalFilesystemAdapter
+    $adapter = new class($root, $afterWritingHalf, $andDeletes, $onlyTo) extends LocalFilesystemAdapter
     {
+        public function __construct(
+            string $root,
+            private readonly bool $afterWritingHalf,
+            private readonly bool $andDeletes,
+            private readonly ?string $onlyTo,
+        ) {
+            parent::__construct($root);
+        }
+
         public function write(string $path, string $contents, Config $config): void
         {
+            if ($this->onlyTo !== null && $path !== $this->onlyTo) {
+                parent::write($path, $contents, $config);
+
+                return;
+            }
+
+            if ($this->afterWritingHalf) {
+                parent::write($path, substr($contents, 0, intdiv(strlen($contents), 2)), $config);
+            }
+
             throw UnableToWriteFile::atLocation($path, 'read-only');
         }
 
         public function writeStream(string $path, $contents, Config $config): void
         {
-            throw UnableToWriteFile::atLocation($path, 'read-only');
+            $this->write($path, (string) stream_get_contents($contents), $config);
+        }
+
+        public function delete(string $path): void
+        {
+            if ($this->andDeletes) {
+                throw UnableToDeleteFile::atLocation($path, 'read-only');
+            }
+
+            parent::delete($path);
         }
     };
 
-    Storage::set('images', new FilesystemAdapter(new Filesystem($adapter), $adapter, ['root' => $root]));
+    Storage::set('images', new FilesystemAdapter(new Filesystem($adapter), $adapter, ['root' => $root, 'throw' => $throwing]));
 }
 
 it('never reports an upload as live when the disk refused the write', function () {
@@ -492,3 +522,118 @@ it('undoes a refused upload quietly, because AssetDeleted would strip every refe
 
     Event::assertNotDispatched(AssetDeleted::class);
 });
+
+it('answers a refused write that arrives as an exception with the same error, as a disk set to throw sends it and Statamic 6.43 sends it for every disk', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    Exceptions::fake();
+    imagesDiskThatRefusesWrites(throwing: true);
+
+    $user = Fixtures::makeUser('upload images assets', 'view images assets');
+
+    Server::actingAs($user)
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store'])
+        ->assertDontSee('uploaded — live');
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+
+    Exceptions::assertReported(UnableToWriteFile::class);
+
+    Server::actingAs($user)
+        ->tool(AssetsList::class, ['container' => 'images'])
+        ->assertOk()
+        ->assertSee('"total":0');
+});
+
+it('leaves a stored upload alone when a listener\'s own upload is refused, because that failed write names a file this call did not write', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Exceptions::fake();
+    imagesDiskThatRefusesWrites(throwing: true, afterWritingHalf: true, onlyTo: 'hero-copy.png');
+
+    Event::listen(AssetUploaded::class, function (AssetUploaded $event) {
+        if ($event->asset->path() === 'hero.png') {
+            AssetContainer::find('images')->makeAsset('hero-copy.png')->upload(UploadedFile::fake()->image('hero-copy.png'));
+        }
+    });
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors()
+        ->assertDontSee('nothing was created');
+
+    expect(Storage::disk('images')->get('hero.png'))->toBe(Fixtures::tinyPng())
+        ->and(Storage::disk('images')->exists('hero-copy.png'))->toBeTrue();
+});
+
+it('answers a disk that refuses the write and every delete with the same error, as a read-only bucket does', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    Exceptions::fake();
+    imagesDiskThatRefusesWrites(throwing: true, andDeletes: true);
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store']);
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+});
+
+it('leaves a file alone that already sits at the requested path when the write Statamic moved to another name is refused', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    Exceptions::fake();
+    config(['statamic.stache.watcher' => false]);
+
+    AssetContainer::find('images')->contents()->all();
+    Storage::disk('images')->put('hero.png', 'put here behind the cached listing');
+    imagesDiskThatRefusesWrites(throwing: true);
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => 'hero.png',
+        ])
+        ->assertHasErrors(['the disk did not store']);
+
+    expect(Storage::disk('images')->allFiles())->toBe(['hero.png'])
+        ->and(Storage::disk('images')->get('hero.png'))->toBe('put here behind the cached listing');
+});
+
+it('removes the half-written file a refused write left on the disk, which would otherwise be listed as an asset', function (string $filename) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Queue::fake();
+    Exceptions::fake();
+    imagesDiskThatRefusesWrites(throwing: true, afterWritingHalf: true);
+
+    Server::actingAs(Fixtures::makeUser('upload images assets'))
+        ->tool(AssetsUpload::class, [
+            'container' => 'images',
+            'content_base64' => base64_encode(Fixtures::tinyPng()),
+            'filename' => $filename,
+        ])
+        ->assertHasErrors(['the disk did not store']);
+
+    expect(Storage::disk('images')->allFiles())->toBe([]);
+})->with([
+    'written under the name asked for' => ['hero.png'],
+    'written under a name Statamic cleaned once more' => ['Report - Final.png'],
+]);
