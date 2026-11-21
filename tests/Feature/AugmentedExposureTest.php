@@ -5,6 +5,8 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\TermsGet;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
@@ -17,6 +19,7 @@ use Statamic\Facades\Entry;
 use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
+use Statamic\Facades\Search;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
 use Statamic\Facades\User;
@@ -742,4 +745,79 @@ it('keeps the shape of computed plain values and objects that hold nothing to fi
         ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
         ->assertOk()
         ->assertSee('"plain":{"number":42,"list":["a","b"],"map":{"x":1},"date":"2026-01-02T03:04:05.000000Z","enum":"draft","object":{"name":"Ann"}}');
+});
+
+it('filters computed search results and wrapper objects holding entries by exposure', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    config(['statamic.search.indexes.default' => ['driver' => 'local', 'searchables' => ['collection:blog', 'collection:pages'], 'fields' => ['title']]]);
+
+    tap(Entry::make()->collection('blog')->locale('en')->slug('confidential')->data(['title' => 'Confidential post']))->save();
+
+    $wrapped = fn (mixed $inner) => new readonly class($inner) implements JsonSerializable
+    {
+        public function __construct(private mixed $inner) {}
+
+        public function jsonSerialize(): mixed
+        {
+            return $this->inner;
+        }
+    };
+
+    $search = function (string $term) {
+        $index = Search::index('default');
+        $index->update();
+
+        return $index->search($term);
+    };
+
+    Collection::computed('pages', 'related_by_search', fn () => $search('Confidential'));
+    Collection::computed('pages', 'pages_by_search', fn () => $search('About')->get());
+    Collection::computed('pages', 'wrapped_entry', fn () => $wrapped(Entry::query()->where('collection', 'blog')->first()));
+    Collection::computed('pages', 'wrapped_entries', fn () => $wrapped(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'wrapped_scalar', fn () => $wrapped('plain text'));
+    Collection::computed('pages', 'cursor_page', fn () => new CursorPaginator(Entry::query()->where('collection', 'blog')->get(), 10));
+    Collection::computed('pages', 'resources', fn () => JsonResource::collection(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'resource', fn () => new JsonResource(Entry::query()->where('collection', 'blog')->first()));
+    Collection::computed('pages', 'nested_resource', fn () => new JsonResource(new JsonResource(new JsonResource(Entry::query()->where('collection', 'blog')->first()))));
+    Collection::computed('pages', 'resource_of_result', fn () => new JsonResource($search('Confidential')->get()->first()));
+    Collection::computed('pages', 'resource_of_list', fn () => new JsonResource(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'plain_results', fn () => $search('Confidential')->withoutData()->get());
+    Collection::computed('pages', 'priced', fn () => new class((object) ['name' => 'Chair', 'price' => 10, 'cost_price' => 4]) extends JsonResource
+    {
+        public function toArray($request): array
+        {
+            return ['name' => $this->resource->name, 'price' => $this->resource->price];
+        }
+    });
+
+    $home = Fixtures::page('home', 'Home');
+    Fixtures::page('about', 'About us');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"related_by_search":[]')
+        ->assertSee('"wrapped_entry":null')
+        ->assertSee('"wrapped_entries":[]')
+        ->assertSee('"wrapped_scalar":"plain text"')
+        ->assertSee('"cursor_page":[]')
+        ->assertSee('"resources":[]')
+        ->assertSee('"resource":null')
+        ->assertSee('"nested_resource":null')
+        ->assertSee('"resource_of_result":null')
+        ->assertSee('"resource_of_list":[]')
+        ->assertSee('"plain_results":[]')
+        ->assertSee('"priced":{"name":"Chair","price":10}')
+        ->assertSee('About us')
+        ->assertDontSee('Confidential post')
+        ->assertDontSee('/blog/confidential')
+        ->assertDontSee('search_score');
 });

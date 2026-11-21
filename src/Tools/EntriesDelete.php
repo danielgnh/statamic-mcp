@@ -52,6 +52,17 @@ class EntriesDelete extends Tool
             fn (string $site) => $this->ensureSiteAccess($user, $site)
         );
 
+        $root = collect([$entry])->concat($descendants)->first(fn (EntryContract $localization): bool => $localization->page()?->isRoot() === true);
+
+        if ($root !== null) {
+            throw new ToolException(sprintf(
+                "entry '%s' is the home page of the '%s' tree in site '%s' and can't be deleted: Statamic can't read a tree without its home page — nothing was deleted. Put another page first in the tree in the Control Panel, then delete this one.",
+                $root->id(),
+                $collection,
+                $root->locale(),
+            ));
+        }
+
         $deleted = $descendants
             ->map(fn (Entry $localization) => [
                 'id' => $localization->id(),
