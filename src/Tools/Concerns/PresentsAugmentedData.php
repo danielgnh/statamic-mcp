@@ -2,8 +2,11 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Resources\Json\ResourceCollection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\Str;
 use JsonSerializable;
@@ -15,6 +18,7 @@ use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Forms\Form as FormContract;
 use Statamic\Contracts\Forms\Submission as SubmissionContract;
+use Statamic\Contracts\Search\Result as SearchResult;
 use Statamic\Contracts\Structures\Nav as NavContract;
 use Statamic\Contracts\Taxonomies\Taxonomy as TaxonomyContract;
 use Statamic\Contracts\Taxonomies\Term as TermContract;
@@ -42,6 +46,7 @@ use Statamic\Fieldtypes\Terms;
 use Statamic\Fieldtypes\Users;
 use Statamic\Forms\Fieldtype as Forms;
 use Statamic\Globals\Variables;
+use Statamic\Search\PlainResult;
 use Statamic\Structures\CollectionStructure;
 use Statamic\Structures\Page;
 use Traversable;
@@ -150,6 +155,12 @@ trait PresentsAugmentedData
             return $this->presentedSets($items, $exposed);
         }
 
+        if ($items instanceof JsonResource) {
+            return $this->presentedResource($items, $exposed);
+        }
+
+        $items = $this->withoutWrapper($items);
+
         if ($this->isOutsideExposure($items, $exposed)) {
             return null;
         }
@@ -158,8 +169,10 @@ trait PresentsAugmentedData
             $items = $items->get();
         }
 
+        $wrapper = $items;
+
         $items = match (true) {
-            $items instanceof Paginator => $items->items(),
+            $items instanceof Paginator, $items instanceof CursorPaginator => $items->items(),
             $items instanceof Enumerable => $items->all(),
             $items instanceof Augmentable, $items instanceof UnitEnum => $items,
             $items instanceof JsonSerializable => $items->jsonSerialize(),
@@ -169,9 +182,15 @@ trait PresentsAugmentedData
             default => $items,
         };
 
+        if (is_object($items) && $items !== $wrapper) {
+            return $this->presentedRelation($items, $exposed);
+        }
+
         if (! is_array($items)) {
             return $this->stub($items, $exposed);
         }
+
+        $items = array_map(fn (mixed $item) => $item instanceof JsonResource ? $item : $this->withoutWrapper($item), $items);
 
         $presented = array_map(
             fn (mixed $item) => $this->presentedRelation($item, $exposed),
@@ -179,6 +198,42 @@ trait PresentsAugmentedData
         );
 
         return array_is_list($items) ? array_values($presented) : $presented;
+    }
+
+    private function withoutWrapper(mixed $item): mixed
+    {
+        if ($item instanceof PlainResult) {
+            return Data::find($item->getRawResult()['reference'] ?? null);
+        }
+
+        return $item instanceof SearchResult ? $item->getSearchable() : $item;
+    }
+
+    /**
+     * @param  Exposed  $exposed
+     */
+    private function presentedResource(JsonResource $resource, array $exposed): mixed
+    {
+        if ($resource instanceof ResourceCollection) {
+            return array_values(array_filter(
+                array_map(fn (mixed $item) => $this->presentedRelation($item, $exposed), $resource->collection?->all() ?? []),
+                fn (mixed $item) => $item !== null,
+            ));
+        }
+
+        $wrapped = $resource->resource;
+
+        while ($wrapped instanceof JsonResource) {
+            $wrapped = $wrapped->resource;
+        }
+
+        $presented = $this->presentedRelation($wrapped, $exposed);
+
+        if ($presented === null || is_iterable($wrapped)) {
+            return $presented;
+        }
+
+        return $this->presentedRelation($resource->resolve(), $exposed);
     }
 
     /**
