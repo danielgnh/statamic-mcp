@@ -1153,3 +1153,101 @@ it('does not count an entry against itself for a unique value, so updating any o
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed']])
         ->assertOk();
 });
+
+it('refuses an icon value that climbs out of the icon set, at the top level and inside a set', function (array $data, string $path) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')
+        ->ensureField('icon', ['type' => 'icon'])
+        ->ensureField('blocks', ['type' => 'replicator', 'sets' => ['main' => ['sets' => ['card' => ['fields' => [['handle' => 'icon', 'field' => ['type' => 'icon']]]]]]]])
+        ->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => $data])
+        ->assertHasErrors(["{$path} takes the name of an icon in its set — a path with '..' is refused"]);
+
+    expect($post->fresh()->get('icon'))->toBeNull()->and($post->fresh()->get('blocks'))->toBeNull();
+})->with([
+    'top level' => [['icon' => '../../../../storage/app/private/plan'], 'icon'],
+    'backslashes' => [['icon' => '..\\..\\plan'], 'icon'],
+    'inside a set' => [['blocks' => [['type' => 'card', 'icon' => 'a/../../plan']]], 'blocks.0.icon'],
+]);
+
+it('refuses an icon value that is not a string, which no augmented read could render', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => ['../../x']]])
+        ->assertHasErrors(['icon takes the name of an icon in its set, as a string']);
+});
+
+it('stores a plain icon name, one with dots in it included', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => 'brands/v1..2-logo']])
+        ->assertOk();
+
+    expect($post->fresh()->get('icon'))->toBe('brands/v1..2-logo');
+});
+
+it('refuses to change a key the entry stores outside its blueprint, such as template, as the Control Panel never writes one', function (mixed $template) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(Entry::make()->collection('blog')->slug('landing')->data([
+        'title' => 'Landing',
+        'template' => 'blog/landing',
+        'layout' => 'layout',
+    ])->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Changed', 'template' => $template, 'layout' => 'errors/404']])
+        ->assertHasErrors(['template, layout: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data']);
+
+    expect($entry->fresh()->template())->toBe('blog/landing')
+        ->and($entry->fresh()->layout())->toBe('layout')
+        ->and($entry->fresh()->get('title'))->toBe('Landing');
+})->with([
+    'another view' => ['statamic::auth.login'],
+    'cleared' => [null],
+    'a list' => [['a', 'b']],
+]);
+
+it('takes a key stored outside the blueprint back unchanged, so a raw read can be sent back whole', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(Entry::make()->collection('blog')->slug('landing')->data([
+        'title' => 'Landing',
+        'template' => 'blog/landing',
+        'legacy' => ['b' => 2, 'a' => 1],
+        'ratio' => 1.0,
+    ]))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Changed', 'template' => 'blog/landing', 'legacy' => ['a' => 1, 'b' => 2], 'ratio' => 1]])
+        ->assertOk();
+
+    expect($entry->fresh()->get('title'))->toBe('Changed')
+        ->and($entry->fresh()->template())->toBe('blog/landing')
+        ->and($entry->fresh()->get('legacy'))->toEqual(['a' => 1, 'b' => 2]);
+});
