@@ -5,6 +5,8 @@ use Danielgnh\StatamicMcp\Tests\Support\Fixtures;
 use Danielgnh\StatamicMcp\Tools\EntriesGet;
 use Danielgnh\StatamicMcp\Tools\TermsGet;
 use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
@@ -17,6 +19,7 @@ use Statamic\Facades\Entry;
 use Statamic\Facades\Form;
 use Statamic\Facades\GlobalSet;
 use Statamic\Facades\Nav;
+use Statamic\Facades\Search;
 use Statamic\Facades\Taxonomy;
 use Statamic\Facades\Term;
 use Statamic\Facades\User;
@@ -742,4 +745,175 @@ it('keeps the shape of computed plain values and objects that hold nothing to fi
         ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
         ->assertOk()
         ->assertSee('"plain":{"number":42,"list":["a","b"],"map":{"x":1},"date":"2026-01-02T03:04:05.000000Z","enum":"draft","object":{"name":"Ann"}}');
+});
+
+it('filters computed search results and wrapper objects holding entries by exposure', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::pages();
+
+    config(['statamic.search.indexes.default' => ['driver' => 'local', 'searchables' => ['collection:blog', 'collection:pages'], 'fields' => ['title']]]);
+
+    tap(Entry::make()->collection('blog')->locale('en')->slug('confidential')->data(['title' => 'Confidential post']))->save();
+
+    $wrapped = fn (mixed $inner) => new readonly class($inner) implements JsonSerializable
+    {
+        public function __construct(private mixed $inner) {}
+
+        public function jsonSerialize(): mixed
+        {
+            return $this->inner;
+        }
+    };
+
+    $search = function (string $term) {
+        $index = Search::index('default');
+        $index->update();
+
+        return $index->search($term);
+    };
+
+    Collection::computed('pages', 'related_by_search', fn () => $search('Confidential'));
+    Collection::computed('pages', 'pages_by_search', fn () => $search('About')->get());
+    Collection::computed('pages', 'wrapped_entry', fn () => $wrapped(Entry::query()->where('collection', 'blog')->first()));
+    Collection::computed('pages', 'wrapped_entries', fn () => $wrapped(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'wrapped_scalar', fn () => $wrapped('plain text'));
+    Collection::computed('pages', 'cursor_page', fn () => new CursorPaginator(Entry::query()->where('collection', 'blog')->get(), 10));
+    Collection::computed('pages', 'resources', fn () => JsonResource::collection(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'resource', fn () => new JsonResource(Entry::query()->where('collection', 'blog')->first()));
+    Collection::computed('pages', 'nested_resource', fn () => new JsonResource(new JsonResource(new JsonResource(Entry::query()->where('collection', 'blog')->first()))));
+    Collection::computed('pages', 'resource_of_result', fn () => new JsonResource($search('Confidential')->get()->first()));
+    Collection::computed('pages', 'resource_of_list', fn () => new JsonResource(Entry::query()->where('collection', 'blog')->get()));
+    Collection::computed('pages', 'plain_results', fn () => $search('Confidential')->withoutData()->get());
+    Collection::computed('pages', 'priced', fn () => new class((object) ['name' => 'Chair', 'price' => 10, 'cost_price' => 4]) extends JsonResource
+    {
+        public function toArray($request): array
+        {
+            return ['name' => $this->resource->name, 'price' => $this->resource->price];
+        }
+    });
+
+    $home = Fixtures::page('home', 'Home');
+    Fixtures::page('about', 'About us');
+
+    config(['statamic.mcp.resources' => ['collections' => ['pages']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $home, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"related_by_search":[]')
+        ->assertSee('"wrapped_entry":null')
+        ->assertSee('"wrapped_entries":[]')
+        ->assertSee('"wrapped_scalar":"plain text"')
+        ->assertSee('"cursor_page":[]')
+        ->assertSee('"resources":[]')
+        ->assertSee('"resource":null')
+        ->assertSee('"nested_resource":null')
+        ->assertSee('"resource_of_result":null')
+        ->assertSee('"resource_of_list":[]')
+        ->assertSee('"plain_results":[]')
+        ->assertSee('"priced":{"name":"Chair","price":10}')
+        ->assertSee('About us')
+        ->assertDontSee('Confidential post')
+        ->assertDontSee('/blog/confidential')
+        ->assertDontSee('search_score');
+});
+
+it('never reads a file outside the icon set for a stored icon value that climbs directories', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::assetContainer('secretfiles');
+
+    Storage::disk('secretfiles')->put('plans/floorplan.svg', '<svg><text>CONFIDENTIAL FLOORPLAN</text></svg>');
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->ensureField('safe_icon', ['type' => 'icon'])->save();
+    Blueprint::find('taxonomies.tags.tag')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $climb = fn (string $from, string $to) => str_repeat('../', count(explode('/', trim((string) realpath($from), '/')))).ltrim($to, '/');
+    $outside = $climb(statamic_path('resources/svg/icons'), substr((string) realpath(Storage::disk('secretfiles')->path('plans/floorplan.svg')), 0, -4));
+    $inside = basename((string) collect(glob(statamic_path('resources/svg/icons/*.svg')))->first(), '.svg');
+
+    expect(file_get_contents(statamic_path('resources/svg/icons').'/'.$outside.'.svg'))->toContain('CONFIDENTIAL FLOORPLAN');
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post', 'icon' => $outside, 'safe_icon' => $inside]))->save()->id();
+    tap(Term::make()->taxonomy('tags')->slug('php'))->dataForLocale('en', ['title' => 'PHP', 'icon' => $outside])->save();
+
+    startNewRequest();
+
+    $user = Fixtures::makeUser('view blog entries', 'view tags terms');
+
+    Server::actingAs($user)
+        ->tool(EntriesGet::class, ['id' => $post, 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"icon":null')
+        ->assertSee('"safe_icon":"<svg')
+        ->assertDontSee('CONFIDENTIAL FLOORPLAN');
+
+    Server::actingAs($user)
+        ->tool(TermsGet::class, ['id' => 'tags::php', 'format' => 'augmented'])
+        ->assertOk()
+        ->assertSee('"icon":null')
+        ->assertDontSee('CONFIDENTIAL FLOORPLAN');
+});
+
+it('strips a stored Bard image of an unexposed container whose attributes claim to be a set', function () {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::pages();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+
+    Blueprint::makeFromFields(['title' => ['type' => 'text'], 'body' => ['type' => 'bard']])
+        ->setHandle('page')->setNamespace('collections.pages')->save();
+
+    config([
+        'statamic.mcp.resources.collections' => ['pages'],
+        'statamic.mcp.resources.asset_containers' => ['images'],
+    ]);
+
+    $entry = tap(Entry::make()->collection('pages')->slug('home')->data(['title' => 'Home', 'body' => [
+        ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['type' => 'set', 'src' => 'asset::private::payroll-2026.png']]]],
+    ]]))->save();
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view pages entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented', 'fields' => ['body']])
+        ->assertOk()
+        ->assertDontSee('/assets/private/payroll-2026.png');
+});
+
+it('strips a link mark to an unexposed file or entry from a stored Bard set node', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+
+    $hidden = tap(Entry::make()->collection('blog')->locale('en')->slug('confidential')->data(['title' => 'Confidential post']))->save();
+
+    $set = fn (string $id, string $href) => ['type' => 'set', 'attrs' => ['id' => $id, 'values' => ['type' => 'callout', 'text' => 'hi']], 'marks' => [['type' => 'link', 'attrs' => ['href' => $href]]]];
+
+    $entry = tap(Entry::make()->collection('landing')->locale('en')->slug('a')->data(['title' => 'A', 'body' => [
+        $set('a1', 'statamic://asset::private::payroll-2026.png'),
+        $set('a2', "statamic://entry::{$hidden->id()}"),
+    ]]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    startNewRequest();
+
+    Server::actingAs(Fixtures::makeUser('view landing entries'))
+        ->tool(EntriesGet::class, ['id' => $entry->id(), 'format' => 'augmented', 'fields' => ['body']])
+        ->assertOk()
+        ->assertDontSee('/assets/private/payroll-2026.png')
+        ->assertDontSee('/blog/confidential');
 });

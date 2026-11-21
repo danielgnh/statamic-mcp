@@ -722,3 +722,24 @@ it('gives a page a slug another page has under a different parent, as the CP doe
         ->and(Entry::find($summary)->url())->toBe('/services/overview')
         ->and(Entry::find($overview)->url())->toBe('/products/overview');
 });
+
+it('says which live child pages got another URL when a new slug is saved on their parent', function (bool $parentPublished, string $result) {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure('pages');
+
+    $parent = Fixtures::page('about', 'About', published: $parentPublished);
+    $child = Fixtures::page('team', 'Team');
+    $draft = Fixtures::page('plans', 'Plans', published: false);
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $parent, 'children' => [['entry' => $child], ['entry' => $draft]]]])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit pages entries'))
+        ->tool(EntriesUpdate::class, ['id' => $parent, 'data' => [], 'slug' => 'company'])
+        ->assertOk()
+        ->assertSee('"result":"'.$result.'"')
+        ->assertSee('"live_changes":[{"id":"'.$child.'","site":"en","url":"/company/team","url_before":"/about/team"}]');
+})->with([
+    'a draft parent' => [false, 'saved as draft — not live, but live pages changed with it: see live_changes'],
+    'a live parent' => [true, 'published'],
+]);

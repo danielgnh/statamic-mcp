@@ -6,7 +6,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\Process\Process;
 
-function fetchOverRealCurl(string $path): Response
+function fetchOverRealCurl(string $path, int $maxBytes = 1024): Response
 {
     $listener = @stream_socket_server('tcp://127.0.0.1:0');
 
@@ -28,7 +28,7 @@ function fetchOverRealCurl(string $path): Response
         Http::globalOptions(['proxy' => '']);
 
         return (new ReflectionMethod(SourceDownloader::class, 'fetch'))
-            ->invoke(new SourceDownloader, "http://not-resolvable.invalid:{$port}{$path}", '127.0.0.1', 1024, now()->addSeconds(5));
+            ->invoke(new SourceDownloader, "http://not-resolvable.invalid:{$port}{$path}", '127.0.0.1', $maxBytes, now()->addSeconds(5));
     } finally {
         $server->stop(0);
     }
@@ -46,6 +46,11 @@ it('stops at a Content-Length over the cap before reading the body', function ()
 it('stops a body that grows past the cap, because Content-Length is advisory', function () {
     expect(fn () => fetchOverRealCurl('/grows-past-the-cap'))
         ->toThrow(ToolException::class, 'exceeds the 10240 KB limit');
+});
+
+it('refuses a compressed body, whose wire size is under the cap while what it inflates to is not', function () {
+    expect(fn () => fetchOverRealCurl('/gzip-inflating-past-the-cap', maxBytes: 1024 * 1024))
+        ->toThrow(ToolException::class, 'source_url answered with a compressed body');
 });
 
 it('answers a refused connection with a tool error', function () {

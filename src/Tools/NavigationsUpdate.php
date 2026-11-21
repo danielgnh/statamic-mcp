@@ -178,7 +178,7 @@ class NavigationsUpdate extends Tool
             $this->ensureLinkable($nav, $site, $storedTree, $entry, $path);
         }
 
-        $values = $this->processBranch($nav, $branch, $title, $url, $path, data_get($this->storedBranch($storedTree, $id), 'data'));
+        $values = $this->processBranch($nav, $branch, $title, $url, $path, $this->storedBranch($storedTree, $id));
 
         $stored = Arr::removeNullValues([
             'id' => $id ?? BranchIdGenerator::generate(),
@@ -254,10 +254,12 @@ class NavigationsUpdate extends Tool
 
     /**
      * @param  array<string, mixed>  $branch
+     * @param  array<string, mixed>|null  $storedBranch
      * @return array<array-key, mixed>
      */
-    private function processBranch(NavContract $nav, array $branch, ?string $title, ?string $url, string $path, mixed $stored): array
+    private function processBranch(NavContract $nav, array $branch, ?string $title, ?string $url, string $path, ?array $storedBranch): array
     {
+        $stored = data_get($storedBranch, 'data');
         $data = data_get($branch, 'data', []);
 
         if (! is_array($data) || ($data !== [] && array_is_list($data))) {
@@ -285,7 +287,7 @@ class NavigationsUpdate extends Tool
         }
 
         try {
-            return $this->processAgainstBlueprint($blueprint, $values, array_keys($values));
+            return $this->processAgainstBlueprint($blueprint, $values, array_keys($values), stored: [...(is_array($stored) ? $stored : []), ...Arr::only($storedBranch ?? [], ['title', 'url'])]);
         } catch (ToolException $e) {
             throw new ToolException("{$path}: {$e->getMessage()}", $e->getCode(), $e);
         }

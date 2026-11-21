@@ -8,6 +8,94 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Changed
+
+- **`entries_update`, `terms_update`, and `globals_update` no longer change a
+  top-level key that has no blueprint field.** An entry can store keys its
+  blueprint doesn't define, such as `template`, `layout`, or `redirect`, set by
+  hand or left behind by a removed field. The tools took a new value for any
+  such key without validating it, so an agent with edit permission could pick
+  the view a public page renders with. The Control Panel never writes these
+  keys. They can still be sent back unchanged, so a raw read goes back whole,
+  and keys inside a set, a Grid row, or a Group work as before. A global set
+  without a blueprint is not checked.
+- **`entries_delete` refuses the home page of a tree with a root page,** for
+  the entry and for each localization that would go with it. The Control Panel
+  offers no delete for a home page either. See Fixed.
+- **`assets_upload` refuses a `source_url` that answers with a compressed
+  body.** See Security.
+- **`entries_update` lists the live pages an edit changed under
+  `live_changes`.** The key is only there when something changed. See Fixed.
+
+### Fixed
+
+- **Deleting the home page no longer breaks the collection.** `entries_delete`
+  on the root page of a structured collection answered with an internal error,
+  kept the entry, and stored a tree Statamic couldn't read: every page of the
+  collection answered 500, and every later write failed, until someone fixed
+  the tree file by hand. When no other page had children, the next page
+  silently became the home page.
+- **"saved as draft — not live" no longer hides a change to live pages.** A
+  draft is saved directly, also on a collection with revisions. A published
+  localization shows every field it doesn't override, and a published child
+  page takes its URL from its parent's slug, so an edit to a draft could change
+  both while the result said nothing was live. The result now ends with "but
+  live pages changed with it: see live_changes". `live_changes` names each
+  published localization with the fields it inherits, or with its status
+  before and after when a new date schedules or expires it, and each published
+  child page with its URL before and after, whether a slug, a date, or a field
+  the route uses moved it. A collection mounted on the page is one line. It
+  lists 50 changes and counts the rest, and localizations in a site the caller
+  can't access are counted, not named. The README,
+  `docs/permissions.md`, `docs/tools.md`, and the server instructions said
+  revisions keep an agent from changing live content; they now say what
+  revisions cover.
+
+### Security
+
+- **Augmented reads no longer return entries outside `resources` through
+  search results or wrapper objects.** A computed value holding site search
+  results, a cursor paginator, a `JsonResource`, or an object whose
+  `jsonSerialize()` returns an entry or a list of entries, came out of
+  `entries_get` with `format: augmented` in full, also for a collection MCP
+  doesn't expose. They are now filtered like any other relation. A resource
+  with its own `toArray()` keeps its fields when what it wraps is exposed.
+- **Writes refuse the known ways of linking a file of an unexposed
+  container.** Only Assets fields were checked. A Bard image or link, a
+  Markdown link, a `link` field, or an `asset_container` field pointing into a
+  container outside `resources` was stored, and `entries_preview` then rendered
+  the file's URL and alt text, and showed whether the file exists. Every write
+  now checks the value as Statamic will store it: a value that starts with
+  `asset::`, and any `statamic://` link, whether it names the container, leaves
+  out the `asset::` prefix, or gives the file's URL. A new one into a container
+  outside `resources` is refused with the same message for an existing and a
+  missing file. Links already stored stay where they are. The check doesn't
+  know which text Statamic resolves, so plain text holding such a link is
+  refused too. This narrows what an agent can write; it is not a guarantee
+  about what a site renders. A field with `antlers: true` holds template code,
+  which can build such a link when the page renders, and Statamic's `link` tag
+  resolves any id there. A link to an entry or term outside `resources` is
+  still stored, as UPGRADE.md describes.
+- **A Bard set can't skip the checks on its fields any more.** A set node
+  whose type was written `Set`, and Bard's old format of text and set items,
+  were converted by Statamic after the tools had looked, so unknown keys and
+  files of an unexposed container inside them went through. Both are refused
+  now; a stored value in the old format can still be sent back unchanged.
+- **An augmented read strips a hidden link in two more Bard shapes:** a link
+  mark on a set node, and an image or link whose attributes hold `type: set`.
+- **An `icon` field no longer reads files outside its icon set.** A value such
+  as `../../storage/plan` made an augmented read return the contents of any
+  `.svg` file the server can read. A write now refuses a value with `..` in its
+  path, or one that is not a string, and an augmented read returns `null` for a
+  stored one. Statamic itself
+  resolves the stored value when a template prints the field, so a value saved
+  before this release, or through the Control Panel, still renders there.
+- **`assets_upload` can no longer be made to inflate a small download into a
+  huge one.** The size cap counted compressed bytes while the body was
+  inflated in full: 400 KB on the wire became 400 MB and ended the PHP process
+  with a memory error. A compressed answer is no longer inflated. It is
+  refused, since the request never offers compression.
+
 ## [1.2.0] - 2026-11-19
 
 ### Added

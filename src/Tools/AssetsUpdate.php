@@ -70,7 +70,7 @@ class AssetsUpdate extends Tool
 
         $existing = $asset->data()->all();
 
-        $merged = array_merge($existing, $this->processAgainstBlueprint($blueprint, [...$existing, ...$patch], array_keys($patch)));
+        $merged = array_merge($existing, $this->processAgainstBlueprint($blueprint, [...$existing, ...$patch], array_keys($patch), stored: $existing));
 
         if ($this->normalize($merged) === $this->normalize($existing)) {
             return $this->json([

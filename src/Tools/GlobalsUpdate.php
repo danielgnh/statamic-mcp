@@ -89,7 +89,7 @@ class GlobalsUpdate extends Tool
         if ($blueprint) {
             $patch = $this->mergeSetPatches($blueprint, $patch, $effective);
 
-            $patch = $this->processAgainstBlueprint($blueprint, [...$effective, ...$patch], array_keys($patch));
+            $patch = $this->processAgainstBlueprint($blueprint, [...$effective, ...$patch], array_keys($patch), stored: $effective);
         } else {
             $this->rejectSetPatchesWithoutBlueprint($patch, $effective);
         }

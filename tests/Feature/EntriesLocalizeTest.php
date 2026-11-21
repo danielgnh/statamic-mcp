@@ -599,3 +599,30 @@ it("requires 'access {site} site' for the root a localization originates from, n
 
     expect($origin->in('at'))->toBeNull();
 });
+
+it('takes a link to a file of an unexposed container that the origin already holds, and refuses a new one', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+
+    Blueprint::find('collections.blog.article')->ensureField('notes', ['type' => 'markdown', 'localizable' => true])->save();
+
+    $origin = tap(Entry::make()->collection('blog')->locale('en')->slug('hello')->data([
+        'title' => 'Hello',
+        'notes' => '[plan](statamic://asset::private::plan.pdf)',
+    ]))->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['blog'], 'asset_containers' => ['images']]]);
+
+    $user = localizer();
+
+    Server::actingAs($user)
+        ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de', 'data' => ['notes' => '[plan](statamic://asset::private::other.pdf)']])
+        ->assertHasErrors(['notes links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesLocalize::class, ['id' => $origin->id(), 'site' => 'de', 'data' => ['notes' => '[Plan](statamic://asset::private::plan.pdf)']])
+        ->assertOk();
+});

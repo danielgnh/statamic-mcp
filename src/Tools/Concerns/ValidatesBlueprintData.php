@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Danielgnh\StatamicMcp\Support\IconName;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
@@ -13,15 +14,19 @@ use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
 use Statamic\Exceptions\AssetNotFoundException;
 use Statamic\Facades\Asset;
 use Statamic\Facades\AssetContainer;
+use Statamic\Facades\Data;
 use Statamic\Fields\Blueprint;
 use Statamic\Fields\Field;
 use Statamic\Fields\Fields;
+use Statamic\Fieldtypes\AssetContainer as AssetContainerFieldtype;
 use Statamic\Fieldtypes\Assets\Assets;
 use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Fieldtypes\Icon;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Support\Arr;
+use Statamic\Support\Str;
 use Throwable;
 
 trait ValidatesBlueprintData
@@ -56,12 +61,35 @@ trait ValidatesBlueprintData
     }
 
     /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $stored
+     */
+    protected function rejectChangedKeysOutsideBlueprint(Blueprint $blueprint, array $data, array $stored): void
+    {
+        $handles = $blueprint->fields()->all()->keys()->all();
+
+        $changed = array_keys(array_filter(
+            Arr::except($data, $handles),
+            fn (mixed $value, int|string $key) => array_key_exists($key, $stored) && json_encode($this->normalize($value)) !== json_encode($this->normalize($stored[$key])),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        if ($changed !== []) {
+            throw new ToolException(sprintf(
+                '%s: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data',
+                implode(', ', $changed),
+            ));
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $values
      * @param  list<array-key>  $only
      * @param  array<string, string>  $replacements
+     * @param  array<array-key, mixed>  $stored
      * @return array<array-key, mixed>
      */
-    protected function processAgainstBlueprint(Blueprint $blueprint, array $values, array $only, array $replacements = []): array
+    protected function processAgainstBlueprint(Blueprint $blueprint, array $values, array $only, array $replacements = [], array $stored = []): array
     {
         $fields = $blueprint->fields()->addValues($values);
 
@@ -94,7 +122,7 @@ trait ValidatesBlueprintData
             throw $this->unprocessable($field, $e);
         }
 
-        return collect($only)->mapWithKeys(function (int|string $handle) use ($fields, $values) {
+        $processed = collect($only)->mapWithKeys(function (int|string $handle) use ($fields, $values) {
             $field = $fields->get($handle);
             $value = data_get($values, $handle);
 
@@ -104,6 +132,10 @@ trait ValidatesBlueprintData
 
             return [$handle => $this->orUnprocessable($field, fn () => $field->process()->value())];
         })->all();
+
+        $this->rejectNewFilesOfUnexposedContainers($processed, $stored);
+
+        return $processed;
     }
 
     /**
@@ -202,6 +234,22 @@ trait ValidatesBlueprintData
 
         if ($fieldtype instanceof Assets) {
             $this->rejectMissingAssets($field, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof AssetContainerFieldtype) {
+            foreach (array_diff(Arr::wrap($value), Arr::wrap($stored)) as $container) {
+                if (! is_string($container) || ! $this->exposureAllows('asset_containers', $container)) {
+                    throw new ToolException("{$path} links a container not exposed to MCP — leave it out of data");
+                }
+            }
+        }
+
+        if ($fieldtype instanceof Icon && ! is_string($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set, as a string");
+        }
+
+        if ($fieldtype instanceof Icon && IconName::leavesIconSet($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set — a path with '..' is refused");
         }
 
         return [];
@@ -325,14 +373,24 @@ trait ValidatesBlueprintData
             throw new ToolException("{$path} must be a list of ProseMirror nodes, or an HTML string");
         }
 
-        $messages = [];
-        $counterparts = $this->storedByUniqueId($stored, 'attrs.id');
-
         foreach ($nodes as $index => $node) {
             if (! is_array($node) || ! is_string(data_get($node, 'type'))) {
                 throw new ToolException("{$path}.{$index} must be a ProseMirror node object with a type");
             }
 
+            if ($node['type'] !== 'set' && Str::camel($node['type']) === 'set') {
+                throw new ToolException("{$path}.{$index} is a set: write its type as 'set'");
+            }
+        }
+
+        if ($nodes !== [] && ! $fieldtype->config('inline') && $fieldtype->isLegacyData($nodes)) {
+            throw new ToolException("{$path} is in Bard's old format, a list of text and set items — send ProseMirror nodes, with each set as a node of type 'set'");
+        }
+
+        $messages = [];
+        $counterparts = $this->storedByUniqueId($stored, 'attrs.id');
+
+        foreach ($nodes as $index => $node) {
             if ($node['type'] === 'set') {
                 $counterpart = $this->counterpart($counterparts, data_get($node, 'attrs.id')) ?? $this->storedWithoutIdAt($stored, $index, $node, $counterparts, 'attrs.id');
                 $storedValues = data_get($counterpart, 'type') === 'set' ? data_get($counterpart, 'attrs.values') : null;
@@ -413,6 +471,99 @@ trait ValidatesBlueprintData
                 ));
             }
         }
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $processed
+     * @param  array<array-key, mixed>  $stored
+     */
+    private function rejectNewFilesOfUnexposedContainers(array $processed, array $stored): void
+    {
+        if (config('statamic.mcp.resources.asset_containers') === true) {
+            return;
+        }
+
+        foreach ($processed as $handle => $value) {
+            $added = array_diff(
+                $this->fileReferences($value, (string) $handle),
+                $this->fileReferences($stored[$handle] ?? null, (string) $handle),
+            );
+
+            foreach ($added as $reference) {
+                if ($this->namesFileOfUnexposedContainer(Str::after($reference, "\0"))) {
+                    throw new ToolException("{$handle} links a container not exposed to MCP — leave it out of data");
+                }
+            }
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fileReferences(mixed $value, string $key): array
+    {
+        if (is_array($value)) {
+            $references = [];
+
+            foreach ($value as $inner => $item) {
+                $references = [...$references, ...$this->fileReferences($item, is_string($inner) ? $inner : $key)];
+            }
+
+            return $references;
+        }
+
+        if (! is_string($value)) {
+            return [];
+        }
+
+        preg_match_all('/statamic:\/\/([^()"?#]*)/i', $value, $inText);
+
+        return array_map(
+            fn (string $reference) => "{$key}\0{$reference}",
+            str_starts_with($value, 'asset::') ? [$value, ...$inText[1]] : $inText[1],
+        );
+    }
+
+    private function namesFileOfUnexposedContainer(string $reference): bool
+    {
+        [$repository, $id] = Data::splitReference($reference);
+
+        if ($repository && $repository !== 'asset') {
+            return false;
+        }
+
+        $id = (string) $id;
+
+        if (! str_contains($id, '::')) {
+            $container = $this->containerServing($id);
+
+            return $container !== null && ! $this->exposureAllows('asset_containers', $container->handle());
+        }
+
+        $handle = Str::before($id, '::');
+
+        if (str_contains($handle, '/') || $this->exposureAllows('asset_containers', $handle)) {
+            return false;
+        }
+
+        if ($repository === 'asset') {
+            return true;
+        }
+
+        return ! in_array($handle, $this->exposedHandles('taxonomies'), true) || AssetContainer::find($handle) !== null;
+    }
+
+    private function containerServing(string $url): ?AssetContainerContract
+    {
+        $path = fn (string $location): string => (string) (parse_url($location, PHP_URL_PATH) ?: $location);
+
+        return AssetContainer::all()
+            ->sortByDesc(fn (AssetContainerContract $container) => strlen($path((string) $container->url())))
+            ->first(function (AssetContainerContract $container) use ($url, $path) {
+                $served = (string) $container->url();
+
+                return $served !== '' && (Str::startsWith($url, $served) || Str::startsWith($path($url), $path($served)));
+            });
     }
 
     private function assetsFieldContainer(Field $field): ?AssetContainerContract

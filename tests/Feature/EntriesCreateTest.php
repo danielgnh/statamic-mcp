@@ -6,7 +6,9 @@ use Danielgnh\StatamicMcp\Tools\EntriesCreate;
 use Danielgnh\StatamicMcp\Tools\EntriesUpdate;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Statamic\Events\EntryCreating;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\Blueprint;
 use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
@@ -754,3 +756,148 @@ it('lists the sites of the collection under localizations, filled where propagat
         ->tool(EntriesCreate::class, ['collection' => 'blog', 'data' => ['title' => 'Alone']])
         ->assertHasErrors();
 });
+
+it('refuses a file of an unexposed container in Bard and Markdown text the same whether it exists or not', function (array $data, string $field) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('intro', ['type' => 'bard'])
+        ->ensureField('summary', ['type' => 'bard', 'save_html' => true])
+        ->ensureField('notes', ['type' => 'markdown'])
+        ->ensureField('cta', ['type' => 'link'])
+        ->ensureField('gallery', ['type' => 'asset_container', 'max_items' => 1])
+        ->ensureField('rich', ['type' => 'bard', 'sets' => ['main' => ['sets' => ['promo' => ['fields' => [
+            ['handle' => 'text', 'field' => ['type' => 'text']],
+            ['handle' => 'target', 'field' => ['type' => 'link']],
+        ]]]]]])
+        ->ensureField('blocks', ['type' => 'replicator', 'sets' => ['main' => ['sets' => ['note' => ['fields' => [
+            ['handle' => 'heading', 'field' => ['type' => 'text']],
+            ['handle' => 'footnote', 'field' => ['type' => 'markdown']],
+        ]]]]]])
+        ->save();
+
+    Storage::disk('private')->put('payroll-2026.png', Fixtures::tinyPng());
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', ...$data]])
+        ->assertHasErrors(["{$field} links a container not exposed to MCP — leave it out of data"])
+        ->assertDontSee('private');
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'a Bard image of an existing file' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::private::payroll-2026.png']]]]]], 'intro'],
+    'a Bard image of a missing file' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::private::nope.png']]]]]], 'intro'],
+    'a Bard link mark' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'the plan', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'statamic://asset::private::payroll-2026.png']]]]]]]], 'intro'],
+    'Bard sent as HTML' => [['intro' => '<p><img src="asset::private::payroll-2026.png"></p>'], 'intro'],
+    'a Markdown image' => [['notes' => '![chart](statamic://asset::private::payroll-2026.png)'], 'notes'],
+    'a Markdown image without the asset prefix' => [['notes' => '![chart](statamic://private::payroll-2026.png)'], 'notes'],
+    'a Markdown image without the asset prefix, of a missing file' => [['notes' => '![chart](statamic://private::nope.png)'], 'notes'],
+    'Bard HTML with an encoded colon in the image' => [['intro' => '<p><img src="asset&#58;:private::payroll-2026.png"></p>'], 'intro'],
+    'Bard HTML with encoded colons in the link' => [['intro' => '<p><a href="statamic://asset&colon;&colon;private::payroll-2026.png">plan</a></p>'], 'intro'],
+    'Bard saved as HTML, without the asset prefix' => [['summary' => '<p><a href="statamic://private::payroll-2026.png">plan</a></p>'], 'summary'],
+    'a link field' => [['cta' => 'asset::private::payroll-2026.png'], 'cta'],
+    'a Bard image whose attributes claim to be a set' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['type' => 'set', 'src' => 'asset::private::payroll-2026.png']]]]]], 'intro'],
+    'a Markdown link with an empty repository prefix' => [['notes' => '![chart](statamic://::private::payroll-2026.png)'], 'notes'],
+    'a Markdown link with an empty prefix, of a missing file' => [['notes' => '![chart](statamic://::private::nope.png)'], 'notes'],
+    'a Markdown link with a zero repository prefix' => [['notes' => '[x](statamic://0::private::payroll-2026.png)'], 'notes'],
+    'an asset_container field naming the container' => [['gallery' => 'private'], 'gallery'],
+    'an asset_container field naming no container' => [['gallery' => 'nope'], 'gallery'],
+    'a term-style link into a taxonomy that is not exposed' => [['notes' => '[x](statamic://topics::payroll-2026.png)'], 'notes'],
+    'a link field sent as an object' => [['cta' => ['url' => 'asset::private::payroll-2026.png']], 'cta'],
+    'a link mark on a set node inside a paragraph' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'set', 'index' => 'x', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'statamic://asset::private::payroll-2026.png']]]]]]]], 'intro'],
+    'a Markdown link by the file URL' => [['notes' => '[x](statamic:///assets/private/payroll-2026.png)'], 'notes'],
+    'a Markdown link by the URL of a missing file' => [['notes' => '[x](statamic:///assets/private/nope.png)'], 'notes'],
+    'a link field by the file URL' => [['cta' => 'asset::/assets/private/payroll-2026.png'], 'cta'],
+    'Bard saved as HTML, in plain text' => [['summary' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'see (statamic://asset::private::payroll-2026.png) now']]]]], 'summary'],
+    'Bard saved as HTML, in a link title' => [['summary' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'x', 'marks' => [['type' => 'link', 'attrs' => ['href' => 'https://example.com', 'title' => 'statamic://asset::private::payroll-2026.png']]]]]]]], 'summary'],
+    'Bard saved as HTML, single-quoted' => [['summary' => "<p><img src='statamic://asset::private::payroll-2026.png'></p>"], 'summary'],
+    'a link field inside a Bard set' => [['rich' => [['type' => 'set', 'attrs' => ['id' => 'abc', 'values' => ['type' => 'promo', 'target' => 'asset::private::payroll-2026.png']]]]], 'rich'],
+    'a Markdown field inside a Replicator set' => [['blocks' => [['type' => 'note', 'heading' => 'Hi', 'footnote' => '![x](statamic://private::payroll-2026.png)']]], 'blocks'],
+    'a Bard link whose attributes claim to be a set' => [['intro' => [['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'the plan', 'marks' => [['type' => 'link', 'attrs' => ['type' => 'set', 'href' => 'statamic://asset::private::payroll-2026.png']]]]]]]], 'intro'],
+]);
+
+it('stores a Bard image and a Markdown link of an exposed container, a link to a term, and a hidden container named in plain text', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::assetContainer('images');
+    Fixtures::assetContainer('private');
+    Fixtures::landing();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('intro', ['type' => 'bard'])
+        ->ensureField('notes', ['type' => 'markdown'])
+        ->ensureField('cta', ['type' => 'link'])
+        ->ensureField('gallery', ['type' => 'asset_container', 'max_items' => 1])
+        ->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images'], 'taxonomies' => ['tags']]]);
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => [
+            'title' => 'Home',
+            'gallery' => 'images',
+            'intro' => [
+                ['type' => 'paragraph', 'content' => [['type' => 'image', 'attrs' => ['src' => 'asset::images::hero.jpg']]]],
+                ['type' => 'paragraph', 'content' => [['type' => 'text', 'text' => 'Write asset::private::file.png in the field']]],
+            ],
+            'notes' => '![chart](statamic://asset::images::hero.jpg) ![same](statamic://images::hero.jpg) [tag](statamic://tags::php) [docs](statamic://docs/Class::method) and asset::private::path as plain text',
+            'cta' => 'asset::/assets/images/hero.jpg',
+        ]])
+        ->assertOk();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => [
+            'title' => 'Other',
+            'notes' => 'Use "statamic://entry::abc" in links, or (statamic:///assets/images/hero.jpg)',
+            'cta' => 'https://[::1]/docs/Class::method',
+        ]])
+        ->assertOk();
+});
+
+it('refuses the two Bard shapes that would skip the checks on a set: a set spelled another way, and the old format', function (array $body, string $error) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Server::actingAs(Fixtures::makeUser('create landing entries'))
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'body' => $body]])
+        ->assertHasErrors([$error]);
+
+    expect(Entry::query()->where('collection', 'landing')->count())->toBe(0);
+})->with([
+    'Set' => [[['type' => 'Set', 'attrs' => ['id' => 'abc', 'values' => ['type' => 'callout', 'text' => 'Hi', 'bogus' => 'x']]]], "body.0 is a set: write its type as 'set'"],
+    'the old format' => [[['type' => 'text', 'text' => '<p><img src="asset::private::payroll-2026.png"></p>']], "body is in Bard's old format, a list of text and set items — send ProseMirror nodes, with each set as a node of type 'set'"],
+]);
+
+it('refuses a file of an unexposed container by its URL whatever host the call arrives on', function (string $root) {
+    Fixtures::site();
+    Fixtures::assetContainer('images');
+    Fixtures::landing();
+
+    Storage::fake('vault', ['url' => 'http://localhost/assets/vault']);
+    tap(AssetContainer::make('vault')->disk('vault')->title('Vault'))->save();
+
+    Blueprint::find('collections.landing.landing_page')
+        ->ensureField('notes', ['type' => 'markdown'])
+        ->ensureField('cta', ['type' => 'link'])
+        ->save();
+
+    config(['statamic.mcp.resources' => ['collections' => ['landing'], 'asset_containers' => ['images']]]);
+
+    URL::forceRootUrl($root);
+
+    $user = Fixtures::makeUser('create landing entries');
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'notes' => '[x](statamic:///assets/vault/payroll-2026.png)']])
+        ->assertHasErrors(['notes links a container not exposed to MCP — leave it out of data']);
+
+    Server::actingAs($user)
+        ->tool(EntriesCreate::class, ['collection' => 'landing', 'data' => ['title' => 'Home', 'cta' => 'asset::/assets/vault/payroll-2026.png']])
+        ->assertHasErrors(['cta links a container not exposed to MCP — leave it out of data']);
+})->with(['http://localhost', 'http://other.test']);
