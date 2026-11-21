@@ -19,6 +19,8 @@ use Statamic\Contracts\Entries\Collection as CollectionContract;
 use Statamic\Contracts\Entries\Entry as EntryContract;
 use Statamic\Contracts\Structures\CollectionTree;
 use Statamic\Facades\Blink;
+use Statamic\Facades\Collection;
+use Statamic\Facades\Entry as EntryFacade;
 use Statamic\Facades\Site;
 use Statamic\Support\Str;
 
@@ -32,6 +34,8 @@ class EntriesUpdate extends Tool
     use NormalizesEntryInput;
     use PlacesEntries;
     use ValidatesBlueprintData;
+
+    private const int LIVE_CHANGES_LISTED = 50;
 
     #[\Override]
     public function schema(JsonSchema $schema): array
@@ -183,9 +187,128 @@ class EntriesUpdate extends Tool
 
         $added = $this->addedSets($blueprint, $processed, $effective);
 
-        return $workingCopy
-            ? $this->persistWorkingCopy($target, $user, $amending, $collection, $move, $added)
-            : $this->persistLive($this->applyChanges($entry, $merged, $slug, $date), $user, $collection, $move, $added);
+        if ($workingCopy) {
+            return $this->persistWorkingCopy($target, $user, $amending, $collection, $move, $added);
+        }
+
+        $dateChanges = $date instanceof Carbon && ! $date->equalTo($basis->date());
+        $urlMayChange = ($slug !== null && $slug !== $basis->slug())
+            || $dateChanges
+            || collect(array_keys($processed))->contains(fn (int|string $field) => str_contains((string) $entry->route(), '{'.$field.'}'));
+
+        $livePages = $this->livePagesDependingOn($entry, array_keys($processed), $dateChanges, $urlMayChange);
+
+        return $this->persistLive($this->applyChanges($entry, $merged, $slug, $date), $user, $collection, $move, $added, $livePages);
+    }
+
+    /**
+     * @param  list<array-key>  $fields
+     * @return array{localizations: array<string, array{site: string, status: string, values: array<array-key, mixed>}>, url: ?string, children: array<string, string>, mounts: bool}
+     */
+    private function livePagesDependingOn(EntryContract $entry, array $fields, bool $dateChanges, bool $urlMayChange): array
+    {
+        $pages = ['localizations' => [], 'url' => null, 'children' => [], 'mounts' => false];
+
+        if (($fields !== [] || $dateChanges) && $entry->collection()->sites()->count() > 1) {
+            foreach ($entry->descendants() as $localization) {
+                $pages['localizations'][$localization->id()] = [
+                    'site' => $localization->locale(),
+                    'status' => $localization->status(),
+                    'values' => collect($fields)->mapWithKeys(fn (int|string $field) => [$field => $localization->value((string) $field)])->all(),
+                ];
+            }
+
+            foreach ($entry->descendants() as $localization) {
+                Blink::forget('origin-'.class_basename($localization).'-'.$localization->id());
+            }
+        }
+
+        if ($urlMayChange) {
+            $pages['url'] = $entry->url();
+            $pages['mounts'] = Collection::findByMount($entry) !== null;
+
+            foreach ($entry->page()?->flattenedPages() ?? [] as $page) {
+                if ($page->entry()?->status() === 'published' && is_string($url = $page->entry()->url())) {
+                    $pages['children'][$page->id()] = $url;
+                }
+
+                $this->forgetCachedUri($page->id());
+            }
+
+            $this->forgetCachedUri($entry->id());
+        }
+
+        return $pages;
+    }
+
+    private function forgetCachedUri(string $id): void
+    {
+        Blink::store('entry-uris')->forget($id);
+        Blink::store('structure-uris')->forget($id);
+    }
+
+    /**
+     * @param  array{localizations: array<string, array{site: string, status: string, values: array<array-key, mixed>}>, url: ?string, children: array<string, string>, mounts: bool}  $before
+     * @return list<array<string, mixed>>
+     */
+    private function liveChanges(array $before, EntryContract $saved, UserContract $user): array
+    {
+        $changes = [];
+        $inOtherSites = 0;
+
+        foreach ($before['localizations'] as $id => $was) {
+            $now = EntryFacade::find($id);
+
+            if ($now === null) {
+                continue;
+            }
+
+            if (! in_array('published', [$was['status'], $now->status()], true)) {
+                continue;
+            }
+
+            $inherits = array_keys(array_filter(
+                $was['values'],
+                fn (mixed $value, int|string $field) => $this->normalize($now->value((string) $field)) !== $this->normalize($value),
+                ARRAY_FILTER_USE_BOTH,
+            ));
+
+            $change = array_filter([
+                'inherits' => $inherits,
+                'status' => $now->status() === $was['status'] ? null : $now->status(),
+                'status_before' => $now->status() === $was['status'] ? null : $was['status'],
+            ]);
+
+            if ($change === []) {
+                continue;
+            }
+
+            if ($this->canAccessSite($user, $was['site'])) {
+                $changes[] = ['id' => $id, 'site' => $was['site'], ...$change];
+            } else {
+                $inOtherSites++;
+            }
+        }
+
+        $url = $saved->url();
+
+        if (is_string($before['url']) && is_string($url) && $url !== $before['url']) {
+            foreach ($before['children'] as $id => $childUrl) {
+                if (str_starts_with($childUrl, $before['url'].'/')) {
+                    $changes[] = ['id' => $id, 'site' => $saved->locale(), 'url' => $url.Str::after($childUrl, $before['url']), 'url_before' => $childUrl];
+                }
+            }
+
+            if ($before['mounts']) {
+                $changes[] = ['mounted_collection' => true, 'url' => $url, 'url_before' => $before['url']];
+            }
+        }
+
+        if ($inOtherSites > 0) {
+            $changes[] = ['localizations_in_other_sites' => $inOtherSites];
+        }
+
+        return $changes;
     }
 
     /**
@@ -227,8 +350,9 @@ class EntriesUpdate extends Tool
     /**
      * @param  array{from: ?string, to: ?string}|null  $move
      * @param  array<string, list<string>>  $added
+     * @param  array{localizations: array<string, array{site: string, status: string, values: array<array-key, mixed>}>, url: ?string, children: array<string, string>, mounts: bool}  $livePages
      */
-    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move, array $added): Response
+    private function persistLive(EntryContract $entry, UserContract $user, CollectionContract $collection, ?array $move, array $added, array $livePages): Response
     {
         if (! $entry->updateLastModified($user)->save()) {
             throw new ToolException('the save was cancelled by a listener on this site — the entry was not updated');
@@ -243,6 +367,20 @@ class EntriesUpdate extends Tool
             'url' => $entry->url(),
             ...$this->entryLiveness($entry, $entry->published() ? self::LIVENESS_PUBLISHED : self::LIVENESS_DRAFT),
         ];
+
+        $liveChanges = $this->liveChanges($livePages, $entry, $user);
+
+        if ($liveChanges !== []) {
+            $payload['live_changes'] = array_slice($liveChanges, 0, self::LIVE_CHANGES_LISTED);
+
+            if (count($liveChanges) > self::LIVE_CHANGES_LISTED) {
+                $payload['live_changes_not_listed'] = count($liveChanges) - self::LIVE_CHANGES_LISTED;
+            }
+
+            if ($entry->status() !== 'published') {
+                $payload['result'] .= ', but live pages changed with it: see live_changes';
+            }
+        }
 
         if ($collection->dated()) {
             $payload['date'] = $entry->date()?->toIso8601String();

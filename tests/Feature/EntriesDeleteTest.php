@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Exceptions;
 use Laravel\Mcp\Request;
 use Statamic\Events\EntryDeleted;
 use Statamic\Events\EntryDeleting;
+use Statamic\Facades\Blink;
+use Statamic\Facades\Collection;
 use Statamic\Facades\Entry;
 use Statamic\Facades\Site;
 
@@ -417,4 +419,94 @@ it('stops at an unknown failure when no localization survived it, instead of del
     expect(Entry::find($origin->id()))->not->toBeNull();
 
     Exceptions::assertReported(fn (Exception $e) => $e->getMessage() === 'disk full');
+});
+
+it('refuses to delete the home page of a tree, which would leave a tree Statamic cannot read', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure('pages', root: true);
+
+    $home = Fixtures::page('home', 'Home');
+    $about = Fixtures::page('about', 'About');
+    $team = Fixtures::page('team', 'Team');
+
+    $tree = [['entry' => $home], ['entry' => $about, 'children' => [['entry' => $team]]]];
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree($tree)->save();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    Server::actingAs(Fixtures::makeUser('delete pages entries'))
+        ->tool(EntriesDelete::class, ['id' => $home])
+        ->assertHasErrors(["entry '{$home}' is the home page of the 'pages' tree in site 'en' and can't be deleted: Statamic can't read a tree without its home page — nothing was deleted. Put another page first in the tree in the Control Panel, then delete this one."]);
+
+    Blink::flush();
+
+    expect(Entry::find($home))->not->toBeNull()
+        ->and(Fixtures::storedPagesTree())->toBe($tree)
+        ->and(Entry::find($team)->url())->toBe('/about/team');
+});
+
+it('refuses to delete the home page when no other page has children, instead of promoting the next page to home', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure('pages', root: true);
+
+    $home = Fixtures::page('home', 'Home');
+    $about = Fixtures::page('about', 'About');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $home], ['entry' => $about]])->save();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    Server::actingAs(Fixtures::makeUser('delete pages entries'))
+        ->tool(EntriesDelete::class, ['id' => $home])
+        ->assertHasErrors();
+
+    Blink::flush();
+
+    expect(Entry::find($home))->not->toBeNull()
+        ->and(Entry::find($about)->url())->toBe('/about');
+});
+
+it('refuses to delete an origin whose localization is the home page of its own site, before anything is deleted', function () {
+    Fixtures::multisite();
+    Fixtures::pages();
+    Fixtures::structure('pages', root: true);
+
+    $origin = Fixtures::page('start', 'Start');
+    $first = Fixtures::page('first', 'First');
+    $localization = tap(Entry::find($origin)->makeLocalization('de')->slug('start'))->save();
+    $other = tap(Entry::make()->collection('pages')->locale('de')->slug('andere')->data(['title' => 'Andere']))->save();
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $first], ['entry' => $origin]])->save();
+    Collection::findByHandle('pages')->structure()->in('de')->tree([['entry' => $localization->id()], ['entry' => $other->id()]])->save();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    Server::actingAs(Fixtures::makeSuper())
+        ->tool(EntriesDelete::class, ['id' => $origin])
+        ->assertHasErrors(["entry '{$localization->id()}' is the home page of the 'pages' tree in site 'de' and can't be deleted: Statamic can't read a tree without its home page — nothing was deleted. Put another page first in the tree in the Control Panel, then delete this one."]);
+
+    expect(Entry::find($origin))->not->toBeNull()
+        ->and(Entry::find($localization->id()))->not->toBeNull();
+});
+
+it('still deletes a page that is not the home page of a tree with a root', function () {
+    Fixtures::site();
+    Fixtures::pages();
+    Fixtures::structure('pages', root: true);
+
+    $home = Fixtures::page('home', 'Home');
+    $about = Fixtures::page('about', 'About');
+
+    Collection::findByHandle('pages')->structure()->in('en')->tree([['entry' => $home], ['entry' => $about]])->save();
+
+    config(['statamic.mcp.deletes' => true]);
+
+    Server::actingAs(Fixtures::makeUser('delete pages entries'))
+        ->tool(EntriesDelete::class, ['id' => $about])
+        ->assertOk();
+
+    expect(Entry::find($about))->toBeNull()->and(Entry::find($home))->not->toBeNull();
 });

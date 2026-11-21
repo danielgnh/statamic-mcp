@@ -1153,3 +1153,172 @@ it('does not count an entry against itself for a unique value, so updating any o
         ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Renamed']])
         ->assertOk();
 });
+
+it('refuses an icon value that climbs out of the icon set, at the top level and inside a set', function (array $data, string $path) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')
+        ->ensureField('icon', ['type' => 'icon'])
+        ->ensureField('blocks', ['type' => 'replicator', 'sets' => ['main' => ['sets' => ['card' => ['fields' => [['handle' => 'icon', 'field' => ['type' => 'icon']]]]]]]])
+        ->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => $data])
+        ->assertHasErrors(["{$path} takes the name of an icon in its set — a path with '..' is refused"]);
+
+    expect($post->fresh()->get('icon'))->toBeNull()->and($post->fresh()->get('blocks'))->toBeNull();
+})->with([
+    'top level' => [['icon' => '../../../../storage/app/private/plan'], 'icon'],
+    'backslashes' => [['icon' => '..\\..\\plan'], 'icon'],
+    'inside a set' => [['blocks' => [['type' => 'card', 'icon' => 'a/../../plan']]], 'blocks.0.icon'],
+]);
+
+it('refuses an icon value that is not a string, which no augmented read could render', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => ['../../x']]])
+        ->assertHasErrors(['icon takes the name of an icon in its set, as a string']);
+});
+
+it('stores a plain icon name, one with dots in it included', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => 'brands/v1..2-logo']])
+        ->assertOk();
+
+    expect($post->fresh()->get('icon'))->toBe('brands/v1..2-logo');
+});
+
+it('refuses to change a key the entry stores outside its blueprint, such as template, as the Control Panel never writes one', function (mixed $template) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(Entry::make()->collection('blog')->slug('landing')->data([
+        'title' => 'Landing',
+        'template' => 'blog/landing',
+        'layout' => 'layout',
+    ])->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Changed', 'template' => $template, 'layout' => 'errors/404']])
+        ->assertHasErrors(['template, layout: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data']);
+
+    expect($entry->fresh()->template())->toBe('blog/landing')
+        ->and($entry->fresh()->layout())->toBe('layout')
+        ->and($entry->fresh()->get('title'))->toBe('Landing');
+})->with([
+    'another view' => ['statamic::auth.login'],
+    'cleared' => [null],
+    'a list' => [['a', 'b']],
+]);
+
+it('takes a key stored outside the blueprint back unchanged, so a raw read can be sent back whole', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $entry = tap(Entry::make()->collection('blog')->slug('landing')->data([
+        'title' => 'Landing',
+        'template' => 'blog/landing',
+        'legacy' => ['b' => 2, 'a' => 1],
+        'ratio' => 1.0,
+    ]))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $entry->id(), 'data' => ['title' => 'Changed', 'template' => 'blog/landing', 'legacy' => ['a' => 1, 'b' => 2], 'ratio' => 1]])
+        ->assertOk();
+
+    expect($entry->fresh()->get('title'))->toBe('Changed')
+        ->and($entry->fresh()->template())->toBe('blog/landing')
+        ->and($entry->fresh()->get('legacy'))->toEqual(['a' => 1, 'b' => 2]);
+});
+
+it('says which live localizations changed when a draft origin is edited, because they inherit what they do not override', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+    Fixtures::revisions('blog');
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site', 'access de site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live, but live pages changed with it: see live_changes"')
+        ->assertSee('"live_changes":[{"id":"'.$inheriting->id().'","site":"de","inherits":["title"]}]');
+
+    expect(Entry::find($inheriting->id())->value('title'))->toBe('New title')
+        ->and(Entry::query()->where('site', 'de')->where('title', 'New title')->count())->toBe(1)
+        ->and(Entry::query()->where('site', 'de')->where('title', 'Old title')->count())->toBe(0);
+});
+
+it('counts a changed live localization in a site the caller cannot access, without naming it', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"live_changes":[{"localizations_in_other_sites":1}]')
+        ->assertDontSee($inheriting->id());
+});
+
+it('says when a new date takes a live localization that inherits it offline', function () {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Collection::findByHandle('blog')->dated(true)->futureDateBehavior('private')->save();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->date('2020-01-01')->data(['title' => 'Title'])->published(false))->save();
+    $inheriting = tap($origin->makeLocalization('de')->published(true))->save();
+
+    expect($inheriting->fresh()->status())->toBe('published');
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site', 'access de site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => [], 'date' => '2099-01-01'])
+        ->assertOk()
+        ->assertSee('"live_changes":[{"id":"'.$inheriting->id().'","site":"de","status":"scheduled","status_before":"published"}]');
+});
+
+it('reports no live change for a localization that overrides the edited field, or one that is a draft', function (array $localized, bool $published) {
+    Fixtures::multisite();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    $origin = tap(Entry::make()->collection('blog')->slug('hello')->locale('en')->data(['title' => 'Old title'])->published(false))->save();
+    tap($origin->makeLocalization('de')->data($localized)->published($published))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries', 'access en site'))
+        ->tool(EntriesUpdate::class, ['id' => $origin->id(), 'data' => ['title' => 'New title']])
+        ->assertOk()
+        ->assertSee('"result":"saved as draft — not live"')
+        ->assertDontSee('live_changes');
+})->with([
+    'its own title' => [['title' => 'Eigener Titel'], true],
+    'a draft' => [[], false],
+]);
