@@ -280,17 +280,19 @@ trait PresentsAugmentedData
      * @param  Exposed  $exposed
      * @return array<array-key, mixed>
      */
-    private function withoutHiddenNodeLinks(array $node, array $exposed): array
+    private function withoutHiddenNodeLinks(array $node, array $exposed, bool $insideAttributes = false): array
     {
-        if (($node['type'] ?? null) === 'set') {
-            return $node;
+        if (! $insideAttributes && ($node['type'] ?? null) === 'set') {
+            return is_array($node['marks'] ?? null)
+                ? [...$node, 'marks' => $this->withoutHiddenNodeLinks($node['marks'], $exposed)]
+                : $node;
         }
 
         foreach ($node as $key => $item) {
             $node[$key] = match (true) {
                 $key === 'href' && is_string($item) && str_starts_with($item, 'statamic://') => $this->isOutsideExposure($this->linkTarget($item), $exposed) ? '' : $item,
                 $key === 'src' && is_string($item) && str_starts_with($item, 'asset::') => $this->inExposedContainer($item, $exposed) ? $item : null,
-                is_array($item) => $this->withoutHiddenNodeLinks($item, $exposed),
+                is_array($item) => $this->withoutHiddenNodeLinks($item, $exposed, $insideAttributes || $key === 'attrs'),
                 default => $item,
             };
         }
