@@ -10,6 +10,15 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ### Changed
 
+- **`entries_update`, `terms_update`, and `globals_update` no longer change a
+  top-level key that has no blueprint field.** An entry can store keys its
+  blueprint doesn't define, such as `template`, `layout`, or `redirect`, set by
+  hand or left behind by a removed field. The tools took a new value for any
+  such key without validating it, so an agent with edit permission could pick
+  the view a public page renders with. The Control Panel never writes these
+  keys. They can still be sent back unchanged, so a raw read goes back whole,
+  and keys inside a set, a Grid row, or a Group work as before. A global set
+  without a blueprint is not checked.
 - **`entries_delete` refuses the home page of a tree with a root page,** for
   the entry and for each localization that would go with it. The Control Panel
   offers no delete for a home page either. See Fixed.

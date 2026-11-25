@@ -27,12 +27,20 @@ trait MergesSets
 
     /**
      * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $stored
+     */
+    abstract protected function rejectChangedKeysOutsideBlueprint(Blueprint $blueprint, array $data, array $stored): void;
+
+    /**
+     * @param  array<string, mixed>  $data
      * @param  array<string, mixed>  $current
      * @return array<string, mixed>
      */
     protected function mergeSetPatches(Blueprint $blueprint, array $data, array $current): array
     {
         $this->rejectReservedKeys($data);
+
+        $this->rejectChangedKeysOutsideBlueprint($blueprint, $data, $current);
 
         $data = $this->mergeSetPatchesIn($blueprint->fields(), $data, $current, '');
 

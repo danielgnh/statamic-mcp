@@ -544,3 +544,16 @@ it('allows a localized slug another term only has in another site, as the Contro
         ->assertOk()
         ->assertSee('"slug":"alpha"');
 });
+
+it('refuses to change a key the term stores outside its blueprint', function () {
+    Fixtures::site();
+    Fixtures::tags();
+
+    Term::make()->taxonomy('tags')->slug('php')->in('en')->data(['title' => 'PHP', 'template' => 'tags/show'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit tags terms'))
+        ->tool(TermsUpdate::class, ['id' => 'tags::php', 'data' => ['template' => 'statamic::auth.login']])
+        ->assertHasErrors(['template: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data']);
+
+    expect(Term::find('tags::php')->in('en')->get('template'))->toBe('tags/show');
+});
