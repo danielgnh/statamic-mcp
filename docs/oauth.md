@@ -111,6 +111,8 @@ client under any name, so the host is what tells a real connector from a
 lookalike called "Claude". A view you publish or supply yourself should show
 the redirect URI too.
 
+![Claude's connector settings and the consent screen, which names the account that approves and the redirect URI](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/consent.png)
+
 To restyle it, publish the Blade and edit the copy — no need to publish
 laravel/mcp's own view, which depends on a compiled Vite/Tailwind bundle and
 500s on sites without one:
