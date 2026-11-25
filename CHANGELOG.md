@@ -13,6 +13,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 - **`entries_delete` refuses the home page of a tree with a root page,** for
   the entry and for each localization that would go with it. The Control Panel
   offers no delete for a home page either. See Fixed.
+- **`assets_upload` refuses a `source_url` that answers with a compressed
+  body.** See Security.
 
 ### Fixed
 
@@ -39,6 +41,11 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   `entries_get` with `format: augmented` in full, also for a collection MCP
   doesn't expose. They are now filtered like any other relation. A resource
   with its own `toArray()` keeps its fields when what it wraps is exposed.
+- **`assets_upload` can no longer be made to inflate a small download into a
+  huge one.** The size cap counted compressed bytes while the body was
+  inflated in full: 400 KB on the wire became 400 MB and ended the PHP process
+  with a memory error. A compressed answer is no longer inflated. It is
+  refused, since the request never offers compression.
 
 ## [1.2.0] - 2026-11-19
 
