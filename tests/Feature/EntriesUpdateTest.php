@@ -1154,6 +1154,59 @@ it('does not count an entry against itself for a unique value, so updating any o
         ->assertOk();
 });
 
+it('refuses an icon value that climbs out of the icon set, at the top level and inside a set', function (array $data, string $path) {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')
+        ->ensureField('icon', ['type' => 'icon'])
+        ->ensureField('blocks', ['type' => 'replicator', 'sets' => ['main' => ['sets' => ['card' => ['fields' => [['handle' => 'icon', 'field' => ['type' => 'icon']]]]]]]])
+        ->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => $data])
+        ->assertHasErrors(["{$path} takes the name of an icon in its set — a path with '..' is refused"]);
+
+    expect($post->fresh()->get('icon'))->toBeNull()->and($post->fresh()->get('blocks'))->toBeNull();
+})->with([
+    'top level' => [['icon' => '../../../../storage/app/private/plan'], 'icon'],
+    'backslashes' => [['icon' => '..\\..\\plan'], 'icon'],
+    'inside a set' => [['blocks' => [['type' => 'card', 'icon' => 'a/../../plan']]], 'blocks.0.icon'],
+]);
+
+it('refuses an icon value that is not a string, which no augmented read could render', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => ['../../x']]])
+        ->assertHasErrors(['icon takes the name of an icon in its set, as a string']);
+});
+
+it('stores a plain icon name, one with dots in it included', function () {
+    Fixtures::site();
+    Fixtures::tags();
+    Fixtures::blog();
+
+    Blueprint::find('collections.blog.article')->ensureField('icon', ['type' => 'icon'])->save();
+
+    $post = tap(Entry::make()->collection('blog')->locale('en')->slug('post')->data(['title' => 'Post']))->save();
+
+    Server::actingAs(Fixtures::makeUser('edit blog entries'))
+        ->tool(EntriesUpdate::class, ['id' => $post->id(), 'data' => ['icon' => 'brands/v1..2-logo']])
+        ->assertOk();
+
+    expect($post->fresh()->get('icon'))->toBe('brands/v1..2-logo');
+});
+
 it('refuses to change a key the entry stores outside its blueprint, such as template, as the Control Panel never writes one', function (mixed $template) {
     Fixtures::site();
     Fixtures::tags();
