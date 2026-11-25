@@ -1,5 +1,17 @@
 # Upgrading
 
+## From 1.2 to 1.3
+
+1.3.0 adds no config keys or migrations. It needs `laravel/mcp` 1.3 or newer,
+the first release that serves skills, so let Composer move it along:
+
+```bash
+composer update danielgnh/statamic-mcp laravel/mcp --with-all-dependencies
+```
+
+If you installed `laravel/mcp` yourself, raise its constraint in your own
+`composer.json` to `^1.3` first, or Composer keeps the add-on at 1.2.
+
 ## From 1.0 to 1.1
 
 1.1.0 adds no config keys or migrations. If the site caches routes and your

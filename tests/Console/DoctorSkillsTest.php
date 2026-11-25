@@ -9,18 +9,10 @@ use Danielgnh\StatamicMcp\Tests\Support\Skills\UnbuildableSkill;
 use Danielgnh\StatamicMcp\Tests\Support\Skills\UnregistrableSkill;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
-use Laravel\Mcp\Server\Skill;
 
 function doctorSkillsOutput(): string
 {
     return preg_replace('/\s+/', ' ', Artisan::output());
-}
-
-function skipDoctorWithoutSkills(): void
-{
-    if (! class_exists(Skill::class)) {
-        test()->markTestSkipped('laravel/mcp serves skills from 1.3.');
-    }
 }
 
 /**
@@ -46,21 +38,7 @@ it('says nothing about skills on a site without any', function () {
     expect(Artisan::output())->not->toContain('skill')->not->toContain('Skill');
 });
 
-it('warns that skills are configured on a laravel/mcp that does not serve them', function () {
-    if (class_exists(Skill::class)) {
-        $this->markTestSkipped('Only laravel/mcp below 1.3 ignores skills.');
-    }
-
-    Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit');
-
-    $exit = Artisan::call('statamic:mcp:doctor');
-
-    expect($exit)->toBe(0)
-        ->and(doctorSkillsOutput())->toContain('[WARN] 1 skill(s) are configured, but the installed laravel/mcp does not serve skills.');
-});
-
 it('lists the skills of the server class and says which ones its shouldRegister() hides in the console', function () {
-    skipDoctorWithoutSkills();
     config(['statamic.mcp.server' => SkillsServer::class]);
 
     $exit = Artisan::call('statamic:mcp:doctor');
@@ -73,7 +51,6 @@ it('lists the skills of the server class and says which ones its shouldRegister(
 });
 
 it('marks the skills that add-ons registered', function () {
-    skipDoctorWithoutSkills();
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit');
 
     Artisan::call('statamic:mcp:doctor');
@@ -84,7 +61,6 @@ it('marks the skills that add-ons registered', function () {
 });
 
 it('warns naming a skill that laravel/mcp skips, with its reason', function (array $files, string $reason) {
-    skipDoctorWithoutSkills();
     $folder = doctorSkillFolder(storage_path('framework/testing/skills'), $files);
     Server::registerAddonSkills($folder);
 
@@ -101,7 +77,6 @@ it('warns naming a skill that laravel/mcp skips, with its reason', function (arr
 ]);
 
 it('warns about a skill folder that does not exist, such as a relative path from an add-on', function () {
-    skipDoctorWithoutSkills();
     Server::registerAddonSkills('mcp-skills/never-there');
 
     Artisan::call('statamic:mcp:doctor');
@@ -110,7 +85,6 @@ it('warns about a skill folder that does not exist, such as a relative path from
 });
 
 it("says that the site's skill replaces an add-on skill of the same name, without a warning", function () {
-    skipDoctorWithoutSkills();
     config(['statamic.mcp.server' => SkillsServer::class]);
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit');
 
@@ -122,7 +96,6 @@ it("says that the site's skill replaces an add-on skill of the same name, withou
 });
 
 it('warns about the second of two add-on skills with one URI, because the first one registered is served', function () {
-    skipDoctorWithoutSkills();
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit', SkillsServer::FIXTURES.'/shadow/seo-audit');
 
     Artisan::call('statamic:mcp:doctor');
@@ -131,7 +104,6 @@ it('warns about the second of two add-on skills with one URI, because the first 
 });
 
 it('warns that a skill behind a hidden one with the same URI reaches the users the first one refuses', function () {
-    skipDoctorWithoutSkills();
     config(['statamic.mcp.server' => SkillsServer::class]);
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/shadow/pricing-playbook');
 
@@ -141,7 +113,6 @@ it('warns that a skill behind a hidden one with the same URI reaches the users t
 });
 
 it('fails naming a skill class that cannot be built, because it breaks every skill and resource method', function () {
-    skipDoctorWithoutSkills();
     Server::registerAddonSkills(UnbuildableSkill::class);
 
     $exit = Artisan::call('statamic:mcp:doctor');
@@ -151,7 +122,6 @@ it('fails naming a skill class that cannot be built, because it breaks every ski
 });
 
 it('only warns about a shouldRegister() that throws, because one reading the request user throws only in the console', function () {
-    skipDoctorWithoutSkills();
     Server::registerAddonSkills(UnregistrableSkill::class);
 
     $exit = Artisan::call('statamic:mcp:doctor');
@@ -161,7 +131,6 @@ it('only warns about a shouldRegister() that throws, because one reading the req
 });
 
 it('warns about a skill folder in the public directory, where anyone can download it', function () {
-    skipDoctorWithoutSkills();
     $folder = doctorSkillFolder(public_path('mcp-skills'), ['SKILL.md' => "---\nname: demo\ndescription: A demo.\n---\n"]);
     Server::registerAddonSkills($folder);
 
@@ -172,7 +141,6 @@ it('warns about a skill folder in the public directory, where anyone can downloa
 });
 
 it('warns about a skill folder that a storage link publishes', function () {
-    skipDoctorWithoutSkills();
     config(['filesystems.links' => [public_path('storage') => storage_path('app/public')]]);
     $folder = doctorSkillFolder(storage_path('app/public/mcp-skills'), ['SKILL.md' => "---\nname: demo\ndescription: A demo.\n---\n"]);
     Server::registerAddonSkills($folder);
@@ -183,7 +151,6 @@ it('warns about a skill folder that a storage link publishes', function () {
 });
 
 it('warns about a skill folder on the disk of an asset container, where an upload can rewrite it', function () {
-    skipDoctorWithoutSkills();
     $container = Fixtures::assetContainer('images');
     $folder = doctorSkillFolder($container->diskPath().'/skills', ['SKILL.md' => "---\nname: demo\ndescription: A demo.\n---\n"]);
     Server::registerAddonSkills($folder);
@@ -195,7 +162,6 @@ it('warns about a skill folder on the disk of an asset container, where an uploa
 });
 
 it('does not take a folder that only shares a prefix with the public directory for a public one', function () {
-    skipDoctorWithoutSkills();
     $folder = doctorSkillFolder(public_path().'-skills', ['SKILL.md' => "---\nname: demo\ndescription: A demo.\n---\n"]);
     Server::registerAddonSkills($folder);
 

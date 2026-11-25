@@ -385,8 +385,7 @@ Server::actingAs($user)
 A skill is a folder with a `SKILL.md` and any files it refers to: a playbook with example
 entries, a checklist, a how-to for one kind of page. A client that supports skills over
 MCP shows the model each skill's name and description and loads the rest only when the
-model asks for it. Skills need `laravel/mcp:^1.3`. This addon installs on older versions
-too, so add the requirement to your site's own `composer.json`.
+model asks for it.
 
 Guidelines stay the place for anything every agent must read. They travel inside
 `statamic_overview` and `blueprints_get`, so every client gets them. A skill reaches the
@@ -485,8 +484,7 @@ public function bootAddon(): void
 
 Pass absolute folder paths or `Skill` class names. A relative path would point into the
 site's `resources/`, not the add-on's. The `method_exists()` check is needed for the same
-reason as with `registerAddonTools()`. On a site with laravel/mcp below 1.3 the call is
-stored and nothing is served.
+reason as with `registerAddonTools()`.
 
 The server serves the site's own `$skills` first, then the add-on skills in the order
 their providers booted. Of two skills with one name that a user may see, the first is
@@ -510,10 +508,10 @@ A `Skill` class whose constructor or `shouldRegister()` throws is worse: every
 does every `resources/read` of a skill file. Tools are not affected.
 
 `php please mcp:doctor` lists each skill with its source, names every skipped one with
-the reason, and says which add-on skill a site skill replaces. It fails on a `Skill` class that cannot be built. It warns about a
-`shouldRegister()` that throws, about skills on a laravel/mcp that does not serve them,
-and when the `server` config names a class that does not extend
-`Danielgnh\StatamicMcp\Server`, because that server never loads add-on skills.
+the reason, and says which add-on skill a site skill replaces. It fails on a `Skill`
+class that cannot be built. It warns about a `shouldRegister()` that throws, and when the
+`server` config names a class that does not extend `Danielgnh\StatamicMcp\Server`,
+because that server never loads add-on skills.
 
 It also warns about a skill folder in the public directory or on the disk of an asset
 container. Every file in a skill folder is served, and whoever can write to the folder

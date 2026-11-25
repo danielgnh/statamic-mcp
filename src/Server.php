@@ -122,12 +122,10 @@ class Server extends McpServer
     #[\Override]
     protected function boot(): void
     {
-        if (class_exists(Skill::class)) {
-            $this->skills = [
-                ...$this->skills,
-                ...array_filter(self::registeredAddonSkills(), fn (string $skill) => ! in_array($skill, $this->skills, true)),
-            ];
-        }
+        $this->skills = [
+            ...$this->skills,
+            ...array_filter(self::registeredAddonSkills(), fn (string $skill) => ! in_array($skill, $this->skills, true)),
+        ];
 
         $addonTools = array_values(array_diff(self::registeredAddonTools(), $this->tools));
         $registry = (new ToolRegistry($this->tools))->add(...$addonTools);

@@ -6,16 +6,9 @@ use Danielgnh\StatamicMcp\Tests\Support\Skills\SkillsServer;
 use Danielgnh\StatamicMcp\Tests\UsesSkillsServer;
 use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Testing\TestResponse;
-use Laravel\Mcp\Server\Skill;
 use Statamic\Contracts\Auth\User;
 
 uses(UsesSkillsServer::class);
-
-beforeEach(function () {
-    if (! class_exists(Skill::class)) {
-        $this->markTestSkipped('laravel/mcp serves skills from 1.3.');
-    }
-});
 
 function skillsPost(string $method, array $params, ?User $user): TestResponse
 {
