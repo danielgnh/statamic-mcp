@@ -25,6 +25,8 @@ it('is ready once passport is installed and the tables exist', function () {
 });
 
 it('groups tokens into one connection per user and client with honest timestamps', function () {
+    $this->freezeSecond();
+
     $claude = OAuthFixtures::client('Claude');
     $chatgpt = OAuthFixtures::client('ChatGPT');
 
@@ -39,8 +41,8 @@ it('groups tokens into one connection per user and client with honest timestamps
 
     $pair = $connections->first(fn ($c) => $c['user_id'] === 'user-1' && $c['client_name'] === 'Claude');
 
-    expect($pair['connected_at']->toDateString())->toBe(now()->subDays(10)->toDateString())
-        ->and($pair['last_refreshed_at']->toDateString())->toBe(now()->toDateString())
+    expect($pair['connected_at'])->toEqual(now()->subDays(10))
+        ->and($pair['last_refreshed_at'])->toEqual(now()->subHour())
         ->and($pair['active'])->toBeTrue();
 });
 

@@ -50,6 +50,13 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   `docs/permissions.md`, `docs/tools.md`, and the server instructions said
   revisions keep an agent from changing live content; they now say what
   revisions cover.
+- **`assets_upload` answers a refused write with its own error on Statamic 6.43.**
+  Statamic 6.43 throws when a disk refuses an upload, and a disk configured
+  with `'throw' => true` does so on every version. The tool answered "An
+  internal server error occurred." and could leave a half-written file behind,
+  which the container then listed as an asset. It now answers "the disk did not
+  store …" and removes the file that write left. The site's log has the disk's
+  own error.
 
 ### Security
 
