@@ -8,8 +8,20 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Changed
+
+- **`entries_delete` refuses the home page of a tree with a root page,** for
+  the entry and for each localization that would go with it. The Control Panel
+  offers no delete for a home page either. See Fixed.
+
 ### Fixed
 
+- **Deleting the home page no longer breaks the collection.** `entries_delete`
+  on the root page of a structured collection answered with an internal error,
+  kept the entry, and stored a tree Statamic couldn't read: every page of the
+  collection answered 500, and every later write failed, until someone fixed
+  the tree file by hand. When no other page had children, the next page
+  silently became the home page.
 - **`assets_upload` answers a refused write with its own error on Statamic 6.43.**
   Statamic 6.43 throws when a disk refuses an upload, and a disk configured
   with `'throw' => true` does so on every version. The tool answered "An
