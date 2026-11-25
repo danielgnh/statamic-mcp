@@ -8,6 +8,27 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Added
+
+- **Add-ons can serve skills.** An add-on calls `Server::registerAddonSkills()`
+  from its service provider with absolute skill folder paths or `Skill` class
+  names, and every site that installs it serves those skills without a server
+  class of its own. The site's own `$skills` come first, so a site skill
+  replaces an add-on skill of the same name for every user who may see it. Skills need `laravel/mcp:^1.3`. On
+  an older version the call is stored and nothing is served. See "Skills" in
+  `docs/tools.md`.
+- **Skills are documented.** A site lists skill folders in `$skills` on its
+  server class, and a `Skill` class with `shouldRegister()` limits a skill to
+  some users. Skills run behind the same authentication and Access MCP check as
+  the tools.
+- **The doctor checks the skills.** `mcp:doctor` lists each skill with its
+  source and names the ones laravel/mcp skips, with the reason. It fails on a
+  `Skill` class that cannot be built. It warns about a `shouldRegister()` that
+  throws, about a skill folder in the public directory or on an asset
+  container's disk, about skills on a laravel/mcp below 1.3, and when the
+  configured server does not extend `Danielgnh\StatamicMcp\Server` and so never
+  loads add-on skills.
+
 ## [1.2.0] - 2026-11-19
 
 ### Added

@@ -35,6 +35,7 @@ use Danielgnh\StatamicMcp\Tools\TermsUpdate;
 use Laravel\Mcp\Server as McpServer;
 use Laravel\Mcp\Server\Attributes\Instructions;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Skill;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 use ReflectionAttribute;
@@ -80,6 +81,8 @@ class Server extends McpServer
 
     private const string ADDON_TOOLS = 'statamic-mcp.addon-tools';
 
+    private const string ADDON_SKILLS = 'statamic-mcp.addon-skills';
+
     /**
      * @param  class-string<Tool>  ...$tools
      */
@@ -98,9 +101,34 @@ class Server extends McpServer
         return app()->bound(self::ADDON_TOOLS) ? app(self::ADDON_TOOLS) : [];
     }
 
+    /**
+     * @param  string|class-string<Skill>  ...$skills
+     */
+    public static function registerAddonSkills(string ...$skills): void
+    {
+        app()->instance(self::ADDON_SKILLS, array_values(array_unique([...self::registeredAddonSkills(), ...$skills])));
+    }
+
+    /**
+     * @internal
+     *
+     * @return list<string|class-string<Skill>>
+     */
+    public static function registeredAddonSkills(): array
+    {
+        return app()->bound(self::ADDON_SKILLS) ? app(self::ADDON_SKILLS) : [];
+    }
+
     #[\Override]
     protected function boot(): void
     {
+        if (class_exists(Skill::class)) {
+            $this->skills = [
+                ...$this->skills,
+                ...array_filter(self::registeredAddonSkills(), fn (string $skill) => ! in_array($skill, $this->skills, true)),
+            ];
+        }
+
         $addonTools = array_values(array_diff(self::registeredAddonTools(), $this->tools));
         $registry = (new ToolRegistry($this->tools))->add(...$addonTools);
 

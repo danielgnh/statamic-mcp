@@ -379,3 +379,147 @@ Server::actingAs($user)
     ->tool(SeoAudit::class, ['url' => '/about'])
     ->assertOk();
 ```
+
+## Skills
+
+A skill is a folder with a `SKILL.md` and any files it refers to: a playbook with example
+entries, a checklist, a how-to for one kind of page. A client that supports skills over
+MCP shows the model each skill's name and description and loads the rest only when the
+model asks for it. Skills need `laravel/mcp:^1.3`. This addon installs on older versions
+too, so add the requirement to your site's own `composer.json`.
+
+Guidelines stay the place for anything every agent must read. They travel inside
+`statamic_overview` and `blueprints_get`, so every client gets them. A skill reaches the
+model only in clients that support skills, and only when the model decides to load it. At
+the time of writing, November 2026, support is in beta in Claude, Claude Code, and VS
+Code. A client without it lists each `SKILL.md` as a plain resource.
+
+### Skills on your server class
+
+List the folders in `$skills` on the server class the README describes. A relative path
+starts at `resources/`:
+
+```php
+namespace App\Mcp;
+
+use Danielgnh\StatamicMcp\Server;
+
+class StatamicServer extends Server
+{
+    protected array $skills = [
+        'mcp-skills/landing-page',
+        Skills\PricingPlaybook::class,
+    ];
+}
+```
+
+```
+resources/mcp-skills/landing-page/
+├── SKILL.md
+└── examples/hero-first.yaml
+```
+
+`SKILL.md` starts with a frontmatter block. `name` must equal the folder name, in
+lowercase letters, digits, and hyphens. `description` tells the model when to load the
+skill, in at most 1,024 characters:
+
+```markdown
+---
+name: landing-page
+description: Build a landing page from the page builder blocks. Use for a new campaign or product page.
+---
+
+Start from `examples/hero-first.yaml` and replace the copy.
+```
+
+Skills run behind the same authentication and Access MCP check as the tools. Past that, a
+folder path has no gate: every user with Access MCP can list the skill and read every
+file in it, whatever their roles allow elsewhere. The frontmatter is returned as written,
+so keep role names and internal notes out of it. Dotfiles and symlinks inside the folder
+are never served.
+
+### A skill for some users only
+
+A skill that quotes content from a collection, or that only some roles should follow, is
+a class with `shouldRegister()`:
+
+```php
+namespace App\Mcp\Skills;
+
+use Danielgnh\StatamicMcp\Support\ActingUser;
+use Laravel\Mcp\Request;
+use Laravel\Mcp\Server\Skill;
+
+class PricingPlaybook extends Skill
+{
+    public function path(): string
+    {
+        return 'mcp-skills/pricing-playbook';
+    }
+
+    public function shouldRegister(Request $request): bool
+    {
+        return ActingUser::resolve($request->user())?->hasPermission('edit pricing entries') ?? false;
+    }
+}
+```
+
+A user it refuses does not see the skill in `skills/list` or `resources/list` and cannot
+read any of its files. `ActingUser::resolve()` returns the Statamic user in token and
+OAuth mode alike.
+
+### Skills from an add-on
+
+An add-on registers its skills from its service provider, next to its tools:
+
+```php
+use Danielgnh\StatamicMcp\Server;
+
+public function bootAddon(): void
+{
+    if (method_exists(Server::class, 'registerAddonSkills')) {
+        Server::registerAddonSkills(__DIR__.'/../resources/mcp-skills/seo-audit');
+    }
+}
+```
+
+Pass absolute folder paths or `Skill` class names. A relative path would point into the
+site's `resources/`, not the add-on's. The `method_exists()` check is needed for the same
+reason as with `registerAddonTools()`. On a site with laravel/mcp below 1.3 the call is
+stored and nothing is served.
+
+The server serves the site's own `$skills` first, then the add-on skills in the order
+their providers booted. Of two skills with one name that a user may see, the first is
+served, so a site replaces an add-on's skill by listing one of its own with that name. A
+skill whose `shouldRegister()` refuses a user takes no name for that user: they get the
+next skill with that name. Start an add-on's skill names with the add-on's prefix, as
+with tool names.
+
+A skill names tools in its text. With `read_only` on, the write tools are gone and the
+skill is still served, so a skill that needs them should say what to do without them.
+
+### What breaks, and what the doctor says
+
+laravel/mcp skips a skill it cannot serve and writes the reason to the log: a folder that
+does not exist, a `SKILL.md` without valid frontmatter, a name that differs from the
+folder name, a name another skill already took, more than 512 files, or more than 16 MiB.
+The other skills and all tools keep working.
+
+A `Skill` class whose constructor or `shouldRegister()` throws is worse: every
+`skills/list`, `skills/get`, and `resources/list` fails while it is registered, and so
+does every `resources/read` of a skill file. Tools are not affected.
+
+`php please mcp:doctor` lists each skill with its source, names every skipped one with
+the reason, and says which add-on skill a site skill replaces. It fails on a `Skill` class that cannot be built. It warns about a
+`shouldRegister()` that throws, about skills on a laravel/mcp that does not serve them,
+and when the `server` config names a class that does not extend
+`Danielgnh\StatamicMcp\Server`, because that server never loads add-on skills.
+
+It also warns about a skill folder in the public directory or on the disk of an asset
+container. Every file in a skill folder is served, and whoever can write to the folder
+decides what every agent reads. On an asset disk that includes any user or agent who can
+upload. Keep skill folders under `resources/`, where only a deploy changes them.
+
+Each of those four methods walks every skill folder and parses every `SKILL.md`, and
+`skills/list` also reads and hashes every file of the skills on its page. Nothing is
+cached. Keep skills small: a few files of text, not an archive.
