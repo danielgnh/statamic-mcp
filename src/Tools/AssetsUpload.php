@@ -5,6 +5,7 @@ namespace Danielgnh\StatamicMcp\Tools;
 use Danielgnh\StatamicMcp\Support\SourceDownloader;
 use Danielgnh\StatamicMcp\Tools\Concerns\ResolvesAssets;
 use Facades\Statamic\Fields\Validator as FieldValidator;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Validator;
@@ -15,7 +16,9 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToWriteFile;
 use Statamic\Assets\AssetUploader;
+use Statamic\Assets\Uploader;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
 use Statamic\Rules\AllowedFile;
 
@@ -114,6 +117,18 @@ class AssetsUpload extends Tool
             report($e);
 
             $unreadable = true;
+        } catch (UnableToWriteFile $e) {
+            if (! $this->thrownByTheUploadersWrite($e)) {
+                throw $e;
+            }
+
+            report($e);
+
+            if ($container->disk()->exists($e->location())) {
+                $container->disk()->delete($e->location());
+            }
+
+            throw $this->notStored($path);
         } finally {
             @unlink($file->getPathname());
         }
@@ -121,7 +136,7 @@ class AssetsUpload extends Tool
         if (! $container->disk()->exists($asset->path())) {
             $asset->deleteQuietly();
 
-            throw new ToolException(sprintf("the disk did not store '%s' — nothing was created. It may be read-only, or out of space.", $path));
+            throw $this->notStored($path);
         }
 
         return $this->json([
@@ -129,6 +144,19 @@ class AssetsUpload extends Tool
             ...$this->liveness($asset, self::LIVENESS_UPLOADED),
             ...($unreadable ? ['not_stored' => [self::UNREADABLE_IMAGE]] : []),
         ]);
+    }
+
+    private function thrownByTheUploadersWrite(UnableToWriteFile $e): bool
+    {
+        $frames = collect($e->getTrace())->takeUntil(fn (array $frame): bool => ($frame['class'] ?? null) === self::class);
+
+        return $frames->contains(fn (array $frame): bool => ($frame['class'] ?? null) === Uploader::class && $frame['function'] === 'write')
+            && ! $frames->contains(fn (array $frame): bool => is_a($frame['class'] ?? '', Dispatcher::class, true));
+    }
+
+    private function notStored(string $path): ToolException
+    {
+        return new ToolException(sprintf("the disk did not store '%s' — nothing was created. It may be read-only, or out of space.", $path));
     }
 
     private function decodeBase64(string $encoded): string
