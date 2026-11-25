@@ -28,9 +28,13 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ### Fixed
 
-- **A refused upload says so again on Statamic 6.43 and newer.** Statamic now
-  throws when the disk refuses a write, and `assets_upload` answered "An
-  internal server error occurred." instead of "the disk did not store".
+- **`assets_upload` answers a refused write with its own error on Statamic 6.43.**
+  Statamic 6.43 throws when a disk refuses an upload, and a disk configured
+  with `'throw' => true` does so on every version. The tool answered "An
+  internal server error occurred." and could leave a half-written file behind,
+  which the container then listed as an asset. It now answers "the disk did not
+  store …" and removes the file that write left. The site's log has the disk's
+  own error.
 
 ## [1.2.0] - 2026-11-19
 
