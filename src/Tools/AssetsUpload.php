@@ -15,6 +15,7 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToWriteFile;
 use Statamic\Assets\AssetUploader;
 use Statamic\Contracts\Assets\AssetContainer as AssetContainerContract;
 use Statamic\Rules\AllowedFile;
@@ -103,6 +104,7 @@ class AssetsUpload extends Tool
         $file = $this->makeUploadedFile($contents, $basename);
         $asset = $container->makeAsset($path);
         $unreadable = false;
+        $refused = false;
 
         try {
             $this->validateAgainstContainerRules($container, $file);
@@ -114,11 +116,13 @@ class AssetsUpload extends Tool
             report($e);
 
             $unreadable = true;
+        } catch (UnableToWriteFile) {
+            $refused = true;
         } finally {
             @unlink($file->getPathname());
         }
 
-        if (! $container->disk()->exists($asset->path())) {
+        if ($refused || ! $container->disk()->exists($asset->path())) {
             $asset->deleteQuietly();
 
             throw new ToolException(sprintf("the disk did not store '%s' — nothing was created. It may be read-only, or out of space.", $path));
