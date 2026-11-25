@@ -451,3 +451,16 @@ it('gives a new set a fresh id when its id is 0 or sent twice', function () {
         ->and($ids[3])->toBe('keep0001')
         ->and(array_intersect($ids, ['same0001', '0']))->toBe([]);
 });
+
+it('refuses to change a key the global set stores outside its blueprint', function () {
+    Fixtures::site();
+    Fixtures::settings();
+
+    GlobalSet::findByHandle('settings')->in('en')->data(['site_name' => 'Acme', 'legacy_key' => 'old'])->save();
+
+    Server::actingAs(Fixtures::makeUser('edit settings globals'))
+        ->tool(GlobalsUpdate::class, ['handle' => 'settings', 'data' => ['legacy_key' => 'new']])
+        ->assertHasErrors(['legacy_key: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data']);
+
+    expect(GlobalSet::findByHandle('settings')->in('en')->get('legacy_key'))->toBe('old');
+});
