@@ -2,6 +2,7 @@
 
 namespace Danielgnh\StatamicMcp\Tools\Concerns;
 
+use Danielgnh\StatamicMcp\Support\IconName;
 use Danielgnh\StatamicMcp\Support\Sets;
 use Danielgnh\StatamicMcp\Support\TextEdit;
 use Danielgnh\StatamicMcp\Tools\ToolException;
@@ -20,6 +21,7 @@ use Statamic\Fieldtypes\Assets\Assets;
 use Statamic\Fieldtypes\Bard;
 use Statamic\Fieldtypes\Grid;
 use Statamic\Fieldtypes\Group;
+use Statamic\Fieldtypes\Icon;
 use Statamic\Fieldtypes\Replicator;
 use Statamic\Support\Arr;
 use Throwable;
@@ -51,6 +53,28 @@ trait ValidatesBlueprintData
                 count($reserved) === 1 ? '' : 's',
                 implode(', ', $reserved),
                 count($reserved) === 1 ? 'is' : 'are',
+            ));
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $stored
+     */
+    protected function rejectChangedKeysOutsideBlueprint(Blueprint $blueprint, array $data, array $stored): void
+    {
+        $handles = $blueprint->fields()->all()->keys()->all();
+
+        $changed = array_keys(array_filter(
+            Arr::except($data, $handles),
+            fn (mixed $value, int|string $key) => array_key_exists($key, $stored) && json_encode($this->normalize($value)) !== json_encode($this->normalize($stored[$key])),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        if ($changed !== []) {
+            throw new ToolException(sprintf(
+                '%s: stored here, but not a blueprint field. The Control Panel never changes such a key, so send it back unchanged or leave it out of data',
+                implode(', ', $changed),
             ));
         }
     }
@@ -202,6 +226,14 @@ trait ValidatesBlueprintData
 
         if ($fieldtype instanceof Assets) {
             $this->rejectMissingAssets($field, $value, $path, $stored);
+        }
+
+        if ($fieldtype instanceof Icon && ! is_string($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set, as a string");
+        }
+
+        if ($fieldtype instanceof Icon && IconName::leavesIconSet($value)) {
+            throw new ToolException("{$path} takes the name of an icon in its set — a path with '..' is refused");
         }
 
         return [];

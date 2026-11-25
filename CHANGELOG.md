@@ -29,8 +29,31 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   configured server does not extend `Danielgnh\StatamicMcp\Server` and so never
   loads add-on skills.
 
+### Changed
+
+- **`entries_update`, `terms_update`, and `globals_update` no longer change a
+  top-level key that has no blueprint field.** An entry can store keys its
+  blueprint doesn't define, such as `template`, `layout`, or `redirect`, set by
+  hand or left behind by a removed field. The tools took a new value for any
+  such key without validating it, so an agent with edit permission could pick
+  the view a public page renders with. The Control Panel never writes these
+  keys. They can still be sent back unchanged, so a raw read goes back whole,
+  and keys inside a set, a Grid row, or a Group work as before. A global set
+  without a blueprint is not checked.
+- **`entries_delete` refuses the home page of a tree with a root page,** for
+  the entry and for each localization that would go with it. The Control Panel
+  offers no delete for a home page either. See Fixed.
+- **`assets_upload` refuses a `source_url` that answers with a compressed
+  body.** See Security.
+
 ### Fixed
 
+- **Deleting the home page no longer breaks the collection.** `entries_delete`
+  on the root page of a structured collection answered with an internal error,
+  kept the entry, and stored a tree Statamic couldn't read: every page of the
+  collection answered 500, and every later write failed, until someone fixed
+  the tree file by hand. When no other page had children, the next page
+  silently became the home page.
 - **`assets_upload` answers a refused write with its own error on Statamic 6.43.**
   Statamic 6.43 throws when a disk refuses an upload, and a disk configured
   with `'throw' => true` does so on every version. The tool answered "An
@@ -38,6 +61,28 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   which the container then listed as an asset. It now answers "the disk did not
   store …" and removes the file that write left. The site's log has the disk's
   own error.
+
+### Security
+
+- **Augmented reads no longer return entries outside `resources` through
+  search results or wrapper objects.** A computed value holding site search
+  results, a cursor paginator, a `JsonResource`, or an object whose
+  `jsonSerialize()` returns an entry or a list of entries, came out of
+  `entries_get` with `format: augmented` in full, also for a collection MCP
+  doesn't expose. They are now filtered like any other relation. A resource
+  with its own `toArray()` keeps its fields when what it wraps is exposed.
+- **An `icon` field no longer reads files outside its icon set.** A value such
+  as `../../storage/plan` made an augmented read return the contents of any
+  `.svg` file the server can read. A write now refuses a value with `..` in its
+  path, or one that is not a string, and an augmented read returns `null` for a
+  stored one. Statamic itself
+  resolves the stored value when a template prints the field, so a value saved
+  before this release, or through the Control Panel, still renders there.
+- **`assets_upload` can no longer be made to inflate a small download into a
+  huge one.** The size cap counted compressed bytes while the body was
+  inflated in full: 400 KB on the wire became 400 MB and ended the PHP process
+  with a memory error. A compressed answer is no longer inflated. It is
+  refused, since the request never offers compression.
 
 ## [1.2.0] - 2026-11-19
 

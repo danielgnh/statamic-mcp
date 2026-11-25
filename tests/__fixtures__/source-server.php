@@ -31,4 +31,14 @@ if ($path === '/grows-past-the-cap') {
     exit;
 }
 
+if ($path === '/gzip-inflating-past-the-cap') {
+    $body = gzencode(str_repeat("\0", 8 * 1024 * 1024), 9);
+
+    header('Content-Encoding: gzip');
+    header('Content-Length: '.strlen($body));
+    echo $body;
+
+    exit;
+}
+
 echo 'PINNED';
