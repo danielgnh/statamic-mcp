@@ -26,6 +26,12 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   `laravel/mcp` below 1.3 updates both at once, as described in
   [UPGRADE.md](UPGRADE.md).
 
+### Fixed
+
+- **A refused upload says so again on Statamic 6.43 and newer.** Statamic now
+  throws when the disk refuses a write, and `assets_upload` answered "An
+  internal server error occurred." instead of "the disk did not store".
+
 ## [1.2.0] - 2026-11-19
 
 ### Added
