@@ -29,6 +29,12 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
   configured server does not extend `Danielgnh\StatamicMcp\Server` and so never
   loads add-on skills.
 
+### Fixed
+
+- **A refused upload says so again on Statamic 6.43 and newer.** Statamic now
+  throws when the disk refuses a write, and `assets_upload` answered "An
+  internal server error occurred." instead of "the disk did not store".
+
 ## [1.2.0] - 2026-11-19
 
 ### Added
