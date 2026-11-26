@@ -82,6 +82,35 @@ it('marks a pair inactive when every token is expired with no live refresh', fun
     expect((new ConnectionRepository)->all()->first()['active'])->toBeFalse();
 });
 
+it('leaves out a pair once every one of its access tokens is revoked', function () {
+    $client = OAuthFixtures::client();
+
+    OAuthFixtures::accessToken('user-1', $client, ['revoked' => true]);
+    OAuthFixtures::accessToken('user-1', $client, ['revoked' => true]);
+    OAuthFixtures::accessToken('user-2', $client);
+
+    expect((new ConnectionRepository)->all()->pluck('user_id')->all())->toBe(['user-2']);
+});
+
+it('keeps listing a pair whose access tokens are revoked while a refresh token is not, since the refresh grant checks only the refresh row', function () {
+    $client = OAuthFixtures::client();
+
+    OAuthFixtures::refreshToken(OAuthFixtures::accessToken('user-1', $client, ['revoked' => true]));
+
+    expect((new ConnectionRepository)->all())->toHaveCount(1);
+});
+
+it('keeps the first connection date when refreshes have revoked the older tokens', function () {
+    $this->freezeSecond();
+
+    $client = OAuthFixtures::client();
+
+    OAuthFixtures::accessToken('user-1', $client, ['revoked' => true, 'created_at' => now()->subDays(10)]);
+    OAuthFixtures::accessToken('user-1', $client, ['created_at' => now()->subHour()]);
+
+    expect((new ConnectionRepository)->all()->sole()['connected_at'])->toEqual(now()->subDays(10));
+});
+
 it('disconnects a pair by revoking its access AND refresh tokens', function () {
     $client = OAuthFixtures::client();
     $other = OAuthFixtures::client('ChatGPT');

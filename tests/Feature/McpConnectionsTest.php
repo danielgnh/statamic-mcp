@@ -64,6 +64,51 @@ it('lets a user disconnect their own connection, revoking access and refresh tok
         ->and($refreshModel::query()->find($refreshId)->revoked)->toBeTrue();
 });
 
+it('drops a disconnected connection from the list', function () {
+    $user = Fixtures::makeUser('access cp');
+
+    $client = OAuthFixtures::client('Zeta Connector');
+    OAuthFixtures::refreshToken(OAuthFixtures::accessToken((string) $user->id(), $client));
+
+    $this->actingAs($user)
+        ->delete(cp_route('mcp.connections.oauth.destroy', [$client, (string) $user->id()]))
+        ->assertRedirect(cp_route('mcp.connections.index'));
+
+    $this->actingAs($user)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertDontSee('Zeta Connector');
+});
+
+it('revokes the connections of a deleted user and drops them from the list', function () {
+    $super = Fixtures::makeSuper();
+    $other = Fixtures::makeUser();
+
+    $client = OAuthFixtures::client('Zeta Connector');
+    $tokenId = OAuthFixtures::accessToken((string) $other->id(), $client);
+    $refreshId = OAuthFixtures::refreshToken($tokenId);
+
+    $other->delete();
+
+    expect(Passport::tokenModel()::query()->find($tokenId)->revoked)->toBeTrue()
+        ->and(Passport::refreshTokenModel()::query()->find($refreshId)->revoked)->toBeTrue();
+
+    $this->actingAs($super)
+        ->get(cp_route('mcp.connections.index'))
+        ->assertOk()
+        ->assertDontSee('Zeta Connector');
+});
+
+it("leaves a deleted user's tokens on clients of another user provider alone", function () {
+    $other = Fixtures::makeUser();
+
+    $tokenId = OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client('Host API', 'customers'));
+
+    $other->delete();
+
+    expect(Passport::tokenModel()::query()->find($tokenId)->revoked)->toBeFalse();
+});
+
 it("lets a super admin disconnect anyone's connection", function () {
     $super = Fixtures::makeSuper();
     $other = Fixtures::makeUser();
@@ -233,13 +278,13 @@ it("shows a user's avatar image when the site has one for them", function () {
         ->assertSee(':user="'.Js::from(['id' => $other->id(), 'name' => null, 'avatar' => $other->avatar(), 'initials' => '?']).'"', false);
 });
 
-it('keeps the user id, without a link, once the user is deleted', function () {
+it('keeps the user id, without a link, when the user is removed without a delete event', function () {
     $super = Fixtures::makeSuper();
     $other = Fixtures::makeUser();
 
     OAuthFixtures::accessToken((string) $other->id(), OAuthFixtures::client());
 
-    $other->delete();
+    $other->deleteQuietly();
 
     $this->actingAs($super)
         ->get(cp_route('mcp.connections.index'))

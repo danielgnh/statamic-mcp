@@ -14,6 +14,7 @@ use Danielgnh\StatamicMcp\Middleware\AuthenticateMcpToken;
 use Danielgnh\StatamicMcp\Middleware\AuthenticateOAuth;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpEnabled;
 use Danielgnh\StatamicMcp\Middleware\EnsureMcpPermission;
+use Danielgnh\StatamicMcp\OAuth\ConnectionRepository;
 use Danielgnh\StatamicMcp\OAuth\PassportBearerGuard;
 use Danielgnh\StatamicMcp\OAuth\PassportKeys;
 use Danielgnh\StatamicMcp\Support\McpRoute;
@@ -23,6 +24,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Laravel\Mcp\Facades\Mcp;
@@ -33,6 +35,7 @@ use Laravel\Passport\Passport;
 use League\OAuth2\Server\AuthorizationServer;
 use League\OAuth2\Server\ResourceServer;
 use RuntimeException;
+use Statamic\Events\UserDeleted;
 use Statamic\Facades\Permission;
 use Statamic\Providers\AddonServiceProvider;
 
@@ -74,6 +77,8 @@ class ServiceProvider extends AddonServiceProvider
         $this->loadJsonTranslationsFrom(__DIR__.'/../lang');
 
         $this->registerPermission();
+
+        Event::listen(UserDeleted::class, fn (UserDeleted $event) => app(ConnectionRepository::class)->disconnectUser((string) $event->user->id()));
 
         if (! config('statamic.mcp.enabled')) {
             return;
