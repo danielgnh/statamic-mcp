@@ -394,7 +394,13 @@ Guidelines stay the place for anything every agent must read. They travel inside
 `statamic_overview` and `blueprints_get`, so every client gets them. A skill reaches the
 model only in clients that support skills, and only when the model decides to load it. At
 the time of writing, November 2026, support is in beta in Claude, Claude Code, and VS
-Code. A client without it lists each `SKILL.md` as a plain resource.
+Code. Claude Code loads skills from a server in an interactive session only: not with
+`claude -p`, not through the Agent SDK, and not when it connects through a custom
+`ANTHROPIC_BASE_URL`.
+
+A client without support lists each `SKILL.md` as a plain resource and none of the other
+files. The model can still read them, but only when `SKILL.md` gives their path, so name
+every file a skill needs in its text.
 
 ### Skills on your server class
 
