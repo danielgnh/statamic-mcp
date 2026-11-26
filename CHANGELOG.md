@@ -10,6 +10,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [1.3.0] - 2026-11-26
 
+![Skills, new in Statamic MCP 1.3: playbooks your agent loads when a task needs them. Claude Code loads the landing-page skill, reads its example file and starts from the example entry](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/skills.jpg)
+
 This release adds skills: playbooks with example files that a site or an add-on
 serves next to the tools, and that an agent loads only when a task calls for
 one. It needs `laravel/mcp` 1.3, see [UPGRADE.md](UPGRADE.md).

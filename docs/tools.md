@@ -402,6 +402,8 @@ A client without support lists each `SKILL.md` as a plain resource and none of t
 files. The model can still read them, but only when `SKILL.md` gives their path, so name
 every file a skill needs in its text.
 
+![How a skill loads: the model first sees only each skill's name and description, loads SKILL.md when a task matches, reads the example file it names, then works with the usual tools. Guidelines travel in every statamic_overview and blueprints_get, skills load on demand. A skill comes from a folder in $skills, a Skill class shown only to users with a permission, or an add-on](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-a-skill-loads.svg)
+
 ### What it looks like in a client
 
 Claude Code lists a skill as `<server>:<skill>`, so `statamic:landing-page` for a server
@@ -410,6 +412,8 @@ to name one. Asked "I need to build a landing page for a new campaign. What is t
 step?", Claude Code loads `statamic:landing-page`, reads the example entry the playbook
 names, and answers from both: start from the example, replace its copy, and read the
 pages blueprint before writing. From there it works with the same tools as always.
+
+![Claude Code, asked how to start a landing page for a new campaign, loads the skill statamic:landing-page, reads skill://landing-page/examples/hero-first.yaml and answers: start from the example entry, a hero block and a call-to-action block, and replace its copy](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/skill-in-claude-code.png)
 
 ### What to put in a skill
 

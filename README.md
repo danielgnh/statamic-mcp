@@ -202,6 +202,8 @@ The site's own `tools()` runs after the add-ons', so it can still remove or repl
 
 Guidelines reach an agent on every task. A skill is for the rest: a playbook an agent needs for one kind of job, with the example files that go with it. It is a folder with a `SKILL.md` and whatever that file refers to. A client that supports skills over MCP shows the model only each skill's name and description, and loads the rest when a task calls for it.
 
+![How a skill loads: the model first sees only each skill's name and description, loads SKILL.md when a task matches, reads the example file it names, then works with the usual tools. Guidelines travel in every statamic_overview and blueprints_get, skills load on demand. A skill comes from a folder in $skills, a Skill class shown only to users with a permission, or an add-on](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-a-skill-loads.svg)
+
 ```
 resources/mcp-skills/landing-page/
 ├── SKILL.md
@@ -220,6 +222,8 @@ class StatamicServer extends Server
 ```
 
 Now ask Claude Code for a landing page for the new campaign. It loads `statamic:landing-page`, reads the example entry the playbook names, and starts from that entry instead of an empty page. Nobody has to name the skill.
+
+![Claude Code, asked how to start a landing page for a new campaign, loads the skill statamic:landing-page, reads skill://landing-page/examples/hero-first.yaml and answers: start from the example entry, a hero block and a call-to-action block, and replace its copy](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/skill-in-claude-code.png)
 
 What a skill can hold:
 
