@@ -402,6 +402,74 @@ A client without support lists each `SKILL.md` as a plain resource and none of t
 files. The model can still read them, but only when `SKILL.md` gives their path, so name
 every file a skill needs in its text.
 
+![How a skill loads: the model first sees only each skill's name and description, loads SKILL.md when a task matches, reads the example file it names, then works with the usual tools. Guidelines travel in every statamic_overview and blueprints_get, skills load on demand. A skill comes from a folder in $skills, a Skill class shown only to users with a permission, or an add-on](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/how-a-skill-loads.svg)
+
+### What it looks like in a client
+
+Claude Code lists a skill as `<server>:<skill>`, so `statamic:landing-page` for a server
+added under the name `statamic`. Type `/` to see the skills a server offers. Nobody has
+to name one. Asked "I need to build a landing page for a new campaign. What is the first
+step?", Claude Code loads `statamic:landing-page`, reads the example entry the playbook
+names, and answers from both: start from the example, replace its copy, and read the
+pages blueprint before writing. From there it works with the same tools as always.
+
+![Claude Code, asked how to start a landing page for a new campaign, loads the skill statamic:landing-page, reads skill://landing-page/examples/hero-first.yaml and answers: start from the example entry, a hero block and a call-to-action block, and replace its copy](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/skill-in-claude-code.png)
+
+### What to put in a skill
+
+A skill pays off for guidance that is long, comes with example files, and matters for
+some tasks only:
+
+| Skill | What it holds |
+|---|---|
+| `landing-page` | The block order your campaign pages follow, and a sample entry per page type to start from. |
+| `translate-page` | Which fields get translated, a glossary file, and when to call `entries_localize`. |
+| `job-posting` | The checklist for a vacancy: required fields, tone, the terms to set, and who publishes. |
+| `image-alt-texts` | How to walk `assets_list` and write alt text your way with `assets_update`, with good and bad examples. |
+| `form-report` | How to summarize a form's submissions from `submissions_list`, and what counts as spam. |
+| `seo-audit` | Shipped by an add-on: the checks to run over a collection, and the fields the add-on keeps its data in. |
+
+A rule about one field belongs in that field's `instructions`. A rule every agent needs
+on every task belongs in the guidelines.
+
+A complete skill is short. This one makes an agent build campaign pages the way the site
+already does:
+
+```
+resources/mcp-skills/landing-page/
+├── SKILL.md
+└── examples/
+    ├── hero-first.yaml
+    └── event.yaml
+```
+
+```markdown
+---
+name: landing-page
+description: Build a landing page from the page builder blocks. Use for a new campaign, product, or event page.
+---
+
+# Landing pages
+
+1. Read the example closest to the request: `examples/hero-first.yaml` for a campaign
+   or a product, `examples/event.yaml` for an event. Never start from an empty entry.
+2. Call `blueprints_get` for the `pages` collection, so the fields and the block
+   instructions are current.
+3. Create the page with `entries_create`. Keep the block order of the example and
+   replace all of its copy.
+4. Call `entries_preview` and give the editor the link. Leave publishing to the editor.
+```
+
+```yaml
+# examples/hero-first.yaml
+title: 'Spring campaign'
+page_builder:
+  - type: hero
+    headline: 'Spring is here'
+  - type: cta
+    label: 'Buy now'
+```
+
 ### Skills on your server class
 
 List the folders in `$skills` on the server class the README describes. A relative path

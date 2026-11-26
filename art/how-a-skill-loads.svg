@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="782" viewBox="0 0 760 782" role="img" aria-labelledby="t d" font-family='system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'>
+<title id="t">How a skill loads</title>
+<desc id="d">The model first sees only each skill's name and description, at most 1,024 characters. When a task matches, the model loads SKILL.md, the playbook. It reads the example file the playbook names, then works with the usual tools as the same Statamic user. Guidelines are different: they travel inside statamic_overview and blueprints_get, so every client reads them every time. A skill can come from a folder in $skills, from a Skill class whose shouldRegister() decides who sees it, or from an add-on through Server::registerAddonSkills().</desc>
+<rect x="0.5" y="0.5" width="759" height="781" rx="12" fill="#ffffff" stroke="rgba(11,11,11,0.10)"/>
+<text x="32" y="46" font-size="17" fill="#0b0b0b" font-weight="600">How a skill loads</text>
+<text x="32" y="68" font-size="13" fill="#52514e">The model starts with a name and a description. The rest comes when a task needs it.</text>
+
+<rect x="32" y="96" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="120" r="11" fill="#1c5cab"/>
+<text x="56" y="124.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">1</text>
+<text x="76" y="125" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>skills/list</text>
+<text x="76" y="144" font-size="11.5" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>&quot;frontmatter&quot;: {&quot;name&quot;: &quot;landing-page&quot;,</text>
+<text x="186.4" y="159" font-size="11.5" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>&quot;description&quot;: &quot;…&quot;}</text>
+<line x1="428" y1="132" x2="452" y2="132" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 128 L458 132 L452 136 Z" fill="#898781"/>
+<text x="470" y="122" font-size="13" fill="#52514e">The model sees each skill's name</text>
+<text x="470" y="140" font-size="13" fill="#52514e">and description, nothing more</text>
+<text x="470" y="160" font-size="12.5" fill="#0b0b0b" font-weight="600">Descriptions: at most 1,024 characters</text>
+
+<rect x="32" y="184" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="208" r="11" fill="#1c5cab"/>
+<text x="56" y="212.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">2</text>
+<text x="76" y="213" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>SKILL.md</text>
+<text x="76" y="236" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>skill://landing-page/SKILL.md</text>
+<line x1="428" y1="220" x2="452" y2="220" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 216 L458 220 L452 224 Z" fill="#898781"/>
+<text x="470" y="210" font-size="13" fill="#52514e">A task matches the description,</text>
+<text x="470" y="228" font-size="13" fill="#52514e">so the model loads the playbook</text>
+<text x="470" y="248" font-size="12.5" fill="#0b0b0b" font-weight="600">Start from examples/hero-first.yaml</text>
+
+<rect x="32" y="272" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="296" r="11" fill="#1c5cab"/>
+<text x="56" y="300.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">3</text>
+<text x="76" y="301" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>examples/hero-first.yaml</text>
+<text x="76" y="324" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>skill://landing-page/examples/…</text>
+<line x1="428" y1="308" x2="452" y2="308" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 304 L458 308 L452 312 Z" fill="#898781"/>
+<text x="470" y="298" font-size="13" fill="#52514e">The file the playbook names: an</text>
+<text x="470" y="316" font-size="13" fill="#52514e">entry with a hero and a CTA block</text>
+<text x="470" y="336" font-size="12.5" fill="#0b0b0b" font-weight="600">Read because SKILL.md names it</text>
+
+<rect x="32" y="360" width="388" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<circle cx="56" cy="384" r="11" fill="#1c5cab"/>
+<text x="56" y="388.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">4</text>
+<text x="76" y="389" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>blueprints_get, entries_create</text>
+<text x="76" y="412" font-size="12" fill="#52514e">The usual tools, as the same Statamic user</text>
+<line x1="428" y1="396" x2="452" y2="396" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 392 L458 396 L452 400 Z" fill="#898781"/>
+<text x="470" y="386" font-size="13" fill="#52514e">The work goes through the tools</text>
+<text x="470" y="404" font-size="13" fill="#52514e">and the user's permissions</text>
+<text x="470" y="424" font-size="12.5" fill="#0b0b0b" font-weight="600">New entries save as drafts</text>
+
+<line x1="32" y1="452" x2="728" y2="452" stroke="#e1e0d9" stroke-width="1"/>
+<text x="32" y="480" font-size="13" fill="#0b0b0b" font-weight="600">Guidelines and skills</text>
+
+<rect x="32" y="494" width="388" height="56" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<rect x="32" y="494" width="5" height="56" rx="2" fill="#86b6ef"/>
+<text x="52" y="517" font-size="13" fill="#0b0b0b" font-weight="600">Guidelines: every time</text>
+<text x="52" y="537" font-size="12" fill="#52514e">Rules every agent must follow</text>
+<line x1="428" y1="522" x2="452" y2="522" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 518 L458 522 L452 526 Z" fill="#898781"/>
+<text x="470" y="517" font-size="13" fill="#52514e">Inside statamic_overview and</text>
+<text x="470" y="535" font-size="13" fill="#52514e">blueprints_get, for every client</text>
+
+<rect x="32" y="560" width="388" height="56" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<rect x="32" y="560" width="5" height="56" rx="2" fill="#1c5cab"/>
+<text x="52" y="583" font-size="13" fill="#0b0b0b" font-weight="600">Skills: on demand</text>
+<text x="52" y="603" font-size="12" fill="#52514e">A playbook for one kind of task</text>
+<line x1="428" y1="588" x2="452" y2="588" stroke="#898781" stroke-width="1.5"/>
+<path d="M452 584 L458 588 L452 592 Z" fill="#898781"/>
+<text x="470" y="583" font-size="13" fill="#52514e">Loaded when a task matches, in</text>
+<text x="470" y="601" font-size="13" fill="#52514e">clients that support skills</text>
+
+<line x1="32" y1="636" x2="728" y2="636" stroke="#e1e0d9" stroke-width="1"/>
+<text x="32" y="664" font-size="13" fill="#0b0b0b" font-weight="600">Where a skill comes from</text>
+
+<rect x="32" y="678" width="224" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<text x="48" y="703" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>landing-page</text>
+<text x="48" y="723" font-size="12" fill="#52514e">A folder in <tspan font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>$skills</tspan></text>
+<text x="48" y="740" font-size="12" fill="#52514e">Every user with Access MCP</text>
+
+<rect x="268" y="678" width="224" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<text x="284" y="703" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>pricing-playbook</text>
+<text x="284" y="723" font-size="12" fill="#52514e">A <tspan font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>Skill</tspan> class</text>
+<text x="284" y="740" font-size="12" fill="#52514e">Only users with a permission</text>
+
+<rect x="504" y="678" width="224" height="72" rx="8" fill="#f6f8fc" stroke="rgba(11,11,11,0.10)"/>
+<text x="520" y="703" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>seo-audit</text>
+<text x="520" y="723" font-size="12" fill="#52514e">From an add-on, through</text>
+<text x="520" y="740" font-size="11" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>registerAddonSkills()</text>
+</svg>
