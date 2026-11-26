@@ -200,7 +200,35 @@ The site's own `tools()` runs after the add-ons', so it can still remove or repl
 
 ## Skills
 
-A skill is a folder with a `SKILL.md` playbook and its example files, which a client that supports skills over MCP loads only when the model needs it. List skill folders in `$skills` on your server class, or register them from an add-on with `Server::registerAddonSkills()`. Client support is still in beta, so guidelines stay the place for what every agent must read. A folder skill is readable by every user with Access MCP; a `Skill` class with `shouldRegister()` limits one to some users. [docs/tools.md](docs/tools.md#skills) covers the folder layout, per-user skills, add-ons, and what `mcp:doctor` checks.
+Guidelines reach an agent on every task. A skill is for the rest: a playbook an agent needs for one kind of job, with the example files that go with it. It is a folder with a `SKILL.md` and whatever that file refers to. A client that supports skills over MCP shows the model only each skill's name and description, and loads the rest when a task calls for it.
+
+```
+resources/mcp-skills/landing-page/
+├── SKILL.md
+└── examples/hero-first.yaml
+```
+
+List the folder on your server class:
+
+```php
+class StatamicServer extends Server
+{
+    protected array $skills = [
+        'mcp-skills/landing-page',
+    ];
+}
+```
+
+Now ask Claude Code for a landing page for the new campaign. It loads `statamic:landing-page`, reads the example entry the playbook names, and starts from that entry instead of an empty page. Nobody has to name the skill.
+
+What a skill can hold:
+
+- A page type built from your blocks, with a sample entry to start from.
+- How a page gets translated, with the glossary as a file.
+- The checklist for a job posting, a press release, or a product launch.
+- How to write alt text for a folder of images in your style.
+
+An add-on ships skills of its own with `Server::registerAddonSkills()`, and a `Skill` class with `shouldRegister()` limits a skill to users with a permission. A folder skill is readable by every user with Access MCP, and `mcp:doctor` lists every skill and warns about the ones it cannot serve. Client support is in beta: Claude Code loads skills in interactive sessions, and a client without support sees each `SKILL.md` as a plain resource. So guidelines stay the place for what every agent must read. [docs/tools.md](docs/tools.md#skills) has a complete skill, per-user skills, add-ons, and what the doctor checks.
 
 ## Configuration
 

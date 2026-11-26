@@ -8,13 +8,24 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+This release adds skills: playbooks with example files that a site or an add-on
+serves next to the tools, and that an agent loads only when a task calls for
+one. It needs `laravel/mcp` 1.3, see [UPGRADE.md](UPGRADE.md).
+
 ### Added
 
-- **Skills.** A site lists skill folders in `$skills` on its server class, and
-  an add-on registers its own with `Server::registerAddonSkills()`. A `Skill`
-  class with `shouldRegister()` limits a skill to some users. Skills run behind
-  the same authentication and Access MCP check as the tools. See "Skills" in
-  `docs/tools.md`.
+- **Skills.** A skill is a folder with a `SKILL.md` and the files it refers
+  to, such as a `landing-page` playbook with the block order of a campaign page
+  and a sample entry. A client that supports skills over MCP shows the model
+  each skill's name and description and loads the rest on demand: asked for a
+  landing page, Claude Code loads `statamic:landing-page` and starts from the
+  sample entry, without anyone naming the skill. A site lists skill folders in
+  `$skills` on its server class, and an add-on registers its own with
+  `Server::registerAddonSkills()`. A `Skill` class with `shouldRegister()`
+  limits a skill to some users. Skills run behind the same authentication and
+  Access MCP check as the tools. Guidelines stay the place for what every agent
+  must read, because client support for skills is in beta. See "Skills" in
+  `docs/tools.md` for a complete skill and more ideas.
 - **The doctor checks the skills.** `mcp:doctor` lists each skill with its
   source, names the ones laravel/mcp skips with the reason, and warns about
   skill folders that anyone can download or an upload can rewrite.
