@@ -10,7 +10,6 @@ use Danielgnh\StatamicMcp\Tokens\TokenRepository;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\File;
 use Illuminate\Testing\TestResponse;
-use Laravel\Mcp\Server\Skill;
 
 function addonSkillsPost(string $method, array $params = [], string ...$permissions): TestResponse
 {
@@ -23,13 +22,6 @@ function addonSkillsPost(string $method, array $params = [], string ...$permissi
         'method' => $method,
         'params' => $params === [] ? (object) [] : $params,
     ]);
-}
-
-function skipWithoutSkills(): void
-{
-    if (! class_exists(Skill::class)) {
-        test()->markTestSkipped('laravel/mcp serves skills from 1.3.');
-    }
 }
 
 it('registers add-on skills once each, in the order the add-ons booted', function () {
@@ -48,13 +40,11 @@ it('serves the same tools whether or not add-ons registered skills', function ()
 });
 
 it('serves no skill method on a site without skills', function () {
-    skipWithoutSkills();
 
     expect(addonSkillsPost('skills/list')->json('error.code'))->toBe(-32601);
 });
 
 it('serves an add-on skill folder and an add-on skill class on a site without a server class of its own', function () {
-    skipWithoutSkills();
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit', PricingPlaybook::class);
 
     $uris = collect(addonSkillsPost('skills/list', [], 'edit pricing entries')->assertOk()->json('result.skills'))->pluck('uri');
@@ -66,7 +56,6 @@ it('serves an add-on skill folder and an add-on skill class on a site without a 
 });
 
 it('skips a broken add-on skill, reports it, and keeps the other skills and every tool working', function () {
-    skipWithoutSkills();
     Exceptions::fake();
 
     $broken = storage_path('framework/testing/skills/broken');
@@ -91,7 +80,6 @@ it('skips a broken add-on skill, reports it, and keeps the other skills and ever
 });
 
 it('serves the first of two add-on skills with one name', function () {
-    skipWithoutSkills();
     Exceptions::fake();
     Server::registerAddonSkills(SkillsServer::FIXTURES.'/seo-audit', SkillsServer::FIXTURES.'/shadow/seo-audit');
 
@@ -101,7 +89,6 @@ it('serves the first of two add-on skills with one name', function () {
 });
 
 it('keeps every tool working when an add-on skill breaks the skill methods', function (string $skill) {
-    skipWithoutSkills();
     Exceptions::fake();
     Server::registerAddonSkills($skill);
 

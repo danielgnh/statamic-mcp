@@ -60,8 +60,7 @@ class Doctor extends Command
         $this->checkEnabled();
         $this->checkRoute();
         if ($server = $this->checkServer()) {
-            $this->checkTools($server);
-            $this->checkSkills($server);
+            $this->checkSkills($server, $this->checkTools($server));
         }
 
         $this->checkMiddleware();
@@ -163,7 +162,7 @@ class Doctor extends Command
     /**
      * @param  class-string<McpServer>  $server
      */
-    protected function checkTools(string $server): void
+    protected function checkTools(string $server): ?McpServer
     {
         $addonTools = Server::registeredAddonTools();
 
@@ -182,7 +181,7 @@ class Doctor extends Command
         } catch (Throwable $e) {
             $this->problem("The MCP server cannot start ({$e->getMessage()}) — every MCP request answers 500 until this is fixed. If it names a tool class, remove that class from your server's tools(), or update or remove the add-on that registers it.");
 
-            return;
+            return null;
         }
 
         $tools = collect((fn (): array => $this->tools)->call($instance))
@@ -244,12 +243,14 @@ class Doctor extends Command
                 $this->line("       Add-on tool class {$class} is not served. read_only leaves out add-on tools without #[IsReadOnly] on their own class, and the server's tools() can remove them.");
             }
         }
+
+        return $instance;
     }
 
     /**
      * @param  class-string<McpServer>  $server
      */
-    protected function checkSkills(string $server): void
+    protected function checkSkills(string $server, ?McpServer $instance): void
     {
         $addonSkills = Server::registeredAddonSkills();
 
@@ -264,46 +265,34 @@ class Doctor extends Command
             $addonSkills = [];
         }
 
-        try {
-            $instance = app($server, ['transport' => new FakeTransporter]);
-            $instance->start();
-        } catch (Throwable) {
+        if (! $instance instanceof McpServer) {
             return;
         }
 
-        $skills = property_exists($instance, 'skills') ? (fn (): array => $this->skills)->call($instance) : [];
-
-        if (! class_exists(Skill::class)) {
-            $configured = count(array_unique([...array_filter($skills, is_string(...)), ...$addonSkills])) + count(array_filter($skills, is_object(...)));
-
-            if ($configured > 0) {
-                $this->warn("[WARN] {$configured} skill(s) are configured, but the installed laravel/mcp does not serve skills. Add laravel/mcp:^1.3 to the site's composer.json.");
-            }
-
-            return;
-        }
+        $skills = (fn (): array => $this->skills)->call($instance);
 
         if ($skills === []) {
             return;
         }
 
+        $breaksEverySkill = 'every skills/list, skills/get and resources/list, and every resources/read of a skill file, fails';
         $taken = [];
-        $hiddenLabels = [];
         $lines = [];
         $healthy = true;
 
         foreach ($skills as $entry) {
             $label = is_string($entry) ? $entry : get_debug_type($entry);
+            $fromAddon = in_array($entry, $addonSkills, true);
 
             try {
                 $skill = match (true) {
                     $entry instanceof Skill => $entry,
-                    is_string($entry) && is_subclass_of($entry, Skill::class) => app($entry),
+                    is_subclass_of($entry, Skill::class) => app($entry),
                     default => new DirectorySkill($entry),
                 };
             } catch (Throwable $e) {
                 $healthy = false;
-                $this->problem(sprintf('Skill %s cannot be built (%s) — every skills/list, skills/get and resources/list, and every resources/read of a skill file, fails while it is registered. Fix what it needs, or remove it.', $label, $e->getMessage()));
+                $this->problem(sprintf('Skill %s cannot be built (%s) — %s while it is registered. Fix what it needs, or remove it.', $label, $e->getMessage(), $breaksEverySkill));
 
                 continue;
             }
@@ -314,12 +303,12 @@ class Doctor extends Command
                 $hidden = ! $skill->eligibleForRegistration();
             } catch (Throwable $e) {
                 $healthy = false;
-                $this->warn(sprintf('[WARN] Skill %s: its shouldRegister() throws here (%s). If it throws in a request too, every skills/list, skills/get and resources/list fails, and so does every resources/read of a skill file. One that reads the request user can throw only in the console, where there is none.', $label, $e->getMessage()));
+                $this->warn(sprintf('[WARN] Skill %s: its shouldRegister() throws here (%s). If it throws in a request too, %s. One that reads the request user can throw only in the console, where there is none.', $label, $e->getMessage(), $breaksEverySkill));
             }
 
             try {
                 $skill->files();
-                $uri = $skill->toArray()['uri'];
+                $uri = $skill->uri();
             } catch (InvalidArgumentException $e) {
                 $healthy = false;
                 $this->warn(sprintf('[WARN] Skill %s is not served (%s). laravel/mcp skips it and writes the reason to the log.', $label, $e->getMessage()));
@@ -327,36 +316,26 @@ class Doctor extends Command
                 continue;
             } catch (Throwable $e) {
                 $healthy = false;
-                $this->problem(sprintf('Skill %s cannot be read (%s) — every skills/list, skills/get and resources/list, and every resources/read of a skill file, fails while it is registered. Fix its folder, or remove it.', $label, $e->getMessage()));
+                $this->problem(sprintf('Skill %s cannot be read (%s) — %s while it is registered. Fix its folder, or remove it.', $label, $e->getMessage(), $breaksEverySkill));
 
                 continue;
             }
 
-            if (isset($taken[$uri]) && in_array($taken[$uri], $hiddenLabels, true)) {
-                $healthy = false;
-                $this->warn(sprintf("[WARN] Skill %s takes %s after %s, so it is served to every user that one's shouldRegister() refuses. Rename one of the two folders and its name in SKILL.md.", $label, $uri, $taken[$uri]));
+            if ($first = $taken[$uri] ?? null) {
+                if ($first['hidden']) {
+                    $healthy = false;
+                    $this->warn(sprintf("[WARN] Skill %s takes %s after %s, so it is served to every user that one's shouldRegister() refuses. Rename one of the two folders and its name in SKILL.md.", $label, $uri, $first['label']));
+                } elseif ($fromAddon && ! $first['addon']) {
+                    $lines[] = sprintf('       Add-on skill %s is replaced: %s comes first and takes %s.', $label, $first['label'], $uri);
+                } else {
+                    $healthy = false;
+                    $this->warn(sprintf('[WARN] Skill %s is not served: %s comes first and takes %s. Rename one of the two folders and its name in SKILL.md.', $label, $first['label'], $uri));
+                }
 
                 continue;
             }
 
-            if (isset($taken[$uri]) && in_array($entry, $addonSkills, true) && ! in_array($taken[$uri], $addonSkills, true)) {
-                $lines[] = sprintf('       Add-on skill %s is replaced: %s comes first and takes %s.', $label, $taken[$uri], $uri);
-
-                continue;
-            }
-
-            if (isset($taken[$uri])) {
-                $healthy = false;
-                $this->warn(sprintf('[WARN] Skill %s is not served: %s comes first and takes %s. Rename one of the two folders and its name in SKILL.md.', $label, $taken[$uri], $uri));
-
-                continue;
-            }
-
-            $taken[$uri] = $label;
-
-            if ($hidden) {
-                $hiddenLabels[] = $label;
-            }
+            $taken[$uri] = ['label' => $label, 'hidden' => $hidden, 'addon' => $fromAddon];
 
             if ($exposure = $this->writableByOthers($skill->directory())) {
                 $healthy = false;
@@ -365,7 +344,7 @@ class Doctor extends Command
 
             $lines[] = sprintf(
                 '       %s %s: %s%s',
-                in_array($entry, $addonSkills, true) ? 'Add-on skill' : 'Skill',
+                $fromAddon ? 'Add-on skill' : 'Skill',
                 $uri,
                 $label,
                 $hidden ? ' (its shouldRegister() hides it here)' : '',
