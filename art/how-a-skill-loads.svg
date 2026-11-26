@@ -9,7 +9,8 @@
 <circle cx="56" cy="120" r="11" fill="#1c5cab"/>
 <text x="56" y="124.5" font-size="12" fill="#ffffff" font-weight="600" text-anchor="middle">1</text>
 <text x="76" y="125" font-size="13" fill="#0b0b0b" font-weight="600" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>skills/list</text>
-<text x="76" y="148" font-size="12" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>{&quot;name&quot;: &quot;landing-page&quot;, &quot;description&quot;: &quot;…&quot;}</text>
+<text x="76" y="144" font-size="11.5" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>&quot;frontmatter&quot;: {&quot;name&quot;: &quot;landing-page&quot;,</text>
+<text x="186.4" y="159" font-size="11.5" fill="#52514e" font-family='ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'>&quot;description&quot;: &quot;…&quot;}</text>
 <line x1="428" y1="132" x2="452" y2="132" stroke="#898781" stroke-width="1.5"/>
 <path d="M452 128 L458 132 L452 136 Z" fill="#898781"/>
 <text x="470" y="122" font-size="13" fill="#52514e">The model sees each skill's name</text>
