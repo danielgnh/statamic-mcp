@@ -8,6 +8,8 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-26
+
 This release adds skills: playbooks with example files that a site or an add-on
 serves next to the tools, and that an agent loads only when a task calls for
 one. It needs `laravel/mcp` 1.3, see [UPGRADE.md](UPGRADE.md).
@@ -1297,7 +1299,8 @@ Initial release.
   and working-copy files on disk as orphans — the Control Panel behaves the
   same way.
 
-[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/danielgnh/statamic-mcp/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/danielgnh/statamic-mcp/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/danielgnh/statamic-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/danielgnh/statamic-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/danielgnh/statamic-mcp/compare/v0.9.1...v1.0.0
