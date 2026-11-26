@@ -8,7 +8,7 @@
 
 Statamic MCP lets AI clients like Claude Code, Cursor, claude.ai, and ChatGPT read and write your Statamic 6 content: entries, taxonomy terms, globals, assets, and navigation menus, and read the submissions your forms collect. Every request runs as a real Statamic user, so the roles you already manage in the Control Panel decide what an agent can do.
 
-It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package, version 1.1.2 or newer. Coming from 0.x? [UPGRADE.md](UPGRADE.md) has the steps, and [CHANGELOG.md](CHANGELOG.md) lists every change.
+It's built on Laravel's [`laravel/mcp`](https://laravel.com/docs/mcp) package, version 1.3 or newer. Coming from 0.x? [UPGRADE.md](UPGRADE.md) has the steps, and [CHANGELOG.md](CHANGELOG.md) lists every change.
 
 ## Requirements
 
@@ -197,6 +197,10 @@ public function bootAddon(): void
 ```
 
 The site's own `tools()` runs after the add-ons', so it can still remove or replace their tools. With `read_only` on, add-on tools that do not declare `#[IsReadOnly]` are left out. The `method_exists()` check keeps the add-on working on sites without this addon or with a version before 1.2. [docs/tools.md](docs/tools.md#tools-from-an-add-on) covers tool names, what breaks the server, and testing.
+
+## Skills
+
+A skill is a folder with a `SKILL.md` playbook and its example files, which a client that supports skills over MCP loads only when the model needs it. List skill folders in `$skills` on your server class, or register them from an add-on with `Server::registerAddonSkills()`. Client support is still in beta, so guidelines stay the place for what every agent must read. A folder skill is readable by every user with Access MCP; a `Skill` class with `shouldRegister()` limits one to some users. [docs/tools.md](docs/tools.md#skills) covers the folder layout, per-user skills, add-ons, and what `mcp:doctor` checks.
 
 ## Configuration
 

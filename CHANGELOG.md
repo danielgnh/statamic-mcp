@@ -8,8 +8,23 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Added
+
+- **Skills.** A site lists skill folders in `$skills` on its server class, and
+  an add-on registers its own with `Server::registerAddonSkills()`. A `Skill`
+  class with `shouldRegister()` limits a skill to some users. Skills run behind
+  the same authentication and Access MCP check as the tools. See "Skills" in
+  `docs/tools.md`.
+- **The doctor checks the skills.** `mcp:doctor` lists each skill with its
+  source, names the ones laravel/mcp skips with the reason, and warns about
+  skill folders that anyone can download or an upload can rewrite.
+
 ### Changed
 
+- **Breaking: requires `laravel/mcp` 1.3 or newer.** 1.3.0 is the first
+  release that serves skills. A site whose own `composer.json` pins
+  `laravel/mcp` below 1.3 updates both at once, as described in
+  [UPGRADE.md](UPGRADE.md).
 - **`entries_update`, `terms_update`, and `globals_update` no longer change a
   top-level key that has no blueprint field.** An entry can store keys its
   blueprint doesn't define, such as `template`, `layout`, or `redirect`, set by

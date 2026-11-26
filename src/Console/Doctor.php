@@ -21,9 +21,13 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Laravel\Mcp\Server as McpServer;
+use Laravel\Mcp\Server\Skill;
+use Laravel\Mcp\Server\Skills\DirectorySkill;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use PDOException;
 use Statamic\Console\RunsInPlease;
+use Statamic\Facades\AssetContainer;
 use Statamic\Facades\User;
 use Throwable;
 use TypeError;
@@ -56,7 +60,7 @@ class Doctor extends Command
         $this->checkEnabled();
         $this->checkRoute();
         if ($server = $this->checkServer()) {
-            $this->checkTools($server);
+            $this->checkSkills($server, $this->checkTools($server));
         }
 
         $this->checkMiddleware();
@@ -158,7 +162,7 @@ class Doctor extends Command
     /**
      * @param  class-string<McpServer>  $server
      */
-    protected function checkTools(string $server): void
+    protected function checkTools(string $server): ?McpServer
     {
         $addonTools = Server::registeredAddonTools();
 
@@ -177,7 +181,7 @@ class Doctor extends Command
         } catch (Throwable $e) {
             $this->problem("The MCP server cannot start ({$e->getMessage()}) — every MCP request answers 500 until this is fixed. If it names a tool class, remove that class from your server's tools(), or update or remove the add-on that registers it.");
 
-            return;
+            return null;
         }
 
         $tools = collect((fn (): array => $this->tools)->call($instance))
@@ -239,6 +243,151 @@ class Doctor extends Command
                 $this->line("       Add-on tool class {$class} is not served. read_only leaves out add-on tools without #[IsReadOnly] on their own class, and the server's tools() can remove them.");
             }
         }
+
+        return $instance;
+    }
+
+    /**
+     * @param  class-string<McpServer>  $server
+     */
+    protected function checkSkills(string $server, ?McpServer $instance): void
+    {
+        $addonSkills = Server::registeredAddonSkills();
+
+        if ($addonSkills !== [] && ! is_a($server, Server::class, true)) {
+            $this->warn(sprintf(
+                '[WARN] Add-ons registered skills (%s), but %s does not extend %s, so the AI does not get them. Extend it, or list them in $skills on your server class.',
+                implode(', ', $addonSkills),
+                $server,
+                Server::class,
+            ));
+
+            $addonSkills = [];
+        }
+
+        if (! $instance instanceof McpServer) {
+            return;
+        }
+
+        $skills = (fn (): array => $this->skills)->call($instance);
+
+        if ($skills === []) {
+            return;
+        }
+
+        $breaksEverySkill = 'every skills/list, skills/get and resources/list, and every resources/read of a skill file, fails';
+        $taken = [];
+        $lines = [];
+        $healthy = true;
+
+        foreach ($skills as $entry) {
+            $label = is_string($entry) ? $entry : get_debug_type($entry);
+            $fromAddon = in_array($entry, $addonSkills, true);
+
+            try {
+                $skill = match (true) {
+                    $entry instanceof Skill => $entry,
+                    is_subclass_of($entry, Skill::class) => app($entry),
+                    default => new DirectorySkill($entry),
+                };
+            } catch (Throwable $e) {
+                $healthy = false;
+                $this->problem(sprintf('Skill %s cannot be built (%s) — %s while it is registered. Fix what it needs, or remove it.', $label, $e->getMessage(), $breaksEverySkill));
+
+                continue;
+            }
+
+            $hidden = false;
+
+            try {
+                $hidden = ! $skill->eligibleForRegistration();
+            } catch (Throwable $e) {
+                $healthy = false;
+                $this->warn(sprintf('[WARN] Skill %s: its shouldRegister() throws here (%s). If it throws in a request too, %s. One that reads the request user can throw only in the console, where there is none.', $label, $e->getMessage(), $breaksEverySkill));
+            }
+
+            try {
+                $skill->files();
+                $uri = $skill->uri();
+            } catch (InvalidArgumentException $e) {
+                $healthy = false;
+                $this->warn(sprintf('[WARN] Skill %s is not served (%s). laravel/mcp skips it and writes the reason to the log.', $label, $e->getMessage()));
+
+                continue;
+            } catch (Throwable $e) {
+                $healthy = false;
+                $this->problem(sprintf('Skill %s cannot be read (%s) — %s while it is registered. Fix its folder, or remove it.', $label, $e->getMessage(), $breaksEverySkill));
+
+                continue;
+            }
+
+            if ($first = $taken[$uri] ?? null) {
+                if ($first['hidden']) {
+                    $healthy = false;
+                    $this->warn(sprintf("[WARN] Skill %s takes %s after %s, so it is served to every user that one's shouldRegister() refuses. Rename one of the two folders and its name in SKILL.md.", $label, $uri, $first['label']));
+                } elseif ($fromAddon && ! $first['addon']) {
+                    $lines[] = sprintf('       Add-on skill %s is replaced: %s comes first and takes %s.', $label, $first['label'], $uri);
+                } else {
+                    $healthy = false;
+                    $this->warn(sprintf('[WARN] Skill %s is not served: %s comes first and takes %s. Rename one of the two folders and its name in SKILL.md.', $label, $first['label'], $uri));
+                }
+
+                continue;
+            }
+
+            $taken[$uri] = ['label' => $label, 'hidden' => $hidden, 'addon' => $fromAddon];
+
+            if ($exposure = $this->writableByOthers($skill->directory())) {
+                $healthy = false;
+                $this->warn(sprintf('[WARN] Skill %s lies %s. Move the folder under resources/, where only a deploy changes it.', $label, $exposure));
+            }
+
+            $lines[] = sprintf(
+                '       %s %s: %s%s',
+                $fromAddon ? 'Add-on skill' : 'Skill',
+                $uri,
+                $label,
+                $hidden ? ' (its shouldRegister() hides it here)' : '',
+            );
+        }
+
+        if ($healthy) {
+            $this->info('[ OK ] '.count($taken).' skill(s) valid.');
+        }
+
+        foreach ($lines as $line) {
+            $this->line($line);
+        }
+    }
+
+    protected function writableByOthers(string $directory): ?string
+    {
+        foreach ([public_path(), ...array_values(config('filesystems.links', []))] as $public) {
+            if ($this->pathsOverlap($directory, $public)) {
+                return 'in the public directory, where anyone can download it';
+            }
+        }
+
+        foreach (AssetContainer::all() as $container) {
+            if ($container->disk()?->filesystem()->getAdapter() instanceof LocalFilesystemAdapter && $this->pathsOverlap($directory, $container->diskPath())) {
+                return "on the disk of the asset container '{$container->handle()}', where an upload, by a person or an agent, can rewrite what every agent reads";
+            }
+        }
+
+        return null;
+    }
+
+    protected function pathsOverlap(string $first, string $second): bool
+    {
+        $first = realpath($first);
+        $second = realpath($second);
+
+        if ($first === false || $second === false) {
+            return false;
+        }
+
+        return str_starts_with($first.DIRECTORY_SEPARATOR, $second.DIRECTORY_SEPARATOR)
+            || str_starts_with($second.DIRECTORY_SEPARATOR, $first.DIRECTORY_SEPARATOR);
     }
 
     protected function checkMiddleware(): void
