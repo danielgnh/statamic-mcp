@@ -173,10 +173,13 @@ connection is still usable — a live refresh token counts, since the connector
 can come back without re-consent. The page opens for anyone with Access MCP.
 Users see and disconnect their own connections; supers see everyone's.
 
-**Disconnect** revokes the pair's access tokens *and* their refresh tokens.
-The connector gets a 401 on its next request and must re-run the OAuth flow
-(login + consent) to reconnect. Passport does not track per-request usage,
-so "last refreshed" reflects token issuance, not the last MCP call.
+**Disconnect** revokes the pair's access tokens *and* their refresh tokens,
+and the row leaves the list. The connector gets a 401 on its next request and
+must re-run the OAuth flow (login + consent) to reconnect. Deleting a user in
+Statamic does the same for every connection that user had. Passport does not
+track per-request usage, so "last refreshed" reflects token issuance, not the
+last MCP call.
 
-Dead rows accumulate as tokens expire and rotate — that is Passport's
-housekeeping, not the addon's: schedule [`passport:purge`](https://laravel.com/docs/passport#purging-tokens).
+A connection whose tokens expired without being revoked stays listed as
+Expired. Revoked and expired rows stay in Passport's tables until you
+schedule [`passport:purge`](https://laravel.com/docs/passport#purging-tokens).

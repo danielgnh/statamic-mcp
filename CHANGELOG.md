@@ -8,6 +8,18 @@ explicitly. [UPGRADE.md](UPGRADE.md) covers the steps an upgrade needs.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Disconnected connections leave the list.** Disconnect on Tools → MCP →
+  Connections revoked the tokens but kept the row, now marked Expired, until
+  `passport:purge` ran. The list now leaves out a connection once all its
+  tokens are revoked.
+- **Deleting a user revokes their connections.** A deleted user's OAuth
+  connections stayed listed with live tokens. Statamic's `UserDeleted` event
+  now revokes the user's access and refresh tokens on MCP clients; tokens on
+  clients of another user provider are left alone. A connection whose user
+  was removed some other way still shows the user ID and can be disconnected.
+
 ## [1.3.0] - 2026-11-26
 
 ![Skills, new in Statamic MCP 1.3: playbooks your agent loads when a task needs them. Claude Code loads the landing-page skill, reads its example file and starts from the example entry](https://raw.githubusercontent.com/danielgnh/statamic-mcp/main/art/skills.jpg)

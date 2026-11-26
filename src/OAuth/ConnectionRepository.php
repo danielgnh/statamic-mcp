@@ -48,9 +48,11 @@ class ConnectionRepository
 
         $foreignClientIds = $clients->reject(PassportBearerGuard::acceptsClient(...))->keys();
         $activePairs = $this->activePairKeys($tokenModel);
+        $unrevokedPairs = $this->unrevokedPairKeys($tokenModel);
 
         return $pairs
             ->whereNotIn('client_id', $foreignClientIds)
+            ->filter(fn ($pair) => $unrevokedPairs->has($pair->user_id.'|'.$pair->client_id))
             ->map(fn ($pair) => [
                 'user_id' => (string) $pair->user_id,
                 'client_id' => (string) $pair->client_id,
@@ -88,6 +90,27 @@ class ConnectionRepository
             ->flip();
     }
 
+    /**
+     * @param  class-string<Token>  $tokenModel
+     * @return Collection<non-falsy-string, int> flipped for O(1) has() lookups
+     */
+    protected function unrevokedPairKeys(string $tokenModel): Collection
+    {
+        $unrevokedRefreshTokens = Passport::refreshTokenModel()::query()
+            ->select('access_token_id')
+            ->where('revoked', false);
+
+        return $tokenModel::query()
+            ->select('user_id', 'client_id')
+            ->distinct()
+            ->where(fn ($query) => $query
+                ->where('revoked', false)
+                ->orWhereIn('id', $unrevokedRefreshTokens))
+            ->get()
+            ->map(fn ($token) => $token->user_id.'|'.$token->client_id)
+            ->flip();
+    }
+
     public function disconnect(string $userId, string $clientId): bool
     {
         if (! $this->ready()) {
@@ -111,11 +134,37 @@ class ConnectionRepository
             return false;
         }
 
-        $refreshModel = Passport::refreshTokenModel();
-        $refreshModel::query()->whereIn('access_token_id', $ids)->update(['revoked' => true]);
-
-        $tokenModel::query()->whereIn('id', $ids)->update(['revoked' => true]);
+        $this->revoke($ids);
 
         return true;
+    }
+
+    public function disconnectUser(string $userId): void
+    {
+        if (! $this->ready()) {
+            return;
+        }
+
+        $tokens = Passport::tokenModel()::query()
+            ->where('user_id', $userId)
+            ->get(['id', 'client_id']);
+
+        $foreignClientIds = Passport::clientModel()::query()
+            ->whereIn('id', $tokens->pluck('client_id')->unique())
+            ->get()
+            ->reject(PassportBearerGuard::acceptsClient(...))
+            ->map(fn ($client) => (string) $client->getKey());
+
+        $this->revoke($tokens->whereNotIn('client_id', $foreignClientIds)->pluck('id'));
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $accessTokenIds
+     */
+    protected function revoke(Collection $accessTokenIds): void
+    {
+        Passport::refreshTokenModel()::query()->whereIn('access_token_id', $accessTokenIds)->update(['revoked' => true]);
+
+        Passport::tokenModel()::query()->whereIn('id', $accessTokenIds)->update(['revoked' => true]);
     }
 }
